@@ -14,25 +14,22 @@ def call(String buildStatus = 'STARTED', blueOceanURL = false) {
     buildUrl = env.RUN_DISPLAY_URL
   }
 
-  def colorName = 'RED'
   def colorCode = '#FF0000'
-  def subject = "${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
-  def summary = "${subject} (${buildUrl})"
-  def details = """<p>${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
-    <p>Check console output at &QUOT;<a href='${buildUrl}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>&QUOT;</p>"""
-
+  
   // Override default values based on build status
   if (buildStatus == 'STARTED') {
-    color = 'YELLOW'
     colorCode = '#FFFF00'
+    buildStatus = buildStatus.toLowerCase().capitalize()
   } else if (buildStatus == 'SUCCESSFUL') {
-    color = 'GREEN'
     colorCode = '#00FF00'
+    buildStatus = buildStatus.toLowerCase().capitalize()
   } else {
-    color = 'RED'
     colorCode = '#FF0000'
   }
 
+  def subject = "*${buildStatus}*: _${env.JOB_NAME}_ *[Build: ${env.BUILD_NUMBER}]*"
+  def summary = "${subject}\n${buildUrl}"
+  
   // Send notifications
   slackSend (color: colorCode, message: summary)
 }
