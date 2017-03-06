@@ -1,8 +1,17 @@
-### sendSlackNotification
+Sends job message to Slack. Slack message will use given buildstatus or **'SUCCESSFUL'**. If `blueOceanURL` is `true`, the function tries to use the blue ocean job URL.
 
 `sendSlackNotification( buildstatus, blueOceanURL)`
 
-## parameters
+### message layout
 
-- buildstatus  | A `String` describing the current buildstatus [default: "STARTED"]
-- blueOceanURL | A `Boolean` value. Determines if a blue ocean URL or default jenkins build URL will be posted [default: false] 
+```
+--------------------------------------------------
+*BUILD_STATUS*: _JOB_NAME_ *[Build: BUILD_NUMBER]*
+BUILD_URL
+--------------------------------------------------
+```
+
+### parameters
+
+- buildstatus  | A `String` describing the current buildstatus [default: **"STARTED"**]
+- blueOceanURL | A `Boolean` value. Determines if a blue ocean URL or default jenkins build URL will be posted [default: **false**] 
