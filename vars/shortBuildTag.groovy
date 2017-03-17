@@ -1,9 +1,10 @@
 #!/usr/bin/env groovy
 
-def String call(Int numberOfDirectories = 2) {
+def String call(int numberOfDirectories = 2) {
   parts = env.JOB_URL.replaceAll("/", "").tokenize('job')
   
   if(parts.size() > 1) {
+    numberOfDirectories = Math.min(numberOfDirectories, parts.size())
     parts = parts.takeRight(numberOfDirectories)
   }
   
