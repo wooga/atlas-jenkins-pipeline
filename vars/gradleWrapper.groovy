@@ -5,7 +5,7 @@
  */
 def call(String command, Boolean returnStatus = false, Boolean returnStdout = false) {
     if(isUnix()) {
-        return sh(script: "gradlew $command", returnStdout:returnStdout, returnStatus:returnStatus)    
+        return sh(script: "./gradlew $command", returnStdout:returnStdout, returnStatus:returnStatus)    
     }
     else {
         return bat(script: "gradlew.bat $command", returnStdout:returnStdout, returnStatus:returnStatus)    
