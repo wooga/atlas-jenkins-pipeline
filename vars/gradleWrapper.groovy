@@ -5,14 +5,10 @@
  */
 def call(String command, Boolean returnStatus = false, Boolean returnStdout = false) {
     String osName = System.getProperty("os.name").toLowerCase()
-
-    def gradleWrapper = "gradlew"
-    def shellStep = sh 
-
     if((osName.contains("windows"))) {
-        gradleWrapper = "gradlew.bat"
-        shellStep = bat
+        return bat(script: "gradlew.bat $command", returnStdout:returnStdout, returnStatus:returnStatus)    
     }
-    
-    shellStep(script: "$gradleWrapper $command" returnStdout:returnStdout, returnStatus:returnStatus)
+    else {
+        return sh(script: "gradlew $command", returnStdout:returnStdout, returnStatus:returnStatus)    
+    }    
 }
