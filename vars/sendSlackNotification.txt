@@ -14,4 +14,4 @@ BUILD_URL
 ### parameters
 
 - buildstatus  | A `String` describing the current buildstatus [default: **"STARTED"**]
-- blueOceanURL | A `Boolean` value. Determines if a blue ocean URL or default jenkins build URL will be posted [default: **false**] 
+- blueOceanURL | A `Boolean` value. Determines if a blue ocean URL or default jenkins build URL will be posted [default: **false**]
