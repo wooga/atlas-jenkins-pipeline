@@ -3,7 +3,7 @@
 /**
  * execute gradlew or gradlew.bat based on current os
  */
-def call(String command, Boolean returnStatus, Boolean returnStdout) {
+def call(String command, Boolean returnStatus = false, Boolean returnStdout = false) {
     String osName = System.getProperty("os.name").toLowerCase()
 
     def gradleWrapper = "gradlew"
