@@ -9,13 +9,18 @@ def call(String buildStatus = 'STARTED', blueOceanURL = false) {
 
   // Default values
   def buildUrl = env.BUILD_URL
-  
+
   if( blueOceanURL && env.RUN_DISPLAY_URL.trim()) {
     buildUrl = env.RUN_DISPLAY_URL
   }
 
+  def channel
+  if(env.SLACK_CHANNEL) {
+    channel = env.SLACK_CHANNEL.trim()
+  }
+
   def colorCode = '#FF0000'
-  
+
   // Override default values based on build status
   if (buildStatus == 'STARTED') {
     colorCode = '#FFFF00'
@@ -29,7 +34,7 @@ def call(String buildStatus = 'STARTED', blueOceanURL = false) {
 
   def subject = "*${buildStatus}*: _${env.JOB_NAME}_ *[Build: ${env.BUILD_NUMBER}]*"
   def summary = "${subject}\n${buildUrl}"
-  
+
   // Send notifications
-  slackSend (color: colorCode, message: summary)
+  slackSend (color: colorCode, message: summary, channel: channel)
 }
