@@ -9,6 +9,7 @@
 
 def call(Map config = [unityVersions:[]]) {
   def unityVersions = config.unityVersions
+  def mainVersionLabel = "unity_${unityVersions[0]}e"
 
   //we need at least one valid unity version for now.
   if(unityVersions.size == 0) {
@@ -43,7 +44,7 @@ def call(Map config = [unityVersions:[]]) {
       stage('setup') {
 
         agent {
-          label "unity&&unity_${unityVersions[0]}e"
+          label "secondary && atlas"
         }
 
         steps {
@@ -67,7 +68,7 @@ def call(Map config = [unityVersions:[]]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "osx&&unity&&unity_${unityVersions[0]}e"
+               label "$mainVersionLabel && atlas && primary"
             }
 
             environment {
@@ -113,7 +114,7 @@ def call(Map config = [unityVersions:[]]) {
 
       stage('publish') {
         agent {
-           label "osx&&unity&&unity_${unityVersions[0]}e"
+           label "secondary && atlas"
         }
 
         environment {
@@ -124,7 +125,6 @@ def call(Map config = [unityVersions:[]]) {
           GITHUB_PASSWORD = "${GRGIT_PSW}"
           NUGET_KEY       = credentials('artifactory_deploy')
           nugetkey        = "${NUGET_KEY}"
-          UNITY_PATH      = "${APPLICATIONS_HOME}/Unity-${unityVersions[0]}/${UNITY_EXEC_PACKAGE_PATH}"
         }
 
         steps {
@@ -153,7 +153,7 @@ def call(Map config = [unityVersions:[]]) {
 **/
 def transformIntoCheckStep(version) {
   return {
-    node("osx&&unity&&unity_${version}e") {
+    node("unity_${version}e && atlas && primary") {
       try {
         checkout scm
         withEnv(["UNITY_PATH=${APPLICATIONS_HOME}/Unity-${version}/${UNITY_EXEC_PACKAGE_PATH}"]) {
