@@ -82,7 +82,7 @@ def call(Map config = [unityVersions:[]]) {
 
             post {
               success {
-                stash(name: 'wdk_output', includes: "**/build/outputs/**/*")
+                stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
               }
 
               always {
