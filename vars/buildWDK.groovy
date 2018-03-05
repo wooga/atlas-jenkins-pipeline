@@ -114,7 +114,7 @@ def call(Map config = [unityVersions:[]]) {
 
       stage('publish') {
         agent {
-           label "secondary && atlas"
+           label "mainVersionLabel && atlas && primary"
         }
 
         environment {
@@ -125,6 +125,7 @@ def call(Map config = [unityVersions:[]]) {
           GITHUB_PASSWORD = "${GRGIT_PSW}"
           NUGET_KEY       = credentials('artifactory_deploy')
           nugetkey        = "${NUGET_KEY}"
+          UNITY_PATH = "${APPLICATIONS_HOME}/Unity-${unityVersions[0]}/${UNITY_EXEC_PACKAGE_PATH}"
         }
 
         steps {
