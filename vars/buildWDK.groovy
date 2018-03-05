@@ -114,7 +114,7 @@ def call(Map config = [unityVersions:[]]) {
 
       stage('publish') {
         agent {
-           label "mainVersionLabel && atlas && primary"
+           label "$mainVersionLabel && atlas && primary"
         }
 
         environment {
