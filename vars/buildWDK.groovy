@@ -164,7 +164,6 @@ def transformIntoCheckStep(version) {
       }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
-        androidLint pattern: '**/lint-results.xml'
         archive '**/build/logs/*.log'
         archive '**/build/reports/unity/**/*.xml'
       }
