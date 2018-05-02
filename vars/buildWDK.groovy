@@ -58,7 +58,7 @@ def call(Map config = [unityVersions:[]]) {
           }
 
           always {
-            archive '**/build/logs/*.log'
+            archiveArtifacts '**/build/logs/*.log'
           }
         }
       }
@@ -86,9 +86,9 @@ def call(Map config = [unityVersions:[]]) {
               }
 
               always {
-                archive 'build/outputs/*.nupkg'
-                archive 'build/outputs/*.unitypackage'
-                archive '**/build/logs/*.log'
+                archiveArtifacts 'build/outputs/*.nupkg'
+                archiveArtifacts 'build/outputs/*.unitypackage'
+                archiveArtifacts '**/build/logs/*.log'
               }
             }
           }
@@ -136,7 +136,7 @@ def call(Map config = [unityVersions:[]]) {
 
         post {
           always {
-            archive '**/build/logs/*.log'
+            archiveArtifacts '**/build/logs/*.log'
           }
         }
       }
@@ -164,8 +164,8 @@ def transformIntoCheckStep(version) {
       }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
-        archive '**/build/logs/*.log'
-        archive '**/build/reports/unity/**/*.xml'
+        archiveArtifacts '**/build/logs/*.log'
+        archiveArtifacts '**/build/reports/unity/**/*.xml'
       }
     }
   }
