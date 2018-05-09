@@ -58,7 +58,7 @@ def call(Map config = [unityVersions:[]]) {
           }
 
           always {
-            archiveArtifacts '**/build/logs/*.log'
+            archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
         }
       }
@@ -87,9 +87,9 @@ def call(Map config = [unityVersions:[]]) {
               }
 
               always {
-                archiveArtifacts 'build/outputs/*.nupkg'
-                archiveArtifacts 'build/outputs/*.unitypackage'
-                archiveArtifacts '**/build/logs/*.log'
+                archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
             }
           }
@@ -138,7 +138,7 @@ def call(Map config = [unityVersions:[]]) {
 
         post {
           always {
-            archiveArtifacts '**/build/logs/*.log'
+            archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
         }
       }
@@ -166,8 +166,8 @@ def transformIntoCheckStep(version) {
       }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
-        archiveArtifacts '**/build/logs/*.log'
-        archiveArtifacts '**/build/reports/unity/**/*.xml'
+        archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+        archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
       }
     }
   }
