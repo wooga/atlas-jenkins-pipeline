@@ -60,12 +60,17 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
         }
 
         agent {
-           label "$mainPlatform && atlas"
+          label "$mainPlatform && atlas"
         }
 
         environment {
-            GRADLE_PUBLISH_KEY    = credentials('gradle.publish.key')
-            GRADLE_PUBLISH_SECRET = credentials('gradle.publish.secret')
+          GRADLE_PUBLISH_KEY    = credentials('gradle.publish.key')
+          GRADLE_PUBLISH_SECRET = credentials('gradle.publish.secret')
+          GRGIT                 = credentials('github_up')
+          GRGIT_USER            = "${GRGIT_USR}"
+          GRGIT_PASS            = "${GRGIT_PSW}"
+          GITHUB_LOGIN          = "${GRGIT_USR}"
+          GITHUB_PASSWORD       = "${GRGIT_PSW}"
         }
 
         steps {
