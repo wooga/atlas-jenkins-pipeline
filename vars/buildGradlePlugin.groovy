@@ -74,7 +74,7 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
         }
 
         steps {
-          gradleWrapper "${params.RELEASE_TYPE.trim()} -P.gradle.publish.key=${GRADLE_PUBLISH_KEY} -P.gradle.publish.secret=${GRADLE_PUBLISH_SECRET} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+          gradleWrapper "${params.RELEASE_TYPE.trim()} -Pgradle.publish.key=${GRADLE_PUBLISH_KEY} -Pgradle.publish.secret=${GRADLE_PUBLISH_SECRET} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
         }
       }
     }
