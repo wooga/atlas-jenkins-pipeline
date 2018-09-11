@@ -43,7 +43,15 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
         steps {
           script {
             def stepsForParallel = plaforms.collectEntries {
-              ["check ${it}" : transformIntoCheckStep(it, config.testEnvironment, config.coverallsToken)]
+              def environment = []
+              if(config.testEnvironment instanceof List) {
+                environment = config.testEnvironment
+              }
+              else {
+                environment = (config.testEnvironment[it]) ?: []
+              }
+
+              ["check ${it}" : transformIntoCheckStep(it, environment, config.coverallsToken)]
             }
 
             parallel stepsForParallel
