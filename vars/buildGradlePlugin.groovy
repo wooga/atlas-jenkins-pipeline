@@ -7,7 +7,7 @@
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coverallsToken:null]) {
+def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coverallsToken:null, labels: '']) {
   def plaforms = config.plaforms
   def mainPlatform = plaforms[0]
 
@@ -53,7 +53,7 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
                 }
               }
 
-              ["check ${it}" : transformIntoCheckStep(it, environment, config.coverallsToken)]
+              ["check ${it}" : transformIntoCheckStep(it, environment, config.coverallsToken, config)]
             }
 
             parallel stepsForParallel
@@ -100,16 +100,35 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
 /**
 * Creates a step closure from a unity version string.
 **/
-def transformIntoCheckStep(platform, testEnvironment, coverallsToken) {
+def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config) {
   return {
-    node("${platform} && atlas") {
+    def node_label = "${platform} && atlas"
+
+    if(config.labels) {
+      node_label += "&& ${config.labels}"
+    }
+
+    node(node_label) {
       try {
+        testEnvironment = testEnvironment.collect { item ->
+          if(item instanceof groovy.lang.Closure) {
+            return item.call().toString()
+          }
+
+          return item.toString()
+        }
+
         checkout scm
         withEnv(["TRAVIS_JOB_NUMBER=${BUILD_NUMBER}.${platform.toUpperCase()}"]) {
           withEnv(testEnvironment) {
             gradleWrapper "check"
           }
         }
+      }
+      catch(Exception error) {
+        println(error)
+        println(error.printStackTrace())
+        currentBuild.result = 'FAILURE'
       }
       finally {
         if(!currentBuild.result) {
