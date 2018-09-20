@@ -1,0 +1,133 @@
+#!/usr/bin/env groovy
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                    //
+// Step buildWDKJS                                                                                                      //
+//                                                                                                                    //
+//                                                                                                                    //
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+def call(Map config = [plaforms:['osx'], testEnvironment:[], coverallsToken:null]) {
+    def plaforms = config.plaforms
+    def mainPlatform = plaforms[0]
+
+    pipeline {
+        agent none
+
+        options {
+            buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
+        }
+
+        parameters {
+            choice(choices: "snapshot\ncandidate\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+            choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+        }
+
+        stages {
+            stage('Preparation') {
+                agent any
+
+                steps {
+                    sendSlackNotification "STARTED", true
+                }
+            }
+
+            stage("check") {
+
+                environment {
+                    GRGIT                 = credentials('github_up')
+                    GRGIT_USER            = "${GRGIT_USR}"
+                    GRGIT_PASS            = "${GRGIT_PSW}"
+                    GITHUB_LOGIN          = "${GRGIT_USR}"
+                    GITHUB_PASSWORD       = "${GRGIT_PSW}"
+                    NODE_RELEASE_NPM_USER = "${ATLAS_NPM_USER}"
+                    NODE_RELEASE_NPM_PASS = "${ATLAS_NPM_PASS}"
+                    NODE_RELEASE_NPM_AUTH_URL = "${ATLAS_NPM_AUTH_URL}"
+                }
+
+                when {
+                    beforeAgent true
+                    expression {
+                        return params.RELEASE_TYPE == "snapshot"
+                    }
+                }
+
+                steps {
+                    script {
+                        def stepsForParallel = plaforms.collectEntries {
+                            def environment = []
+                            if(config.testEnvironment) {
+                                if(config.testEnvironment instanceof List) {
+                                    environment = config.testEnvironment
+                                }
+                                else {
+                                    environment = (config.testEnvironment[it]) ?: []
+                                }
+                            }
+
+                            ["check ${it}" : transformIntoCheckStep(it, environment, config.coverallsToken)]
+                        }
+
+                        parallel stepsForParallel
+                    }
+                }
+            }
+
+            stage('publish') {
+                when {
+                    beforeAgent true
+                    expression {
+                        return params.RELEASE_TYPE != "snapshot"
+                    }
+                }
+
+                agent {
+                    label "$mainPlatform && atlas"
+                }
+
+                environment {
+                    GRGIT                 = credentials('github_up')
+                    GRGIT_USER            = "${GRGIT_USR}"
+                    GRGIT_PASS            = "${GRGIT_PSW}"
+                    GITHUB_LOGIN          = "${GRGIT_USR}"
+                    GITHUB_PASSWORD       = "${GRGIT_PSW}"
+                    NODE_RELEASE_NPM_USER = "${ATLAS_NPM_USER}"
+                    NODE_RELEASE_NPM_PASS = "${ATLAS_NPM_PASS}"
+                    NODE_RELEASE_NPM_AUTH_URL = "${ATLAS_NPM_AUTH_URL}"
+                }
+
+                steps {
+                    gradleWrapper "${params.RELEASE_TYPE.trim()} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+                }
+            }
+        }
+
+        post {
+            always {
+                sendSlackNotification currentBuild.result, true
+            }
+        }
+    }
+}
+
+/**
+ * Creates a step closure from a unity version string.
+ **/
+def transformIntoCheckStep(platform, testEnvironment, coverallsToken) {
+    return {
+        node("${platform} && atlas") {
+            try {
+                checkout scm
+                withEnv(["TRAVIS_JOB_NUMBER=${BUILD_NUMBER}.${platform.toUpperCase()}"]) {
+                    withEnv(testEnvironment) {
+                        gradleWrapper "check"
+                    }
+                }
+            }
+            finally {
+                junit allowEmptyResults: true, testResults: 'build/test-results/**/*.xml'
+            }
+        }
+    }
+}
