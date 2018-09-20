@@ -8,9 +8,9 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-def call(Map config = [plaforms:['osx'], testEnvironment:[], coverallsToken:null]) {
-    def plaforms = config.plaforms
-    def mainPlatform = plaforms[0]
+def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:null]) {
+    def platforms = config.platforms
+    def mainPlatform = platforms[0]
 
     pipeline {
         agent none
@@ -55,7 +55,7 @@ def call(Map config = [plaforms:['osx'], testEnvironment:[], coverallsToken:null
 
                 steps {
                     script {
-                        def stepsForParallel = plaforms.collectEntries {
+                        def stepsForParallel = platforms.collectEntries {
                             def environment = []
                             if(config.testEnvironment) {
                                 if(config.testEnvironment instanceof List) {
