@@ -41,9 +41,10 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                     GRGIT_PASS            = "${GRGIT_PSW}"
                     GITHUB_LOGIN          = "${GRGIT_USR}"
                     GITHUB_PASSWORD       = "${GRGIT_PSW}"
-                    NODE_RELEASE_NPM_USER = "${ATLAS_NPM_USER}"
-                    NODE_RELEASE_NPM_PASS = "${ATLAS_NPM_PASS}"
-                    NODE_RELEASE_NPM_AUTH_URL = "${ATLAS_NPM_AUTH_URL}"
+                    NODE_RELASE_NPM       = credentials('atlas_npm_credentials')
+                    NODE_RELEASE_NPM_USER = "${NODE_RELASE_NPM_USR}"
+                    NODE_RELEASE_NPM_PASS = "${NODE_RELASE_NPM_PSW}"
+                    NODE_RELEASE_NPM_AUTH_URL = "https://wooga.artifactoryonline.com/wooga/api/npm/atlas-node/auth/wooga"
                 }
 
                 when {
@@ -92,9 +93,10 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                     GRGIT_PASS            = "${GRGIT_PSW}"
                     GITHUB_LOGIN          = "${GRGIT_USR}"
                     GITHUB_PASSWORD       = "${GRGIT_PSW}"
-                    NODE_RELEASE_NPM_USER = "${ATLAS_NPM_USER}"
-                    NODE_RELEASE_NPM_PASS = "${ATLAS_NPM_PASS}"
-                    NODE_RELEASE_NPM_AUTH_URL = "${ATLAS_NPM_AUTH_URL}"
+                    NODE_RELASE_NPM       = credentials('atlas_npm_credentials')
+                    NODE_RELEASE_NPM_USER = "${NODE_RELASE_NPM_USR}"
+                    NODE_RELEASE_NPM_PASS = "${NODE_RELASE_NPM_PSW}"
+                    NODE_RELEASE_NPM_AUTH_URL = "https://wooga.artifactoryonline.com/wooga/api/npm/atlas-node/auth/wooga"
                 }
 
                 steps {
