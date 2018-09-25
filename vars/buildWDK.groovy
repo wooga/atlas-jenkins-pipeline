@@ -12,7 +12,7 @@ def call(Map config = [unityVersions:[]]) {
   def mainVersionLabel = "unity_${unityVersions[0]}e"
 
   //we need at least one valid unity version for now.
-  if(unityVersions.size == 0) {
+  if(unityVersions.isEmpty()) {
     error "Please provide at least one unity version."
   }
 
@@ -20,7 +20,8 @@ def call(Map config = [unityVersions:[]]) {
   for(version in unityVersions) {
     def label = "unity_${version}e"
     def nodes = nodesByLabel(label: label)
-    if(nodes.size == 0) {
+
+    if(nodes.isEmpty()) {
       error "No execution node available with unity versions ${version}."
     }
   }
