@@ -160,7 +160,7 @@ def transformIntoCheckStep(version) {
     node("unity_${version}e && atlas && primary") {
       try {
         checkout scm
-        withEnv(["UNITY_PATH=${pathToUnity(version)}", "UNITY_LOG_CATEGORY=check-${version}"]) {
+        withEnv(["UNITY_PATH=${APPLICATIONS_HOME}/Unity-${version}/${UNITY_EXEC_PACKAGE_PATH}", "UNITY_LOG_CATEGORY=check-${version}"]) {
           unstash 'setup_w'
           gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
         }
