@@ -77,6 +77,7 @@ def call(Map config = [plaforms:['osx','windows'], testEnvironment:[], coveralls
           GRADLE_PUBLISH_KEY    = credentials('gradle.publish.key')
           GRADLE_PUBLISH_SECRET = credentials('gradle.publish.secret')
           GRGIT                 = credentials('github_up')
+
           GRGIT_USER            = "${GRGIT_USR}"
           GRGIT_PASS            = "${GRGIT_PSW}"
           GITHUB_LOGIN          = "${GRGIT_USR}"
@@ -147,7 +148,7 @@ def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config) {
           }
         }
 
-        junit allowEmptyResults: true, testResults: 'build/test-results/**/*.xml'
+        junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
       }
     }
   }
