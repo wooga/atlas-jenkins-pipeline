@@ -9,10 +9,21 @@
 
 import com.wooga.jenkins.UnityTestVersionSpecResolver
 import com.wooga.jenkins.UnityTestVersionSpec
+import com.wooga.jenkins.UnityReleaseType
 
 def call(Map config = [unityVersions:[]]) {
   // println("start buildWDK2")
-  def unityVersionTestSpecs = [new UnityTestVersionSpec("2017.3"), new UnityTestVersionSpec("2017.3.1"), new UnityTestVersionSpec("2017.4"), new UnityTestVersionSpec("2018.3")]
+
+  def spec1 = new UnityTestVersionSpec("2017.3")
+  def spec2 = new UnityTestVersionSpec("2017.4")
+  spec2.optional = true
+  def spec3 = new UnityTestVersionSpec("2018.3")
+  spec3.optional = true
+  def spec4 = new UnityTestVersionSpec("2019")
+  spec4.optional = true
+  spec4.releaseType = UnityReleaseType.ALPHA
+
+  def unityVersionTestSpecs = [spec2,spec3,spec4]
   echo("run build with unity test versions requirements:")
   echo("${unityVersionTestSpecs.isEmpty()}")
 
@@ -173,11 +184,19 @@ def transformIntoCheckStep(UnityTestVersionSpec versionSpec) {
           gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
         }
       }
+      catch (Exception err) {
+        if (versionSpec.optional) {
+          currentBuild.result = "UNSTABLE"
+        } else {
+          throw err
+        }
+      }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
         archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-        archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
+        archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml', allowEmptyArchive: true
       }
     }
   }
 }
+

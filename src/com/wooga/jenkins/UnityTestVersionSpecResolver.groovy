@@ -33,6 +33,7 @@ class UnityTestVersionSpecResolver {
                     String version = json.parse(url).toString()
                     UnityTestVersionSpec newSpec = new UnityTestVersionSpec(version)
                     newSpec.setStrictVersion(true)
+                    newSpec.optional = spec.optional
                     if(!resolvedVersions.contains(newSpec)) {
                         resolvedVersions.add(newSpec)
                     }
