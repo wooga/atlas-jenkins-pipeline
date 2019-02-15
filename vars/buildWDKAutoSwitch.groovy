@@ -32,6 +32,7 @@ def call(Map config = [unityVersions:[]]) {
     parameters {
         choice(choices: "snapshot\nrc\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
         choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+        choice(choices: "info\nlifecycle\ndebug\nwarn\nquiet", description: 'Choose the gradle log level', name: 'GRADLE_LOG_LEVEL')
     }
 
     stages {

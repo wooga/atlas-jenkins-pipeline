@@ -9,10 +9,11 @@ def cleanupCommand(String command) {
  * execute gradlew or gradlew.bat based on current os
  */
 def call(String command, Boolean returnStatus = false, Boolean returnStdout = false) {
+    def logLevel = ${GRADLE_LOG_LEVEL} ?: "lifecycle"
     if(isUnix()) {
-        return sh(script: "./gradlew ${cleanupCommand(command)}", returnStdout:returnStdout, returnStatus:returnStatus)
+        return sh(script: "./gradlew ${cleanupCommand(command)} -Porg.gradle.logging.level=${logLevel}", returnStdout:returnStdout, returnStatus:returnStatus)
     }
     else {
-        return bat(script: "gradlew.bat ${cleanupCommand(command)}", returnStdout:returnStdout, returnStatus:returnStatus)
+        return bat(script: "gradlew.bat ${cleanupCommand(command)} -Porg.gradle.logging.level=${logLevel}", returnStdout:returnStdout, returnStatus:returnStatus)
     }
 }
