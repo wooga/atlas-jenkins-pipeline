@@ -159,7 +159,7 @@ def transformIntoCheckStep(version) {
       }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
-        archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+        archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
         archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
       }
     }
