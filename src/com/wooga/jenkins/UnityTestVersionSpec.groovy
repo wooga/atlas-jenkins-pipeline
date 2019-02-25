@@ -8,9 +8,21 @@ class UnityTestVersionSpec {
 
     UnityTestVersionSpec(String versionReq) {
         this.versionReq = versionReq
-        this.strictVersion = false
+        this.strictVersion = versionReq.matches(/\d+\.\d+\.d+(f|p|b|a)\d+/)
+
         this.optional = false
         this.releaseType = UnityReleaseType.FINAL
+    }
+
+    static UnityTestVersionSpec fromMap(Map declarations) {
+        String versionReq = declarations["versionReq"]
+        Boolean optional = declarations["optional"]
+        UnityReleaseType releaseType = UnityReleaseType.valueOf((declarations["releaseType"] as String).toUpperCase())
+
+        def spec = new UnityTestVersionSpec(versionReq)
+        spec.optional = optional
+        spec.releaseType = releaseType
+        spec
     }
 
     boolean equals(o) {
