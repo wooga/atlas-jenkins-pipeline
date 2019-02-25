@@ -1,0 +1,3 @@
+execute body on all machines matching the provided label.
+* label Computer name, label name, or any other label expression like linux && 64bit to restrict where this step builds. May be left blank, in which case any available executor is taken. Supported operators
+* name A descriptive name for this step for the build log
