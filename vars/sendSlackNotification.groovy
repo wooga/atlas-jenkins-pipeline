@@ -28,6 +28,7 @@ def call(String buildStatus = 'STARTED', blueOceanURL = false) {
   } else if (buildStatus == 'SUCCESSFUL') {
     colorCode = '#00FF00'
     buildStatus = buildStatus.toLowerCase().capitalize()
+  }
   else if (buildStatus == 'SUCCESS') {
      colorCode = '#00FF00'
      buildStatus = buildStatus.toLowerCase().capitalize()
