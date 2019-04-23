@@ -20,8 +20,9 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
         }
 
         parameters {
-            choice(choices: "snapshot\ncandidate\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
-            choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+            choice(choices: ["snapshot", "candidate", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+            choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+            booleanParam( defaultValue: false, description: 'Build & Publish Artifacts', name: 'BUILD_ARTIFACTS')
         }
 
         stages {
@@ -79,7 +80,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                 when {
                     beforeAgent true
                     expression {
-                        return params.RELEASE_TYPE != "snapshot"
+                        return params.RELEASE_TYPE != "snapshot" || params.BUILD_ARTIFACTS
                     }
                 }
 
