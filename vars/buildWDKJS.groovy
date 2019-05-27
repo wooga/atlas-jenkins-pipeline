@@ -45,7 +45,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                     NODE_RELASE_NPM       = credentials('atlas_npm_credentials')
                     NODE_RELEASE_NPM_USER = "${NODE_RELASE_NPM_USR}"
                     NODE_RELEASE_NPM_PASS = "${NODE_RELASE_NPM_PSW}"
-                    NODE_RELEASE_NPM_AUTH_URL = "https://wooga.artifactoryonline.com/wooga/api/npm/atlas-node/auth/wooga"
+                    NODE_RELEASE_NPM_AUTH_URL = "${NODE_RELEASE_NPM_AUTH_URL}"
                 }
 
                 when {
@@ -97,7 +97,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                     NODE_RELASE_NPM       = credentials('atlas_npm_credentials')
                     NODE_RELEASE_NPM_USER = "${NODE_RELASE_NPM_USR}"
                     NODE_RELEASE_NPM_PASS = "${NODE_RELASE_NPM_PSW}"
-                    NODE_RELEASE_NPM_AUTH_URL = "https://wooga.artifactoryonline.com/wooga/api/npm/atlas-node/auth/wooga"
+                    NODE_RELEASE_NPM_AUTH_URL = "${NODE_RELEASE_NPM_AUTH_URL}"
                 }
 
                 steps {
