@@ -43,6 +43,7 @@ def call(Map config = [unityVersions:[]]) {
 
         steps {
           sendSlackNotification "STARTED", true
+          sh "git clean -fd"
           gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE setup"
         }
 
@@ -70,6 +71,8 @@ def call(Map config = [unityVersions:[]]) {
             }
 
             steps {
+              sh "git clean -fd"
+              sh "git clean -fdx Wooga.PuzzleCore/Packages"
               unstash 'setup_w'
               gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} assemble"
             }
@@ -124,6 +127,7 @@ def call(Map config = [unityVersions:[]]) {
         }
 
         steps {
+          sh "git clean -fd"    
           unstash 'setup_w'
           unstash 'wdk_output'
           gradleWrapper "${params.RELEASE_TYPE.trim()} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Ppaket.publish.repository='$params.RELEASE_TYPE' -Prelease.scope=${params.RELEASE_SCOPE} -x check"
@@ -153,6 +157,7 @@ def transformIntoCheckStep(version) {
       try {
         checkout scm
         withEnv(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"]) {
+          sh "git clean -fd"
           unstash 'setup_w'
           gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
         }
