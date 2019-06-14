@@ -103,6 +103,12 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                 steps {
                     gradleWrapper "${params.RELEASE_TYPE.trim()} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
                 }
+                post {
+                    always {
+                        archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+                        archiveArtifacts artifacts: '*.tgz', allowEmptyArchive: true
+                    }
+                }
             }
         }
 
@@ -130,6 +136,15 @@ def transformIntoCheckStep(platform, testEnvironment, coverallsToken) {
             }
             finally {
                 junit allowEmptyResults: true, testResults: 'build/test-results/**/*.xml'
+                publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'coverage/lcov-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage',
+                        reportTitles: ''
+                ])
             }
         }
     }
