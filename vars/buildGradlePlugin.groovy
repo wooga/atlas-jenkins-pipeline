@@ -79,7 +79,7 @@ def call(Map config = [:]) {
                                 keepAll: true,
                                 reportDir: 'build/reports/jacoco/test/html',
                                 reportFiles: 'index.html',
-                                reportName: 'Coverage',
+                                reportName: "Coverage ${it}",
                                 reportTitles: ''
                                 ])
                   }
