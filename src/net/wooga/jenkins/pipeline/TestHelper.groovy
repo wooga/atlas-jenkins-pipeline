@@ -42,7 +42,8 @@ def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, ch
                 echo "Dockerfile Path: ${dockerFilePath}"
 
                 if(!fileExists(dockerFilePath)) {
-                  throw new Exception("missing Dockerfile for linux platform")
+                  checkClosure.call()
+                  return
                 }
 
                 def dockerfileContent = readFile(dockerFilePath)
