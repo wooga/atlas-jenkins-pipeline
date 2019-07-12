@@ -151,16 +151,21 @@ def transformIntoCheckStep(version) {
   return {
     node("atlas && primary") {
       try {
-        checkout scm
-        withEnv(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"]) {
-          unstash 'setup_w'
-          gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
+        dir (version) {
+          checkout scm
+          withEnv(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"]) {
+            unstash 'setup_w'
+            gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
+          }
         }
       }
       finally {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
         archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
         archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
+        dir (version) {
+          deleteDir()
+        }
       }
     }
   }
