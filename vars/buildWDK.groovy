@@ -36,6 +36,10 @@ def call(Map config = [unityVersions:[]]) {
       buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
     }
 
+    environment {
+      ATLAS_READ = credentials('artifactory_read')
+    }
+
     parameters {
         choice(choices: "snapshot\nrc\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
         choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')

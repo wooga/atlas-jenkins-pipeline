@@ -27,6 +27,7 @@ def call(Map config = [unityVersions:[]]) {
     environment {
       UVM_AUTO_SWITCH_UNITY_EDITOR  = "YES"
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
+      ATLAS_READ = credentials('artifactory_read')
     }
 
     parameters {
