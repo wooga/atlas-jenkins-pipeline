@@ -39,7 +39,7 @@ def call(Map config = [unityVersions:[]]) {
       stage('setup') {
 
         agent {
-          label "secondary && atlas"
+          label "secondary && atlas && macos"
         }
 
         steps {
@@ -63,7 +63,7 @@ def call(Map config = [unityVersions:[]]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && primary"
+               label "atlas && primary && macos"
             }
 
             environment {
@@ -109,7 +109,7 @@ def call(Map config = [unityVersions:[]]) {
 
       stage('publish') {
         agent {
-           label "atlas && primary"
+           label "atlas && primary && macos"
         }
 
         environment {
@@ -150,7 +150,7 @@ def call(Map config = [unityVersions:[]]) {
 **/
 def transformIntoCheckStep(version) {
   return {
-    node("atlas && primary") {
+    node("atlas && primary && macos") {
       try {
         dir (version) {
           checkout scm
