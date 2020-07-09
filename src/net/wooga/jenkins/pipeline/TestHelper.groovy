@@ -5,7 +5,7 @@ import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 /**
 * Creates a step closure from a unity version string.
 **/
-def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, checkClosure, finallyClosure) {
+def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, checkClosure, finallyClosure, skipcheckout = false) {
   return {
     def node_label = "${platform} && atlas"
 
@@ -29,7 +29,10 @@ def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, ch
           return item.toString()
         }
 
-        checkout scm
+        if(!skipcheckout) {
+          checkout scm
+        }
+
         withEnv(["TRAVIS_JOB_NUMBER=${BUILD_NUMBER}.${platform.toUpperCase()}"]) {
           withEnv(testEnvironment) {
             if(platform == "linux") {

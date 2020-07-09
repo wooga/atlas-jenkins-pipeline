@@ -1,5 +1,7 @@
 #!/usr/bin/env groovy
 
+import net.wooga.jenkins.pipeline.TestHelper
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
 // Step buildWDKAutoSwitch                                                                                            //
@@ -9,11 +11,14 @@
 
 def call(Map config = [unityVersions:[]]) {
   def unityVersions = config.unityVersions
-
+  config.testEnvironment = config.testEnvironment ?: []
+  config.labels = config.labels ?: ['primary']
   //we need at least one valid unity version for now.
   if(unityVersions.isEmpty()) {
     error "Please provide at least one unity version."
   }
+
+  def helper = new TestHelper()
 
   //We can only configure static pipelines atm.
   //To test multiple unity versions we use a script block with a parallel stages inside.
@@ -97,8 +102,37 @@ def call(Map config = [unityVersions:[]]) {
 
             steps {
               script {
-                def stepsForParallel = unityVersions.collectEntries {
-                  ["check Unity-${it}" : transformIntoCheckStep(it)]
+                def stepsForParallel = unityVersions.collectEntries { version ->
+                  def environment = []
+                  if(config.testEnvironment) {
+                    if(config.testEnvironment instanceof List) {
+                      environment = config.testEnvironment
+                    }
+                    else {
+                      environment = (config.testEnvironment[version]) ?: []
+                    }
+                  }
+
+                  environment.addAll(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"])
+
+                  def checkStep = {
+                    dir (version) {
+                      checkout scm
+                      unstash 'setup_w'
+                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
+                    }
+                  }
+
+                  def finalizeStep = {
+                    nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
+                    archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
+                    archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
+                    dir (version) {
+                      deleteDir()
+                    }
+                  }
+
+                  ["check Unity-${version}" : helper.transformIntoCheckStep("macos", environment, null, config, checkStep, finalizeStep, true)]
                 }
                 parallel stepsForParallel
               }
@@ -140,33 +174,6 @@ def call(Map config = [unityVersions:[]]) {
     post {
       always {
         sendSlackNotification currentBuild.result, true
-      }
-    }
-  }
-}
-
-/**
-* Creates a step closure from a unity version string.
-**/
-def transformIntoCheckStep(version) {
-  return {
-    node("atlas && primary && macos") {
-      try {
-        dir (version) {
-          checkout scm
-          withEnv(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"]) {
-            unstash 'setup_w'
-            gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
-          }
-        }
-      }
-      finally {
-        nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
-        archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
-        archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
-        dir (version) {
-          deleteDir()
-        }
       }
     }
   }
