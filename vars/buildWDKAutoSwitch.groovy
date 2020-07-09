@@ -49,7 +49,7 @@ def call(Map config = [unityVersions:[]]) {
 
         post {
           success {
-            stash(name: 'setup_w', useDefaultExcludes: true, includes: ".gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**")
+            stash(name: 'setup_w', useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**")
           }
 
           always {
