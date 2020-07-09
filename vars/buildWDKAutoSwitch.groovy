@@ -12,7 +12,7 @@ import net.wooga.jenkins.pipeline.TestHelper
 def call(Map config = [unityVersions:[]]) {
   def unityVersions = config.unityVersions
   config.testEnvironment = config.testEnvironment ?: []
-  config.labels = config.labels ?: ['primary']
+  config.labels = config.labels ?: 'primary'
   //we need at least one valid unity version for now.
   if(unityVersions.isEmpty()) {
     error "Please provide at least one unity version."
