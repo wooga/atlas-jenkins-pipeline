@@ -85,6 +85,7 @@ def call(Map config = [:]) {
                   }
                 }
                 junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
+                cleanWs()
               }
 
               ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, config, checkStep, finalizeStep)]
@@ -121,6 +122,12 @@ def call(Map config = [:]) {
 
         steps {
           gradleWrapper "${params.RELEASE_TYPE.trim()} -Pbintray.user=${BINTRAY_USER} -Pbintray.key=${BINTRAY_API_KEY} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+        }
+
+        post {
+          cleanup {
+            cleanWs()
+          }
         }
       }
     }

@@ -60,6 +60,10 @@ def call(Map config = [unityVersions:[]]) {
           always {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
+
+          cleanup {
+            cleanWs()
+          }
         }
       }
 
@@ -89,6 +93,10 @@ def call(Map config = [unityVersions:[]]) {
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+              }
+
+              cleanup {
+                cleanWs()
               }
             }
           }
@@ -130,6 +138,7 @@ def call(Map config = [unityVersions:[]]) {
                     dir (version) {
                       deleteDir()
                     }
+                    cleanWs()
                   }
 
                   ["check Unity-${version}" : helper.transformIntoCheckStep("macos", environment, null, config, checkStep, finalizeStep, true)]
@@ -167,6 +176,10 @@ def call(Map config = [unityVersions:[]]) {
         post {
           always {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+          }
+
+          cleanup {
+            cleanWs()
           }
         }
       }

@@ -65,6 +65,10 @@ def call(Map config = [unityVersions:[]]) {
           always {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
+
+          cleanup {
+            cleanWs()
+          }
         }
       }
 
@@ -96,8 +100,13 @@ def call(Map config = [unityVersions:[]]) {
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
+
+              cleanup {
+                cleanWs()
+              }
             }
           }
+
           stage("check") {
             when {
               beforeAgent true
@@ -145,6 +154,10 @@ def call(Map config = [unityVersions:[]]) {
           always {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
+
+          cleanup {
+            cleanWs()
+          }
         }
       }
     }
@@ -173,6 +186,7 @@ def transformIntoCheckStep(version) {
         nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
         archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
         archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
+        cleanWs()
       }
     }
   }
