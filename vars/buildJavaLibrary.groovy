@@ -14,6 +14,7 @@ def call(Map config = [:]) {
   config.platforms = config.plaforms ?: ['osx','windows']
   config.platforms = config.platforms ?: ['osx','windows']
   config.testEnvironment = config.testEnvironment ?: []
+  config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
   config.dockerArgs = config.dockerArgs ?: [:]
   config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
@@ -58,6 +59,8 @@ def call(Map config = [:]) {
           script {
             def stepsForParallel = platforms.collectEntries {
               def environment = []
+              def labels = config.labels
+
               if(config.testEnvironment) {
                 if(config.testEnvironment instanceof List) {
                   environment = config.testEnvironment
@@ -66,6 +69,18 @@ def call(Map config = [:]) {
                   environment = (config.testEnvironment[it]) ?: []
                 }
               }
+
+              if(config.testLabels) {
+                if(config.testLabels instanceof List) {
+                  labels = config.testLabels
+                }
+                else {
+                  labels = (config.testLabels[it]) ?: config.labels
+                }
+              }
+
+              def testConfig = config.clone()
+              testConfig.labels = labels
 
               def checkStep = { gradleWrapper "check" }
               def finalizeStep = {
@@ -88,7 +103,7 @@ def call(Map config = [:]) {
                 cleanWs()
               }
 
-              ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, config, checkStep, finalizeStep)]
+              ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
             }
 
             parallel stepsForParallel

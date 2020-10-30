@@ -1,5 +1,7 @@
 #!/usr/bin/env groovy
 
+import net.wooga.jenkins.pipeline.TestHelper
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
 // Step buildJavaLibrary                                                                                              //
@@ -7,9 +9,21 @@
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [platforms:['osx','windows'], testEnvironment:[], coverallsToken:null, labels: '']) {
+def call(Map config = [:]) {
+  config.platforms = config.plaforms ?: ['osx','windows']
+  config.platforms = config.platforms ?: ['osx','windows']
+  config.testEnvironment = config.testEnvironment ?: []
+  config.testLabels = config.testLabels ?: []
+  config.labels = config.labels ?: ''
+  config.dockerArgs = config.dockerArgs ?: [:]
+  config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
+  config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
+  config.dockerArgs.dockerBuildArgs = config.dockerArgs.dockerBuildArgs ?: []
+  config.dockerArgs.dockerArgs = config.dockerArgs.dockerArgs ?: []
+
   def platforms = config.platforms
   def mainPlatform = platforms[0]
+  def helper = new TestHelper()
 
   pipeline {
     agent none
@@ -44,6 +58,8 @@ def call(Map config = [platforms:['osx','windows'], testEnvironment:[], coverall
           script {
             def stepsForParallel = platforms.collectEntries {
               def environment = []
+              def labels = config.labels
+
               if(config.testEnvironment) {
                 if(config.testEnvironment instanceof List) {
                   environment = config.testEnvironment
@@ -53,7 +69,40 @@ def call(Map config = [platforms:['osx','windows'], testEnvironment:[], coverall
                 }
               }
 
-              ["check ${it}" : transformIntoCheckStep(it, environment, config.coverallsToken, config)]
+              if(config.testLabels) {
+                if(config.testLabels instanceof List) {
+                  labels = config.testLabels
+                }
+                else {
+                  labels = (config.testLabels[it]) ?: config.labels
+                }
+              }
+
+              def testConfig = config.clone()
+              testConfig.labels = labels
+
+              def checkStep = { gradleWrapper "check" }
+              def finalizeStep = {
+                if(!currentBuild.result) {
+                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
+                  withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
+                    gradleWrapper command
+                    publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'build/reports/jacoco/test/html',
+                                reportFiles: 'index.html',
+                                reportName: "Coverage ${it}",
+                                reportTitles: ''
+                                ])
+                  }
+                }
+                junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
+                cleanWs()
+              }
+
+              ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
             }
 
             parallel stepsForParallel
@@ -87,62 +136,6 @@ def call(Map config = [platforms:['osx','windows'], testEnvironment:[], coverall
     post {
       always {
         sendSlackNotification currentBuild.result, true
-      }
-    }
-  }
-}
-
-/**
-* Creates a step closure from a unity version string.
-**/
-def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config) {
-  return {
-    def node_label = "${platform} && atlas"
-
-    if(config.labels) {
-      node_label += "&& ${config.labels}"
-    }
-
-    node(node_label) {
-      try {
-        testEnvironment = testEnvironment.collect { item ->
-          if(item instanceof groovy.lang.Closure) {
-            return item.call().toString()
-          }
-
-          return item.toString()
-        }
-
-        checkout scm
-        withEnv(["TRAVIS_JOB_NUMBER=${BUILD_NUMBER}.${platform.toUpperCase()}"]) {
-          withEnv(testEnvironment) {
-            gradleWrapper "check"
-          }
-        }
-      }
-      catch(Exception error) {
-        println(error)
-        println(error.printStackTrace())
-        currentBuild.result = 'FAILURE'
-      }
-      finally {
-        if(!currentBuild.result) {
-          def command = (coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
-          withEnv(["COVERALLS_REPO_TOKEN=${coverallsToken}"]) {
-              gradleWrapper command
-              publishHTML([
-                          allowMissing: true,
-                          alwaysLinkToLastBuild: true,
-                          keepAll: true,
-                          reportDir: 'build/reports/jacoco/test/html',
-                          reportFiles: 'index.html',
-                          reportName: 'Coverage',
-                          reportTitles: ''
-                          ])
-          }
-        }
-
-        junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
       }
     }
   }

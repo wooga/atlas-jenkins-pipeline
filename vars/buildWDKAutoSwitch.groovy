@@ -12,7 +12,8 @@ import net.wooga.jenkins.pipeline.TestHelper
 def call(Map config = [unityVersions:[]]) {
   def unityVersions = config.unityVersions
   config.testEnvironment = config.testEnvironment ?: []
-  config.labels = config.labels ?: 'primary'
+  config.testLabels = config.testLabels ?: []
+  config.labels = config.labels ?: ''
   //we need at least one valid unity version for now.
   if(unityVersions.isEmpty()) {
     error "Please provide at least one unity version."
@@ -112,14 +113,28 @@ def call(Map config = [unityVersions:[]]) {
               script {
                 def stepsForParallel = unityVersions.collectEntries { version ->
                   def environment = []
+                  def labels = config.labels
+
                   if(config.testEnvironment) {
                     if(config.testEnvironment instanceof List) {
                       environment = config.testEnvironment
                     }
                     else {
-                      environment = (config.testEnvironment[version]) ?: []
+                      environment = (config.testEnvironment[it]) ?: []
                     }
                   }
+
+                  if(config.testLabels) {
+                    if(config.testLabels instanceof List) {
+                      labels = config.testLabels
+                    }
+                    else {
+                      labels = (config.testLabels[it]) ?: config.labels
+                    }
+                  }
+
+                  def testConfig = config.clone()
+                  testConfig.labels = labels
 
                   environment.addAll(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"])
 
@@ -141,7 +156,7 @@ def call(Map config = [unityVersions:[]]) {
                     cleanWs()
                   }
 
-                  ["check Unity-${version}" : helper.transformIntoCheckStep("macos", environment, null, config, checkStep, finalizeStep, true)]
+                  ["check Unity-${version}" : helper.transformIntoCheckStep("macos", environment, null, testConfig, checkStep, finalizeStep, true)]
                 }
                 parallel stepsForParallel
               }
