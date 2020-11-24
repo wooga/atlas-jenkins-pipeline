@@ -70,6 +70,8 @@ def call(Map config = [:]) {
                 }
               }
 
+              environment << "COVERALLS_PARALLEL=true"
+
               if(config.testLabels) {
                 if(config.testLabels instanceof List) {
                   labels = config.testLabels
@@ -107,6 +109,12 @@ def call(Map config = [:]) {
             }
 
             parallel stepsForParallel
+          }
+        }
+
+        post {
+          success {
+            httpRequest httpMode: 'POST', ignoreSslErrors: true, url: 'https://coveralls.io/webhook?repo_token=${config.coverallsToken}'
           }
         }
       }
