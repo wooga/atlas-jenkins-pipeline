@@ -114,7 +114,7 @@ def call(Map config = [:]) {
 
         post {
           success {
-            httpRequest httpMode: 'POST', ignoreSslErrors: true, url: 'https://coveralls.io/webhook?repo_token=${config.coverallsToken}'
+            httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
           }
         }
       }
