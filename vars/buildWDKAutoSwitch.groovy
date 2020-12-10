@@ -150,6 +150,7 @@ def call(Map config = [unityVersions:[]]) {
                     nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                     archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
+                    publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
                     dir (version) {
                       deleteDir()
                     }
