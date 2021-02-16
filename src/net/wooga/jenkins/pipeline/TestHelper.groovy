@@ -7,7 +7,10 @@ import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 **/
 def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, checkClosure, finallyClosure, skipcheckout = false) {
   return {
-    def node_label = "${platform} && atlas"
+    def node_label = "atlas"
+    if(platform) {
+      node_label += "&& ${platform}"
+    }
 
     if(config.labels) {
       node_label += "&& ${config.labels}"
@@ -64,10 +67,6 @@ def transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, ch
             }
           }
         }
-      }
-      catch(Exception error) {
-        echo error.message
-        currentBuild.result = 'FAILURE'
       }
       finally {
         finallyClosure.call()
