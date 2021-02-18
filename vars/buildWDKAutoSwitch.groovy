@@ -117,10 +117,10 @@ def call(Map config = [unityVersions:[]]) {
 
                   if(config.testEnvironment) {
                     if(config.testEnvironment instanceof List) {
-                      environment = config.testEnvironment
+                      environment.addAll(config.testEnvironment)
                     }
                     else {
-                      environment = (config.testEnvironment[it]) ?: []
+                      environment.addAll( (config.testEnvironment[it]) ?: [])
                     }
                   }
 
