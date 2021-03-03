@@ -5,14 +5,11 @@ import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 /**
  * Creates a "check" step for use in a jenkins pipeline
  **/
-def transformIntoCheckStep(String platform, Map testEnvironment, String coverallsToken, Map config, Closure checkClosure, Closure finallyClosure, Boolean skipCheckout = false) {
-
-    return this.createCheckStep(args)
-    this.createCheckStep([platform: platform,
+Closure transformIntoCheckStep(platform, testEnvironment, coverallsToken, config, checkClosure, finallyClosure, skipCheckout = false) {
+    return this.createCheckStep([platform: platform,
             testEnvironment: testEnvironment,
             config: config,
             checkClosure: checkClosure,
-            catchClosure: catchClosure,
             finallyClosure: finallyClosure,
             skipCheckout: skipCheckout])
 }
@@ -20,7 +17,10 @@ def transformIntoCheckStep(String platform, Map testEnvironment, String coverall
 /**
  * Creates a "check" step for use in a jenkins pipeline
  **/
-def createCheckStep(Map args) {
+Closure createCheckStep(Map args) {
+    args.config = args.config ?: [:]
+    args.config.dockerArgs = args.config.dockerArgs ?: [:]
+    args.skipCheckout = args.skipCheckout ?: false
 
     return {
         def node_label = "atlas"
