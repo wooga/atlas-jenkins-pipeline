@@ -25,14 +25,20 @@ def call(String buildStatus = 'STARTED', blueOceanURL = false) {
   if (buildStatus == 'STARTED') {
     colorCode = '#FFFF00'
     buildStatus = buildStatus.toLowerCase().capitalize()
-  } else if (buildStatus == 'SUCCESSFUL') {
+  }
+  else if (buildStatus == 'SUCCESSFUL') {
     colorCode = '#00FF00'
     buildStatus = buildStatus.toLowerCase().capitalize()
   }
   else if (buildStatus == 'SUCCESS') {
      colorCode = '#00FF00'
      buildStatus = buildStatus.toLowerCase().capitalize()
-  } else {
+  }
+  else if (buildStatus == 'UNSTABLE') {
+    colorCode = '#F5A623'
+    buildStatus = buildStatus.toLowerCase().capitalize()
+  }
+  else {
     colorCode = '#FF0000'
     buildStatus = buildStatus.toLowerCase().capitalize()
   }

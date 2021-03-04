@@ -1,6 +1,7 @@
 #!/usr/bin/env groovy
 
 import net.wooga.jenkins.pipeline.TestHelper
+import net.wooga.jenkins.pipeline.BuildUtils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -10,7 +11,9 @@ import net.wooga.jenkins.pipeline.TestHelper
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map config = [unityVersions:[]]) {
-  def unityVersions = config.unityVersions
+
+  def buildUtils = new BuildUtils()
+  def unityVersions = buildUtils.parseVersions(config.unityVersions)
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
@@ -45,7 +48,7 @@ def call(Map config = [unityVersions:[]]) {
       stage('setup') {
 
         agent {
-          label "secondary && atlas && macos"
+          label "atlas && macos"
         }
 
         steps {
@@ -73,7 +76,7 @@ def call(Map config = [unityVersions:[]]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && primary && macos"
+               label "atlas && macos"
             }
 
             environment {
@@ -91,6 +94,7 @@ def call(Map config = [unityVersions:[]]) {
               }
 
               always {
+                stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
@@ -111,9 +115,12 @@ def call(Map config = [unityVersions:[]]) {
 
             steps {
               script {
-                def stepsForParallel = unityVersions.collectEntries { version ->
+                def stepsForParallel = unityVersions.collectEntries { bv ->
                   def environment = []
                   def labels = config.labels
+
+                  version = bv.version
+                  optional = bv.optional
 
                   if(config.testEnvironment) {
                     if(config.testEnvironment instanceof List) {
@@ -146,6 +153,15 @@ def call(Map config = [unityVersions:[]]) {
                     }
                   }
 
+                  def catchStep = { Exception e ->
+                    if (optional){
+                      unstable(message: "Unity build for optional version ${version} is found to be unstable")
+                    }
+                    else{
+                      throw e
+                    }
+                  }
+
                   def finalizeStep = {
                     nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
@@ -157,7 +173,16 @@ def call(Map config = [unityVersions:[]]) {
                     cleanWs()
                   }
 
-                  ["check Unity-${version}" : helper.transformIntoCheckStep("macos", environment, null, testConfig, checkStep, finalizeStep, true)]
+                  def Map args = [:]
+                  args.platform = "macos"
+                  args.testEnvironment = environment
+                  args.config = testConfig
+                  args.checkClosure = checkStep
+                  args.catchClosure = catchStep
+                  args.finallyClosure = finalizeStep
+                  args.skipCheckout = true
+
+                  ["check Unity-${version}" : helper.createCheckStep(args)]
                 }
                 parallel stepsForParallel
               }
@@ -168,7 +193,7 @@ def call(Map config = [unityVersions:[]]) {
 
       stage('publish') {
         agent {
-           label "atlas && primary && macos"
+           label "atlas && macos"
         }
 
         environment {
