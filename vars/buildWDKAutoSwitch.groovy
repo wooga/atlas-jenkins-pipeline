@@ -120,7 +120,8 @@ def call(Map config = [unityVersions:[]]) {
                   def labels = config.labels
 
                   def version = bv.version
-                  def optional = bv.optional
+                  def stepLabel = bv.toLabel()
+                  def directoryName = bv.toDirectoryName()
 
                   if(config.testEnvironment) {
                     if(config.testEnvironment instanceof List) {
@@ -144,17 +145,21 @@ def call(Map config = [unityVersions:[]]) {
                   testConfig.labels = labels
 
                   environment.addAll(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"])
+                  if (bv.apiCompatibilityLevel != null){
+                    environment.addAll(["UNITY_API_COMPATIBILITY_LEVEL=${bv.apiCompatibilityLevel}"])
+                  }
 
                   def checkStep = {
-                    dir (version) {
+                    dir (directoryName) {
                       checkout scm
                       unstash 'setup_w'
-                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE check"
+                      // gradleWrapper "--refresh-dependencies"
+                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} check --info"
                     }
                   }
 
                   def catchStep = { Exception e ->
-                    if (optional){
+                    if (bv.optional){
                       unstable(message: "Unity build for optional version ${version} is found to be unstable")
                     }
                     else{
@@ -167,7 +172,7 @@ def call(Map config = [unityVersions:[]]) {
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                     archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
                     publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
-                    dir (version) {
+                    dir (directoryName) {
                       deleteDir()
                     }
                     cleanWs()
@@ -182,7 +187,7 @@ def call(Map config = [unityVersions:[]]) {
                   args.finallyClosure = finalizeStep
                   args.skipCheckout = true
 
-                  ["check Unity-${version}" : helper.createCheckStep(args)]
+                  ["check Unity-${stepLabel}" : helper.createCheckStep(args)]
                 }
                 parallel stepsForParallel
               }
