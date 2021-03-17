@@ -119,8 +119,8 @@ def call(Map config = [unityVersions:[]]) {
                   def environment = []
                   def labels = config.labels
 
-                  version = bv.version
-                  optional = bv.optional
+                  def version = bv.version
+                  def optional = bv.optional
 
                   if(config.testEnvironment) {
                     if(config.testEnvironment instanceof List) {
