@@ -10,22 +10,27 @@ import net.wooga.jenkins.pipeline.BuildUtils
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [unityVersions:[]]) {
+def call(Map config = [ unityVersions:[] ]) {
 
   def buildUtils = new BuildUtils()
-  def unityVersions = buildUtils.parseVersions(config.unityVersions)
-  config.testEnvironment = config.testEnvironment ?: []
-  config.testLabels = config.testLabels ?: []
-  config.labels = config.labels ?: ''
-  //we need at least one valid unity version for now.
-  if(unityVersions.isEmpty()) {
+
+  // We need at least one valid unity version for now.
+  config.unityVersions = buildUtils.parseVersions(config.unityVersions)
+  if(config.unityVersions.isEmpty()) {
     error "Please provide at least one unity version."
   }
 
+  // Set defaults as needed
+  config.testEnvironment = config.testEnvironment ?: []
+  config.testLabels = config.testLabels ?: []
+  config.labels = config.labels ?: ''
+  config.refreshDependencies = config.refreshDependencies ?: false
+  config.logLevel = config.logLevel ?: ''
+
   def helper = new TestHelper()
 
-  //We can only configure static pipelines atm.
-  //To test multiple unity versions we use a script block with a parallel stages inside.
+  // We can only configure static pipelines atm.
+  // To test multiple unity versions we use a script block with a parallel stages inside.
   pipeline {
     agent none
 
@@ -36,22 +41,31 @@ def call(Map config = [unityVersions:[]]) {
     environment {
       UVM_AUTO_SWITCH_UNITY_EDITOR  = "YES"
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
+      LOG_LEVEL = "${config.logLevel}"
       ATLAS_READ = credentials('artifactory_read')
     }
 
     parameters {
         choice(choices: "snapshot\nrc\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
         choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+        choice(choices: "\ninfo\nwarn\nquiet\ndebug", description: 'Choose the log level', name: 'LOG_LEVEL')
+        booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
+        booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
     }
 
     stages {
-      stage('setup') {
 
+      stage('setup') {
         agent {
           label "atlas && macos"
         }
 
         steps {
+          script {
+            if (config.refreshDependencies == true || params.REFRESH_DEPENDENCIES == true) {
+              gradleWrapper "--refresh-dependencies"
+            }
+          }
           sendSlackNotification "STARTED", true
           gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE setup"
         }
@@ -115,7 +129,7 @@ def call(Map config = [unityVersions:[]]) {
 
             steps {
               script {
-                def stepsForParallel = unityVersions.collectEntries { bv ->
+                def stepsForParallel = config.unityVersions.collectEntries { bv ->
                   def environment = []
                   def labels = config.labels
 
@@ -153,14 +167,13 @@ def call(Map config = [unityVersions:[]]) {
                     dir (directoryName) {
                       checkout scm
                       unstash 'setup_w'
-                      // gradleWrapper "--refresh-dependencies"
-                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} check --info"
+                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} check"
                     }
                   }
 
                   def catchStep = { Exception e ->
                     if (bv.optional){
-                      unstable(message: "Unity build for optional version ${version} is found to be unstable")
+                      unstable(message: "Unity build for optional version ${version} is found to be unstable\n${e.toString()}")
                     }
                     else{
                       throw e
@@ -209,7 +222,7 @@ def call(Map config = [unityVersions:[]]) {
           GITHUB_PASSWORD    = "${GRGIT_PSW}"
           NUGET_KEY          = credentials('artifactory_publish')
           nugetkey           = "${NUGET_KEY}"
-          UNITY_PATH         = "${APPLICATIONS_HOME}/Unity-${unityVersions[0]}/${UNITY_EXEC_PACKAGE_PATH}"
+          UNITY_PATH         = "${APPLICATIONS_HOME}/Unity-${config.unityVersions[0]}/${UNITY_EXEC_PACKAGE_PATH}"
           UNITY_LOG_CATEGORY = "build"
         }
 
