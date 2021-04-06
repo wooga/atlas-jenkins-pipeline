@@ -6,7 +6,7 @@ class BuildVersion {
 
     final String version
     final Boolean optional
-    // NET_4_6, NET_Standard_2_0 (DEFAULT)
+    // net_4_6, net_standard_2_0 (DEFAULT)
     final String apiCompatibilityLevel
 
     BuildVersion(version, optional, apiCompatibilityLevel = null) {
