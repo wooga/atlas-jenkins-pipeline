@@ -10,8 +10,8 @@ import net.wooga.jenkins.pipeline.TestHelper
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map config = [:]) {
-  config.platforms = config.plaforms ?: ['osx','windows']
-  config.platforms = config.platforms ?: ['osx','windows']
+  config.platforms = config.plaforms ?: ['unix']
+  config.platforms = config.platforms ?: ['unix']
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
@@ -33,8 +33,11 @@ def call(Map config = [:]) {
     }
 
     parameters {
-      choice(choices: "snapshot\nrc\nfinal", description: 'Choose the distribution type', name: 'RELEASE_TYPE')
-       choice(choices: "\npatch\nminor\nmajor", description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+      choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+      choice(choices: ["patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+      choice(choices: ["quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
+      booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
+      booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
     }
 
     stages {
