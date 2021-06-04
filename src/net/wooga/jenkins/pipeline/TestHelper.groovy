@@ -1,6 +1,5 @@
 package net.wooga.jenkins.pipeline
-
-import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
+//import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 
 /**
  * Creates a "check" step for use in a jenkins pipeline
