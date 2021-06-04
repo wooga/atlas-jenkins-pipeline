@@ -90,9 +90,15 @@ def call(Map config = [:]) {
               def checkStep = { gradleWrapper "check" }
               def finalizeStep = {
                 if(!currentBuild.result) {
-                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
+                  def tasks  = "jacocoTestReport"
+                  if(config.sonarToken) {
+                    tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
+                  } else if (config.coveralls) {
+                    tasks += " coveralls"
+                  }
+//                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
-                    gradleWrapper command
+                    gradleWrapper tasks
                     publishHTML([
                                 allowMissing: true,
                                 alwaysLinkToLastBuild: true,
