@@ -142,7 +142,7 @@ def call(Map config = [ unityVersions:[] ]) {
                       environment.addAll(config.testEnvironment)
                     }
                     else {
-                      environment.addAll( (config.testEnvironment[it]) ?: [])
+                      environment.addAll( (config.testEnvironment[bv]) ?: [])
                     }
                   }
 
@@ -151,7 +151,7 @@ def call(Map config = [ unityVersions:[] ]) {
                       labels = config.testLabels
                     }
                     else {
-                      labels = (config.testLabels[it]) ?: config.labels
+                      labels = (config.testLabels[bv]) ?: config.labels
                     }
                   }
 
