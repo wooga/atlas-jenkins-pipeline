@@ -87,16 +87,17 @@ def call(Map config = [:]) {
               def testConfig = config.clone()
               testConfig.labels = labels
 
-              def checkStep = { gradleWrapper "check" }
+              def checkStep = {
+                gradleWrapper "check"
+              }
               def finalizeStep = {
                 if(!currentBuild.result) {
                   def tasks  = "jacocoTestReport"
                   if(config.sonarToken) {
                     tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
-                  } else if (config.coveralls) {
+                  } else if (config.coverallsToken) {
                     tasks += " coveralls"
                   }
-//                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
                     gradleWrapper tasks
                     publishHTML([
@@ -120,13 +121,15 @@ def call(Map config = [:]) {
             parallel stepsForParallel
           }
         }
-
-        post {
-          success {
-            httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+        if(config.coverallsToken) {
+          post {
+            success {
+              httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+            }
           }
         }
       }
+
 
       stage('publish') {
         when {
