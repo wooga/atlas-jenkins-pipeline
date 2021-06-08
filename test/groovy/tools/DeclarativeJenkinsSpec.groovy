@@ -1,5 +1,6 @@
 package tools
 
+import com.lesfurets.jenkins.unit.MethodCall
 import com.lesfurets.jenkins.unit.PipelineTestHelper
 import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
@@ -8,6 +9,8 @@ import com.lesfurets.jenkins.unit.declarative.WhenDeclaration
 import net.wooga.jenkins.pipeline.TestHelper
 import spock.lang.Shared
 import spock.lang.Specification
+
+import java.lang.reflect.Method
 
 abstract class DeclarativeJenkinsSpec extends Specification {
 
@@ -60,10 +63,14 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     }
 
     protected boolean hasShCallWith(Closure assertion) {
-        helper.callStack.findAll { call ->
-            call.methodName == "sh"
-        }.any { call ->
-            assertion(call.argsToString())
+        return hasMethodCallWith("sh") {
+            MethodCall call -> assertion(call.argsToString())
         }
     }
-}
+
+
+    protected boolean hasMethodCallWith(String methodName, Closure assertion) {
+        return helper.callStack.findAll { call ->
+            call.methodName == methodName
+        }.any(assertion)
+    }}

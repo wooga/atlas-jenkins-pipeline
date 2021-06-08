@@ -93,10 +93,11 @@ def call(Map config = [:]) {
               def finalizeStep = {
                 if(!currentBuild.result) {
                   def tasks  = "jacocoTestReport"
+                  if (config.coverallsToken) {
+                    tasks += " coveralls"
+                  }
                   if(config.sonarToken) {
                     tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
-                  } else if (config.coverallsToken) {
-                    tasks += " coveralls"
                   }
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
                     gradleWrapper tasks
