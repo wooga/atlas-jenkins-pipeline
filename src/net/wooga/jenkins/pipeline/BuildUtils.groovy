@@ -1,6 +1,6 @@
 package net.wooga.jenkins.pipeline
 
-import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
+import com.cloudbees.groovy.cps.NonCPS
 
 class BuildVersion {
 
