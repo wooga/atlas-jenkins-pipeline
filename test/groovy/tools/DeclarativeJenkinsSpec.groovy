@@ -10,8 +10,6 @@ import net.wooga.jenkins.pipeline.TestHelper
 import spock.lang.Shared
 import spock.lang.Specification
 
-import java.lang.reflect.Method
-
 abstract class DeclarativeJenkinsSpec extends Specification {
 
     @Shared DeclarativePipelineTest jenkinsTest;
@@ -68,9 +66,9 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         }
     }
 
-
     protected boolean hasMethodCallWith(String methodName, Closure assertion) {
         return helper.callStack.findAll { call ->
             call.methodName == methodName
         }.any(assertion)
-    }}
+    }
+}
