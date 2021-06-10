@@ -61,6 +61,9 @@ def parseVersions(versions) {
     final apiCompatibilityLevelKey = "apiCompatibilityLevel"
 
     versions.collect { v ->
+        if (v instanceof BuildVersion) {
+            return v
+        }
 
         if (v instanceof Closure) {
             v = v.call()
