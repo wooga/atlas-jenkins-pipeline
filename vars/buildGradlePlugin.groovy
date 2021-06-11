@@ -122,14 +122,16 @@ def call(Map config = [:]) {
             parallel stepsForParallel
           }
         }
-        if(config.coverallsToken) {
-          post {
-            success {
-              httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+        post {
+          success {
+            script {
+              if(config.coverallsToken) {
+                httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+              }
             }
           }
-        }
-      }
+       }
+     }
 
 
       stage('publish') {
