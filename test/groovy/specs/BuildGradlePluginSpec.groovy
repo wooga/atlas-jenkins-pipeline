@@ -12,15 +12,14 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     def setupSpec() {
         binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
         this.gradleWrapperScript = helper.loadScript("vars/gradleWrapper.groovy", binding)
-        print this.gradleWrapperScript
     }
 
     @Unroll("should execute #name if their token(s) are present")
-    def "should execute coverage when its token is present" (List<String> gradleCmdElements, String sonarToken, String coverallsToken) {
+    def "should execute coverage when its token is present" (){
         given: "loaded buildGradlePlugin in a running build"
         binding.getVariable("currentBuild").with { result = null }
         helper.registerAllowedMethod("gradleWrapper", [String]) { command ->
-            this.gradleWrapperScript(command)
+            this.gradleWrapperScript.call(command)
         }
         def buildGradlePlugin = helper.loadScript("vars/buildGradlePlugin.groovy", binding)
 
@@ -48,7 +47,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         binding.getVariable("currentBuild").with { result = "SUCCESS" }
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         helper.registerAllowedMethod("gradleWrapper", [String]) { command ->
-            this.gradleWrapperScript(command)
+            this.gradleWrapperScript.call(command)
         }
         def buildGradlePlugin = helper.loadScript("vars/buildGradlePlugin.groovy", binding)
 
