@@ -1,0 +1,31 @@
+plugins {
+    id 'groovy'
+    id 'java'
+}
+
+group = 'com.wooga'
+description = 'Atlas Jenkins pipeline shared library'
+java.sourceCompatibility = JavaVersion.VERSION_1_8
+
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+test {
+    useJUnitPlatform()
+}
+
+dependencies {
+    implementation 'org.ajoberstar.grgit:grgit-core:[4,5)'
+    implementation gradleApi()
+    testImplementation platform("org.spockframework:spock-bom:2.0-groovy-3.0")
+    testImplementation "org.spockframework:spock-core"
+    testImplementation "org.spockframework:spock-junit4"  // you can remove this if your code does not rely on old JUnit 4 rules
+    testImplementation('com.netflix.nebula:nebula-test:[8,9)') {
+        version {
+            strictly '8.1.0'
+        }
+    }
+}
