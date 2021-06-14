@@ -21,6 +21,11 @@ pipeline {
         SONAR_PROJECT_NAME = "atlas-jenkins-pipeline"
         SONAR_PROJECT_KEY = "wooga_atlas-jenkins-pipeline"
     }
+    parameters {
+        choice(name: 'releaseType', choices: ['NONE', 'MAJOR', 'MINOR', 'PATCH'],
+                description:  "Pick a release type, or NONE if this run shouldn't generate a release")
+    }
+
     agent any
     stages {
         stage("Check") {
@@ -36,6 +41,19 @@ pipeline {
                             "-Dsonar.tests=test/ " +
                             "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
                 }
+                cleanup {
+                    cleanWs()
+                }
+            }
+        }
+        stage("Release") {
+            when {
+                expression { !(params.releaseType in [null, "", "NONE"]) }
+            }
+            steps {
+                gradleWrapper "branchVersion -P version.updateType=${params.releaseType}"
+            }
+            post {
                 cleanup {
                     cleanWs()
                 }

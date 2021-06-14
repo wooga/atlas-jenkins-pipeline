@@ -20,7 +20,7 @@ class VersionTask extends DefaultTask {
     @Input
     String remote
     @Input
-    boolean dryRun = true
+    boolean dryRun
 
     @TaskAction
     protected void run() {
