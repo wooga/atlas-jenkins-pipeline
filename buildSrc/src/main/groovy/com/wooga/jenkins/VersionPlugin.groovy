@@ -3,7 +3,6 @@ package com.wooga.jenkins
 import org.ajoberstar.grgit.Grgit
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.provider.Property
 
 class VersionPlugin implements Plugin<Project> {
 
@@ -20,14 +19,6 @@ class VersionPlugin implements Plugin<Project> {
             it.remote.convention(propRemote ?: "origin")
             it.updateType.convention(propUpdateType)
             it.dryRun.convention(propDryRun ?: false)
-
-//            it.remote = newProperty(project, String.class, propRemote ?: "origin")
-//            it.updateType = newProperty(project, String.class, propUpdateType)
-//            it.dryRun = newProperty(project, Boolean.class,propDryRun ?: false)
         }
-    }
-
-    private static <T> Property<T> newProperty(Project project, Class<T> type, T defaultValue=null) {
-        return project.objects.property(type).convention(defaultValue)
     }
 }

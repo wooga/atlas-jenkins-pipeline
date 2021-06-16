@@ -9,7 +9,7 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 
-abstract class VersionTask extends DefaultTask {
+class VersionTask extends DefaultTask {
 
     public static final String TASK_NAME = "branchVersion"
 
@@ -17,13 +17,16 @@ abstract class VersionTask extends DefaultTask {
     Grgit git
     @Internal
     Logger logger
-    @Input
-    abstract Property<String> getUpdateType()
-    @Input
-    abstract Property<String> getRemote()
-    @Input
-    abstract Property<Boolean> getDryRun()
 
+    final Property<String> updateType
+    final Property<String> remote
+    final Property<Boolean> dryRun
+
+    VersionTask() {
+        this.updateType = project.objects.property(String)
+        this.remote = project.objects.property(String)
+        this.dryRun = project.objects.property(Boolean)
+    }
 
     @TaskAction
     protected void run() {
@@ -45,7 +48,7 @@ abstract class VersionTask extends DefaultTask {
         updateVersion(remote, newVersion, dryRun)
     }
 
-    def updateVersion(String remote, Version newVersion, boolean dryRun) {
+    private void updateVersion(String remote, Version newVersion, boolean dryRun) {
         VersionBranch branch = new VersionBranch(git, remote, dryRun)
         branch.applyMajor(newVersion)
         logger.info("Created branch ${newVersion.genericMajorName()}")
@@ -57,4 +60,18 @@ abstract class VersionTask extends DefaultTask {
         logger.info("Created tag ${newVersion.fullName()}")
     }
 
+    @Input
+    Property<String> getUpdateType() {
+        return updateType
+    }
+
+    @Input
+    Property<String> getRemote() {
+        return remote
+    }
+
+    @Input
+    Property<Boolean> getDryRun() {
+        return dryRun
+    }
 }

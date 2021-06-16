@@ -15,15 +15,25 @@
  * limitations under the License.
  */
 @Library('github.com/wooga/atlas-jenkins-pipeline@1.x') _
+
 pipeline {
     environment {
         SONAR_TOKEN = credentials("atlas_plugins_sonar_token")
         SONAR_PROJECT_NAME = "atlas-jenkins-pipeline"
         SONAR_PROJECT_KEY = "wooga_atlas-jenkins-pipeline"
+        //generates ATLAS_GITHUB_INTEGRATION_USR and ATLAS_GITHUB_INTEGRATION_PSW
+        ATLAS_GITHUB_INTEGRATION = credentials('github_integration')
+        ATLAS_GITHUB_INTEGRATION_USERNAME = "${ATLAS_GITHUB_INTEGRATION_USR}"
+        ATLAS_GITHUB_INTEGRATION_PASSWORD = "${ATLAS_GITHUB_INTEGRATION_PSW}"
+        GRGIT_USER = "${ATLAS_GITHUB_INTEGRATION_USR}"
+        GRGIT_PASS = "${ATLAS_GITHUB_INTEGRATION_PSW}"
     }
     parameters {
         choice(name: 'releaseType', choices: ['NONE', 'MAJOR', 'MINOR', 'PATCH'],
                 description:  "Pick a release type, or NONE if this run shouldn't generate a release")
+        choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
+        booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
+        booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
     }
 
     agent any
