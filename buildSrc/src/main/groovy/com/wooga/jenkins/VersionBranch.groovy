@@ -25,17 +25,48 @@ class VersionBranch {
         updateVersionBranch(version.genericMinorName(), base)
     }
 
+    private Optional<Branch> getLocalBranchWithRemote(String branchName) {
+        return Optional.ofNullable(
+                git.branch.list(mode: "LOCAL").find{Branch it ->
+                    it.name == branchName &&
+                    it.trackingBranch != null &&
+                    it.trackingBranch.name.endsWith(branchName)
+                }
+        )
+    }
+
     private void updateVersionBranch(String branchName, Branch base) {
-        def versionBranch = git.branch.list().find{it.name == branchName}
-        git.checkout(branch: branchName, createBranch: versionBranch == null)
+        def targetBranch = getLocalBranchWithRemote(branchName).orElseGet{
+            createLocalBranchFromRemote(branchName).orElseGet {
+                getOrCreateLocalBranch(branchName, base)
+            }
+        }
+        git.checkout(branch: targetBranch.name)
         try {
-            Branch newBranch = git.branch.current()
             git.merge(head: base.fullName, message: "Merge branch ${base.name}")
-            git.push(remote: remote, refsOrSpecs: [newBranch.fullName], dryRun: dryRun)
+            git.push(remote: remote,
+                    refsOrSpecs: ["${targetBranch.name}"],
+                    dryRun: dryRun)
         } finally {
             git.checkout(branch: base.fullName)
         }
 
     }
 
+    private Optional<Branch> createLocalBranchFromRemote(String branchName) {
+        def remoteBranch = Optional.ofNullable(
+                git.branch.list(mode: "REMOTE").find { branch -> branch.name.endsWith(branchName) }
+        )
+        return remoteBranch.map{ Branch remote ->
+                git.branch.add(name: branchName, startPoint: remote.fullName, mode: "TRACK")
+        }
+    }
+
+    private Branch getOrCreateLocalBranch(String branchName, Branch base=git.branch.current()) {
+        return Optional.ofNullable(
+                git.branch.list(mode:"LOCAL").find{it.name == branchName} as Branch)
+                .orElseGet {
+                    git.branch.add(name: branchName, startPoint: base.fullName)
+                }
+    }
 }

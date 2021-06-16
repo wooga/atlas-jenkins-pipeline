@@ -3,4 +3,3 @@
  */
 
 rootProject.name = 'atlas-jenkins-pipeline'
-//include(":notBuildSrc")

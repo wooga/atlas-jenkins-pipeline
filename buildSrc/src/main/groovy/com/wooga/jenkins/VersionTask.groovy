@@ -3,11 +3,13 @@ package com.wooga.jenkins
 import org.ajoberstar.grgit.Grgit
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.Logger
+import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
-class VersionTask extends DefaultTask {
+
+abstract class VersionTask extends DefaultTask {
 
     public static final String TASK_NAME = "branchVersion"
 
@@ -16,11 +18,12 @@ class VersionTask extends DefaultTask {
     @Internal
     Logger logger
     @Input
-    UpdateType updateType
+    abstract Property<String> getUpdateType()
     @Input
-    String remote
+    abstract Property<String> getRemote()
     @Input
-    boolean dryRun
+    abstract Property<Boolean> getDryRun()
+
 
     @TaskAction
     protected void run() {
@@ -30,12 +33,19 @@ class VersionTask extends DefaultTask {
         if(dryRun) {
             logger.info("Running versioning plugin in dry run mode. Changes will not be pushed to the remote repository")
         }
+        def updateType = this.updateType.get().toUpperCase() as UpdateType
+        def remote = this.remote.getOrElse("origin")
+        def dryRun = this.dryRun.getOrElse(false)
 
         def currentVersion = Version.currentFromTags(git.tag.list())
-        def newVersion = currentVersion.
-                            map{version -> version.update(updateType)}.
-                            orElse(Version.newFromType(updateType))
+        Version newVersion = currentVersion.
+                map{version -> version.update(updateType)}.
+                orElse(Version.newFromType(updateType))
 
+        updateVersion(remote, newVersion, dryRun)
+    }
+
+    def updateVersion(String remote, Version newVersion, boolean dryRun) {
         VersionBranch branch = new VersionBranch(git, remote, dryRun)
         branch.applyMajor(newVersion)
         logger.info("Created branch ${newVersion.genericMajorName()}")

@@ -75,7 +75,7 @@ Each build version can be defined by just the string of the version or by a map 
 #### Usage:
 
 ```groovy
-// Build and test the wdk package with custom step
+// Build and unit the wdk package with custom step
 def args = 
 [
     logLevel: info,
