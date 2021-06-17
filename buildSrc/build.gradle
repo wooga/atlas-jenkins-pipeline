@@ -1,0 +1,28 @@
+plugins {
+    id 'groovy'
+    id 'java'
+}
+
+group = 'com.wooga'
+description = 'Atlas Jenkins pipeline shared library'
+java.sourceCompatibility = JavaVersion.VERSION_1_8
+
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+dependencies {
+    implementation 'org.ajoberstar.grgit:grgit-core:[4,5)'
+    implementation 'org.codehaus.groovy:groovy-all:2.5.12'
+    implementation gradleApi()
+    testImplementation platform("org.spockframework:spock-bom:1.2-groovy-2.4")
+    testImplementation "org.spockframework:spock-core"
+    testImplementation 'com.wooga.spock.extensions:spock-github-extension:0.1.2'
+    testImplementation ('com.netflix.nebula:nebula-test:[8,9)') {
+        version {
+            strictly '8.1.0'
+        }
+    }
+}
