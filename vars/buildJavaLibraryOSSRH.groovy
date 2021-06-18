@@ -54,7 +54,7 @@ def call(Map config = [:]) {
         when {
           beforeAgent true
           expression {
-            return params.RELEASE_TYPE == "snapshot"
+            return params.RELEASE_TYPE in ["snapshot", ""]
           }
         }
 
