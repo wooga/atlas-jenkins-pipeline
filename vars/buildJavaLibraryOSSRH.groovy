@@ -34,7 +34,7 @@ def call(Map config = [:]) {
     }
 
     parameters {
-      choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+      choice(choices: ["", "snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
       choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
@@ -123,6 +123,10 @@ def call(Map config = [:]) {
       stage('publish') {
         agent {
           label "$mainPlatform && atlas"
+        }
+
+        when {
+          expression { params.RELEASE_TYPE.trim() != "" }
         }
 
         environment {
