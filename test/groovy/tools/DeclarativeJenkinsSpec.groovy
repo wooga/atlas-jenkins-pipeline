@@ -16,7 +16,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     @Shared Binding binding
     @Shared PipelineTestHelper helper
 
-    public void setupSpec() {
+    def setupSpec() {
         jenkinsTest = new DeclarativePipelineTest() {}
         jenkinsTest.setUp()
         helper = jenkinsTest.helper
@@ -27,6 +27,10 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         populateJenkinsDefaultEnvironment(binding)
         registerPipelineFakeMethods(helper)
         forceMockedScriptConstructor(binding, helper, TestHelper.metaClass, "src/net/wooga/jenkins/pipeline/TestHelper.groovy")
+    }
+
+    def cleanup() {
+       helper?.callStack?.clear()
     }
 
     private static void populateJenkinsDefaultEnvironment(Binding binding) {
@@ -70,5 +74,11 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         return helper.callStack.findAll { call ->
             call.methodName == methodName
         }.any(assertion)
+    }
+
+    protected Script loadScript(String name, Closure varBindingOps) {
+        varBindingOps.setDelegate(binding.variables)
+        varBindingOps(binding.variables)
+        return helper.loadScript(name, binding)
     }
 }
