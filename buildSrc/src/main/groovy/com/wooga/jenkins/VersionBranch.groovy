@@ -55,7 +55,7 @@ class VersionBranch {
 
     private Optional<Branch> createLocalBranchFromRemote(String branchName) {
         def remoteBranch = Optional.ofNullable(
-                git.branch.list(mode: "REMOTE").find { branch -> branch.name.endsWith(branchName) }
+                git.branch.list(mode: "REMOTE").find { branch -> branch.name.endsWith("${remote}/${branchName}") }
         )
         return remoteBranch.map{ Branch remote ->
                 git.branch.add(name: branchName, startPoint: remote.fullName, mode: "TRACK")
