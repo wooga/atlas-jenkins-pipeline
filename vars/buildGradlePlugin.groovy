@@ -11,8 +11,7 @@ import net.wooga.jenkins.pipeline.TestHelper
 
 def call(Map config = [:]) {
   //set config defaults
-  config.platforms = config.plaforms ?: ['macos','windows']
-  config.platforms = config.platforms ?: ['macos','windows']
+  config.platforms = config.platforms ?: config.plaforms ?: ['macos','windows']
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
@@ -62,7 +61,7 @@ def call(Map config = [:]) {
 
         steps {
           script {
-            def stepsForParallel = platforms.collectEntries {
+            def stepsForParallel = platforms.collectEntries { platform ->
               def environment = []
               def labels = config.labels
 
@@ -71,7 +70,7 @@ def call(Map config = [:]) {
                   environment = config.testEnvironment
                 }
                 else {
-                  environment = (config.testEnvironment[it]) ?: []
+                  environment = (config.testEnvironment[platform]) ?: []
                 }
               }
 
@@ -82,7 +81,7 @@ def call(Map config = [:]) {
                   labels = config.testLabels
                 }
                 else {
-                  labels = (config.testLabels[it]) ?: config.labels
+                  labels = (config.testLabels[platform]) ?: config.labels
                 }
               }
 
@@ -118,7 +117,7 @@ def call(Map config = [:]) {
                 cleanWs()
               }
 
-              ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
+              ["check ${platform}" : helper.transformIntoCheckStep(platform, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
             }
 
             parallel stepsForParallel

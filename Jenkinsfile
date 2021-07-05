@@ -22,7 +22,7 @@ pipeline {
         SONAR_PROJECT_NAME = "atlas-jenkins-pipeline"
         SONAR_PROJECT_KEY = "wooga_atlas-jenkins-pipeline"
         //generates ATLAS_GITHUB_INTEGRATION_USR and ATLAS_GITHUB_INTEGRATION_PSW
-        ATLAS_GITHUB_INTEGRATION = credentials('github_integration')
+        ATLAS_GITHUB_INTEGRATION = credentials('github_access')
         ATLAS_GITHUB_INTEGRATION_USERNAME = "${ATLAS_GITHUB_INTEGRATION_USR}"
         ATLAS_GITHUB_INTEGRATION_PASSWORD = "${ATLAS_GITHUB_INTEGRATION_PSW}"
         GRGIT_USER = "${ATLAS_GITHUB_INTEGRATION_USR}"
@@ -51,7 +51,7 @@ pipeline {
                             "-Dsonar.tests=test/ " +
                             "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
                 }
-                cleanup {
+                 failure {
                     cleanWs()
                 }
             }
