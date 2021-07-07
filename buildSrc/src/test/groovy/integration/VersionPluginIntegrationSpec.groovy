@@ -10,11 +10,13 @@ import nebula.test.IntegrationSpec
 import org.ajoberstar.grgit.Credentials
 import org.ajoberstar.grgit.Grgit
 import org.ajoberstar.grgit.Tag
+import org.apache.commons.lang3.RandomStringUtils
 import spock.lang.Unroll;
 
 class VersionPluginIntegrationSpec extends IntegrationSpec {
 
     @GithubRepository(
+            repositoryNamePrefix = "pipeline-buildsrc",
             usernameEnv = "ATLAS_GITHUB_INTEGRATION_USER",
             tokenEnv = "ATLAS_GITHUB_INTEGRATION_PASSWORD",
             repositoryPostFixProvider = [TravisBuildNumberPostFix.class],
@@ -75,7 +77,7 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
 
     def createRemoteBranchesIfNotExists(String[] branches) {
         branches.each {branchName ->
-            if (githubRepo.branches.containsKey(branchName)) {
+            if (!githubRepo.branches.containsKey(branchName)) {
                 githubRepo.createBranch(branchName, githubRepo.defaultBranch)
             }
         }
