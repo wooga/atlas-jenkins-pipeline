@@ -25,8 +25,7 @@ pipeline {
         ATLAS_GITHUB_INTEGRATION = credentials('github_integration')
         ATLAS_GITHUB_INTEGRATION_USERNAME = "${ATLAS_GITHUB_INTEGRATION_USR}"
         ATLAS_GITHUB_INTEGRATION_PASSWORD = "${ATLAS_GITHUB_INTEGRATION_PSW}"
-        GRGIT_USER = "${ATLAS_GITHUB_INTEGRATION_USR}"
-        GRGIT_PASS = "${ATLAS_GITHUB_INTEGRATION_PSW}"
+
     }
     parameters {
         choice(name: 'releaseType', choices: ['NONE', 'MAJOR', 'MINOR', 'PATCH'],
@@ -39,6 +38,10 @@ pipeline {
     agent any
     stages {
         stage("Check") {
+            environment {
+                GRGIT_USER = "${ATLAS_GITHUB_INTEGRATION_USR}"
+                GRGIT_PASS = "${ATLAS_GITHUB_INTEGRATION_PSW}"
+            }
             steps { gradleWrapper "check" }
             post {
                 always {
@@ -51,9 +54,6 @@ pipeline {
                             "-Dsonar.tests=test/ " +
                             "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
                 }
-                 failure {
-                    cleanWs()
-                }
             }
         }
         stage("Release") {
@@ -61,13 +61,15 @@ pipeline {
                 expression { !(params.releaseType in [null, "", "NONE"]) }
             }
             steps {
-                gradleWrapper "branchVersion -P version.updateType=${params.releaseType}"
-            }
-            post {
-                cleanup {
-                    cleanWs()
+                sshagent(['atlas_jenkins_pipeline_deploy_key']) {
+                    gradleWrapper "branchVersion -P version.updateType=${params.releaseType}"
                 }
             }
+        }
+    }
+    post {
+        cleanup {
+            cleanWs()
         }
     }
 }
