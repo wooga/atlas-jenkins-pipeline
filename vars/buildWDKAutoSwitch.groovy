@@ -185,6 +185,7 @@ def call(Map config = [ unityVersions:[] ]) {
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                     archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
                     publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
+                    publishCoverage adapters: [opencoverAdapter(mergeToOneReport: true, path: '**/codeCoverage/**/TestCoverageResults_*.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
                     dir (directoryName) {
                       deleteDir()
                     }
