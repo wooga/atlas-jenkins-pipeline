@@ -192,9 +192,10 @@ def call(Map config = [ unityVersions:[] ]) {
                             "-Dsonar.projectName=wdk-unity-UnifiedBuildSystem " +
                             "-Dsonar.login=${config.sonarToken} " +
                             "-Dsonar.host.url=${SONAR_HOST} " +
-                            "-Dsonar.sources=Wooga.UnifiedBuildSystem/Assets/ " // +
+                            "-Dsonar.sources=Wooga.UnifiedBuildSystem/Assets/ " +
+                            "-Dsonar.cs.nunit.reportsPaths=**/build/reports/unity/**/*.xml " + 
                             // "-Dsonar.tests=test/ " //+
-                            // "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
+                            "-Dsonar.cs.opencover.reportsPaths=**/codeCoverage/**/TestCoverageResults_*.xml"
                       }
                       deleteDir()
                     }
