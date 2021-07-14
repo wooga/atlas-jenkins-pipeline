@@ -184,9 +184,8 @@ def call(Map config = [ unityVersions:[] ]) {
                     nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                     archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
-                    withChecks('MyCheck') {
-                      publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
-                    }
+                    publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
+                    gradleWrapper "sonarqube -Dsonar.login=${config.sonarToken}"
                     dir (directoryName) {
                       deleteDir()
                     }
