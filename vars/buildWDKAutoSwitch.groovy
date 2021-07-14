@@ -187,7 +187,14 @@ def call(Map config = [ unityVersions:[] ]) {
                     publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
                     dir (directoryName) {
                       if(config.sonarToken) {
-                        gradleWrapper "sonarqube -Dsonar.login=${config.sonarToken}"
+                        gradleWrapper "sonarqube " +
+                            "-Dsonar.projectKey=wooga_wdk-unity-UnifiedBuildSystem " +
+                            "-Dsonar.projectName=wdk-unity-UnifiedBuildSystem " +
+                            "-Dsonar.login=${config.sonarToken} " +
+                            "-Dsonar.host.url=${SONAR_HOST} " +
+                            "-Dsonar.sources=Wooga.UnifiedBuildSystem/Assets/ " // +
+                            // "-Dsonar.tests=test/ " //+
+                            // "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
                       }
                       deleteDir()
                     }
