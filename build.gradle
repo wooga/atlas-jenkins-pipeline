@@ -24,7 +24,7 @@ repositories {
 dependencies {
     implementation 'com.cloudbees:groovy-cps:1.12'
     implementation 'org.jenkinsci.plugins:pipeline-model-api:1.8.4'
-    implementation 'org.codehaus.groovy:groovy-all:2.4.12'
+    implementation 'org.codehaus.groovy:groovy-all:3.0.8'
     testImplementation "com.lesfurets:jenkins-pipeline-unit:1.3"
     testImplementation "org.spockframework:spock-core:1.3-groovy-2.4"
 }
