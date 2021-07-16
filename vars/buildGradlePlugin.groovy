@@ -40,6 +40,7 @@ def call(Map config = [:]) {
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
       booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONAR')
+      booleanParam(defaultValue: true, description: 'Whether to clean the workspace after the build', name: 'CLEAN_WORKSPACE')
     }
 
     stages {
@@ -114,7 +115,9 @@ def call(Map config = [:]) {
                   }
                 }
                 junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
-                cleanWs()
+                if(params.CLEAN_WORKSPACE) {
+                  cleanWs()
+                }
               }
 
               ["check ${platform}" : helper.transformIntoCheckStep(platform, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
@@ -164,7 +167,11 @@ def call(Map config = [:]) {
 
         post {
           cleanup {
-            cleanWs()
+            scrips {
+              if(params.CLEAN_WORKSPACE) {
+                cleanWs()
+              }
+            }
           }
         }
       }

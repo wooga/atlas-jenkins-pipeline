@@ -11,8 +11,7 @@ import net.wooga.jenkins.pipeline.TestHelper
 
 def call(Map config = [:]) {
   //set config defaults
-  config.platforms = config.plaforms ?: ['unix']
-  config.platforms = config.platforms ?: ['unix']
+  config.platforms = config.platforms ?: config.plaforms ?: ['unix']
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
@@ -39,6 +38,7 @@ def call(Map config = [:]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+      booleanParam(defaultValue: true, description: 'Whether to clean the workspace after the build', name: 'CLEAN_WORKSPACE')
     }
 
     stages {
@@ -87,23 +87,31 @@ def call(Map config = [:]) {
 
               def checkStep = { gradleWrapper "check" }
               def finalizeStep = {
-                if (!currentBuild.result) {
-                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
+                if(!currentBuild.result) {
+                  def tasks  = "jacocoTestReport"
+                  if (config.coverallsToken) {
+                    tasks += " coveralls"
+                  }
+                  if(config.sonarToken && (BRANCH_NAME =~ config.sonarQubeBranchPattern || params.RUN_SONAR)) {
+                    tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
+                  }
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
-                    gradleWrapper command
+                    gradleWrapper tasks
                     publishHTML([
-                            allowMissing         : true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll              : true,
-                            reportDir            : 'build/reports/jacoco/test/html',
-                            reportFiles          : 'index.html',
-                            reportName           : "Coverage ${it}",
-                            reportTitles         : ''
-                    ])
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'build/reports/jacoco/test/html',
+                                reportFiles: 'index.html',
+                                reportName: "Coverage ${it}",
+                                reportTitles: ''
+                                ])
                   }
                 }
-                junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
-                cleanWs()
+                junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
+                if(params.CLEAN_WORKSPACE) {
+                  cleanWs()
+                }
               }
 
               ["check ${it}": helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
@@ -145,7 +153,11 @@ def call(Map config = [:]) {
 
         post {
           cleanup {
-            cleanWs()
+            script {
+              if(params.CLEAN_WORKSPACE) {
+                cleanWs()
+              }
+            }
           }
         }
       }

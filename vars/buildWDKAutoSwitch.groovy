@@ -51,6 +51,7 @@ def call(Map config = [ unityVersions:[] ]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+      booleanParam(defaultValue: true, description: 'Whether to clean the workspace after the build', name: 'CLEAN_WORKSPACE')
     }
 
     stages {
@@ -80,7 +81,11 @@ def call(Map config = [ unityVersions:[] ]) {
           }
 
           cleanup {
-            cleanWs()
+            script {
+              if(params.CLEAN_WORKSPACE) {
+                cleanWs()
+              }
+            }
           }
         }
       }
@@ -115,7 +120,11 @@ def call(Map config = [ unityVersions:[] ]) {
               }
 
               cleanup {
-                cleanWs()
+                script {
+                  if(params.CLEAN_WORKSPACE) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
@@ -188,7 +197,10 @@ def call(Map config = [ unityVersions:[] ]) {
                     dir (directoryName) {
                       deleteDir()
                     }
-                    cleanWs()
+
+                    if(params.CLEAN_WORKSPACE) {
+                      cleanWs()
+                    }
                   }
 
                   def Map args = [:]
@@ -238,7 +250,11 @@ def call(Map config = [ unityVersions:[] ]) {
           }
 
           cleanup {
-            cleanWs()
+            script {
+              if(params.CLEAN_WORKSPACE) {
+                cleanWs()
+              }
+            }
           }
         }
       }
