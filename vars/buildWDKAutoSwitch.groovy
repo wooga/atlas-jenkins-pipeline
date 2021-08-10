@@ -57,7 +57,7 @@ def call(Map config = [ unityVersions:[] ]) {
 
       stage('setup') {
         agent {
-          label "atlas && macos"
+          label "atlas && linux"
         }
 
         steps {
@@ -90,7 +90,7 @@ def call(Map config = [ unityVersions:[] ]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && macos"
+               label "atlas && linux"
             }
 
             environment {
@@ -192,7 +192,7 @@ def call(Map config = [ unityVersions:[] ]) {
                   }
 
                   def Map args = [:]
-                  args.platform = "macos"
+                  args.platform = "linux"
                   args.testEnvironment = environment
                   args.config = testConfig
                   args.checkClosure = checkStep
@@ -211,7 +211,7 @@ def call(Map config = [ unityVersions:[] ]) {
 
       stage('publish') {
         agent {
-           label "atlas && macos"
+           label "atlas && linux"
         }
 
         environment {
