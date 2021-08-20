@@ -127,15 +127,19 @@ def call(Map config = [:]) {
         }
 
         environment {
-          ARTIFACTORY           = credentials('artifactory_publish')
-          GRGIT                 = credentials('github_up')
+          ARTIFACTORY               = credentials('artifactory_publish')
+          GRGIT                     = credentials('github_up')
 
-          ARTIFACTORY_USER      = "${ARTIFACTORY_USR}"
-          ARTIFACTORY_PASS      = "${ARTIFACTORY_PSW}"
-          GRGIT_USER            = "${GRGIT_USR}"
-          GRGIT_PASS            = "${GRGIT_PSW}"
-          GITHUB_LOGIN          = "${GRGIT_USR}"
-          GITHUB_PASSWORD       = "${GRGIT_PSW}"
+          OSSRH_SIGNING_KEY         = credentials('ossrh.signing.key')
+          OSSRH_SIGNING_KEY_ID      = credentials('ossrh.signing.key_id')
+          OSSRH_SIGNING_PASSPHRASE  = credentials('ossrh.signing.passphrase')
+
+          ARTIFACTORY_USER          = "${ARTIFACTORY_USR}"
+          ARTIFACTORY_PASS          = "${ARTIFACTORY_PSW}"
+          GRGIT_USER                = "${GRGIT_USR}"
+          GRGIT_PASS                = "${GRGIT_PSW}"
+          GITHUB_LOGIN              = "${GRGIT_USR}"
+          GITHUB_PASSWORD           = "${GRGIT_PSW}"
         }
 
         steps {
