@@ -6,10 +6,7 @@ import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
 import com.lesfurets.jenkins.unit.declarative.PostDeclaration
 import com.lesfurets.jenkins.unit.declarative.WhenDeclaration
-import net.wooga.jenkins.pipeline.TestHelper
 import org.apache.commons.lang3.ClassUtils
-import org.codehaus.groovy.runtime.DefaultGroovyMethods
-import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 import spock.lang.Shared
 import spock.lang.Specification
 
