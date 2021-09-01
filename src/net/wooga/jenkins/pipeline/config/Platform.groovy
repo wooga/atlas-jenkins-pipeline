@@ -25,11 +25,15 @@ class Platform {
 
     String getTestLabels() {
         def nodeLabels = Optional.ofNullable(testLabels).orElse(labels)
-        nodeLabels = "nodeLabels && ${name}"
-        if (name == "linux") {
-            nodeLabels = "linux && docker"
+        nodeLabels = "${nodeLabels} && ${name}"
+        if (runsOnDocker) {
+            nodeLabels = "${nodeLabels} && docker"
         }
         return nodeLabels
+    }
+
+    boolean getRunsOnDocker() {
+        return name == "linux"
     }
 
     List<String> getTestEnvironment() {
