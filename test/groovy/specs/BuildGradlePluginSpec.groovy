@@ -1,28 +1,22 @@
 package specs
 
 import com.lesfurets.jenkins.unit.MethodCall
-import spock.lang.Shared
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
 class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
-
-    @Shared
-    Script gradleWrapperScript;
+    private static final String SCRIPT_PATH = "vars/newBuildGradlePlugin.groovy"
 
     def setupSpec() {
         binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
+        binding.setVariable("BRANCH_NAME", "any")
         helper.registerAllowedMethod("isUnix") { true }
-        this.gradleWrapperScript = helper.loadScript("vars/gradleWrapper.groovy", binding)
-        helper.registerAllowedMethod("gradleWrapper", [String]) { command ->
-            this.gradleWrapperScript.call(command)
-        }
     }
 
-    def "should post coveralls results to coveralls server"() {
+    def "posts coveralls results to coveralls server" () {
         given: "loaded buildGradlePlugin in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
-        def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
+        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = "SUCCESS"
         }
 
@@ -33,7 +27,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         buildGradlePlugin(coverallsToken: coverallsToken)
 
         then: "request is sent to coveralls webhook"
-        hasMethodCallWith("httpRequest") { MethodCall call ->
+        hasMethodCallWith("httpRequest"){ MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -41,60 +35,58 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         }
     }
 
-    @Unroll("should execute #name if their token(s) are present")
-    def "should execute coverage when its token is present"() {
-        given: "loaded buildGradlePlugin in a running build in the master branch"
-        def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
-            BRANCH_NAME = "master"
+    @Unroll("publishes #releaseType-#releaseScope release ")
+    def "publishes with #release release type"() {
+        given: "build plugin with publish parameters"
+        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
+            params.RELEASE_TYPE = releaseType
+            params.RELEASE_SCOPE = releaseScope
         }
+        helper.registerAllowedMethod("credentials", [String]) {it -> it}
 
-        when: "running gradle pipeline with coverage token"
-        buildGradlePlugin(sonarToken: sonarToken, coverallsToken: coverallsToken)
+        when: "running buildGradlePlugin pipeline"
+        buildGradlePlugin()
 
-        then: "gradle coverage task is called"
-        hasShCallWith { callString ->
-            callString.contains("gradlew") &&
-                    gradleCmdElements.every { callString.contains(it) }
+        then: "runs gradle with parameters"
+        skipsRelease ^/*XOR*/ hasShCallWith { it ->
+            it.contains("gradlew") &&
+            it.contains(releaseType) &&
+            it.contains("-Pgradle.publish.key=gradle.publish.key") &&
+            it.contains("-Pgradle.publish.secret=gradle.publish.secret") &&
+            it.contains("-Prelease.stage=${releaseType}") &&
+            it.contains("-Prelease.scope=${releaseScope}")
+            it.contains("-x check")
         }
 
         where:
-        name                    | gradleCmdElements                                      | sonarToken   | coverallsToken
-        "SonarQube"             | ["sonarqube", "-Dsonar.login=sonarToken"]              | "sonarToken" | null
-        "Coveralls"             | ["coveralls"]                                          | null         | "coverallsToken"
-        "SonarQube & Coveralls" | ["coveralls", "sonarqube", "-Dsonar.login=sonarToken"] | "sonarToken" | "coverallsToken"
+        releaseType | releaseScope | skipsRelease
+        "snapshot"  | "patch"      | true
+        "rc"        | "minor"      | false
+        "final"     | "major"      | false
     }
 
-    @Unroll("should execute sonarqube on branch #branchName")
-    def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
-        given: "loaded build script in a running build in branch"
-        def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
-            BRANCH_NAME = branchName
+    def "registers environment on publish"() {
+        given: "build plugin with publish parameters"
+        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
-            if (isPR) {
-                CHANGE_ID = "notnull"
-                CURRENT_BRANCH = prBranch
-            }
+            params.RELEASE_TYPE = "not-snapshot"
+            params.RELEASE_SCOPE = "any"
+            env.GRGIT_USR = "usr"
+            env.GRGIT_PSW = "pwd"
         }
-        and: "sonar token is set"
-        def runConfig = [sonarToken: "sonarToken"]
+        helper.registerAllowedMethod("credentials", [String]) {it -> it}
 
-        when: "running gradle pipeline with sonar token"
-        buildGradlePlugin(runConfig)
+        when: "running buildGradlePlugin pipeline"
+        buildGradlePlugin()
 
-        then: "should run sonar analysis"
-        hasShCallWith { callString ->
-            callString.contains("gradlew") &&
-                    callString.contains("sonarqube") &&
-                    callString.contains("-Dsonar.login=sonarToken") &&
-                    callString.contains("-Pgithub.branch.name=${expectedBranchProperty}")
-        }
-
-        where:
-        branchName   | prBranch | isPR  | expectedBranchProperty
-        "master"     | null     | false | "master"
-        "not_master" | null     | false | "not_master"
-        "PR-123"     | "branch" | true  | ""
-        "branchpr"   | "branch" | true  | ""
+        then: "sets up GRGIT environment"
+        def env = buildGradlePlugin.binding.env
+        env["GRGIT"] == 'github_up'
+        env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
+        env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
+        and: "sets up github environment"
+        env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
+        env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
     }
 }

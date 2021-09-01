@@ -73,7 +73,7 @@ Closure createCheckStep(Map args) {
                                 image = docker.build(hash, "-f ${dockerArgs.dockerFileName} " + buildArgs + " ${dockerArgs.dockerFileDirectory}")
                             }
 
-                            def imageArgs = dockerArgs.dockerArgs.join(' ')
+                            def imageArgs = dockerArgs.imageArgs.join(' ')
                             image.inside(imageArgs) {
                                 args.checkClosure.call()
                             }

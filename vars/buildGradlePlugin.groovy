@@ -74,7 +74,7 @@ def call(Map config = [:]) {
 
               environment << "COVERALLS_PARALLEL=true"
 
-              if(config.testLabels) {
+              if(config.testLabels) { //talk w/ manne about this
                 if(config.testLabels instanceof List) {
                   labels = config.testLabels
                 }
