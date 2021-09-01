@@ -5,12 +5,11 @@ import net.wooga.jenkins.pipeline.config.Config
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
-import java.nio.file.Files
-import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicBoolean
 
 
 class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
-    private static final String SCRIPT_PATH = "src/net/wooga/jenkins/pipeline/scripts/javaLibCheck.groovy"
+    private static final String SCRIPT_PATH = "src/net/wooga/jenkins/pipeline/scripts/check.groovy"
 
     def setupSpec() {
         helper.registerAllowedMethod("isUnix") { true }
@@ -30,7 +29,7 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        buildJavaLib(config).checkStepsWithCoverage(false).each {it.value()}
+        buildJavaLib(config).checksWithCoverage(false).each {it.value()}
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
@@ -42,8 +41,8 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
         where:
         name                    | gradleCmdElements                                          | sonarToken   | coverallsToken
         "SonarQube"             | [["sonarqube", "-Dsonar.login=sonarToken"]]                | "sonarToken" | null
-//        "Coveralls"             | [["coveralls"]]                                            | null         | "coverallsToken"
-//        "SonarQube & Coveralls" | [["coveralls"], ["sonarqube", "-Dsonar.login=sonarToken"]] | "sonarToken" | "coverallsToken"
+        "Coveralls"             | [["coveralls"]]                                            | null         | "coverallsToken"
+        "SonarQube & Coveralls" | [["coveralls"], ["sonarqube", "-Dsonar.login=sonarToken"]] | "sonarToken" | "coverallsToken"
     }
 
     @Unroll("#shouldRunSonar execute sonarqube if #branchName matches pattern when force is #forceSonar")
@@ -60,7 +59,7 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        buildJavaLib(config).checkStepsWithCoverage(forceSonar).each {it.value()}
+        buildJavaLib(config).checksWithCoverage(forceSonar).each {it.value()}
 
         then: "${shouldRunSonar} run sonar analysis"
         def sonarCalled = hasShCallWith { callString ->
@@ -91,7 +90,7 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
         def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
 
         when: "running buildJavaLib"
-        def checkSteps = buildJavaLib(config).checkStepsWithCoverage(false) as Map<String, Closure>
+        def checkSteps = buildJavaLib(config).checksWithCoverage(false) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
@@ -114,16 +113,7 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
         and: "a fake dockerfile"
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
-        def ran = false
-        def imgMock = [inside: {args, cls ->
-            if(args==dockerArgs.join(" ")) {
-                ran = true
-                cls()
-            }
-        }]
-        def buildArgs = "-f ${dockerfile} ${dockerBuildArgs} ${dockerDir}"
-        def dockerMock = [image: {name -> name==image? imgMock: null},
-                          build: {hash, args -> args == buildArgs? imgMock : null}]
+        def dockerMock = createDockerMock(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
         def buildJavaLib = loadScript(SCRIPT_PATH) {
             docker = dockerMock
         }
@@ -134,11 +124,11 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
                              dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
         [BUILD_NUMBER: 1])
         when: "running linux platform step"
-        def checkSteps = buildJavaLib(config).checkStepsWithCoverage(false) as Map<String, Closure>
+        def checkSteps = buildJavaLib(config).checksWithCoverage(false) as Map<String, Closure>
         checkSteps["check linux"].call()
 
         then:
-        ran && hasShCallWith {it.contains("gradlew") && it.contains("check")}
+        dockerMock.ran.get() && hasShCallWith {it.contains("gradlew") && it.contains("check")}
 
         where:
         dockerfile   | image   | dockerDir   | dockerBuildArgs  | dockerArgs
@@ -155,5 +145,21 @@ class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
                 deleteOnExit()
             }
         }
+    }
+
+    def createDockerMock(String dockerfile, String image, String dockerDir,
+                         List<String> dockerBuildArgs, List<String> dockerArgs) {
+        AtomicBoolean ran = new AtomicBoolean(false)
+        def imgMock = [inside: {args, cls ->
+            if(args==dockerArgs.join(" ")) {
+                ran.set(true)
+                cls()
+            }
+        }]
+        def buildArgs = "-f ${dockerfile} ${dockerBuildArgs} ${dockerDir}"
+        return [image: {name -> name==image? imgMock: null},
+                build: {hash, args -> args == buildArgs? imgMock : null},
+                ran: ran]
+
     }
 }

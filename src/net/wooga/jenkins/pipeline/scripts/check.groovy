@@ -1,63 +1,46 @@
 package net.wooga.jenkins.pipeline.scripts
 
-import net.wooga.jenkins.pipeline.config.DockerArgs
-import net.wooga.jenkins.pipeline.config.Platform
-import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
+import net.wooga.jenkins.pipeline.config.Config
 
-def call(Platform platform, int buildNumber) {
-    def testEnvironment = platform.testEnvironment +
-            ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
+
+Map<String, Closure> call(Config config) {
     return [
-            withDocker: { DockerArgs dockerArgs -> withDocker(platform, testEnvironment, dockerArgs)}
+        createChecks: this.&createChecks.curry(config), //curry == partial function
+        checksWithCoverage: this.&checksWithCoverage.curry(config)
     ]
 }
 
-def withDocker(Platform platform, Collection testEnvironment, DockerArgs dockerArgs) {
-    return [
-        wrap: { Closure mainClosure, Closure catchClosure={throw it}, Closure finallyClosure=null ->
-            return wrapWithDocker(platform, testEnvironment, dockerArgs, mainClosure, catchClosure, finallyClosure)
-        }
-    ]
+protected Map<String, Closure> createChecks(Config config, Closure testStep, Closure analysisStep) {
+    return config.platforms.collectEntries { platform ->
+        def mainClosure = basicCheckStructure(testStep, analysisStep)
+
+        def enclosurer = enclosure(platform, config)
+        def checkStep = platform.runsOnDocker?
+                    enclosurer.withDocker(mainClosure):
+                    enclosurer.simple(mainClosure)
+        return [("check ${platform.name}".toString()): checkStep]
+    }
 }
 
-Closure wrapWithDocker(Platform platform, Collection testEnvironment, DockerArgs dockerArgs,
-        Closure mainClosure, Closure catchClosure={throw it}, Closure finallyClosure=null) {
-    def nodeLabel = "atlas && ${platform.testLabels}"
+protected Closure basicCheckStructure(Closure testStep, Closure analysisStep) {
     return {
-        node(nodeLabel) {
-            try {
-                withEnv(testEnvironment) {
-                    if (platform.name == "linux") {
-                        def image = createImage(dockerArgs)
-                        if(image != null) {
-                            image.inside(dockerArgs.dockerImageArgs) { mainClosure.call() }
-                        } else {
-                            mainClosure.call()
-                        }
-                    } else {
-                        mainClosure.call()
-                    }
-                }
-            }
-            catch (Exception e) {
-                catchClosure.call(e)
-            }
-            finally {
-                finallyClosure?.call()
-            }
+        testStep()
+        if (!currentBuild.result) {
+            analysisStep()
         }
+        junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
+        cleanWs()
     }
 }
 
-def createImage(DockerArgs args) {
-    if (args.image) {
-        return docker.image(args.image)
-    } else {
-        if (fileExists(args.fullFilePath)) {
-            String dockerfileContent = readFile(args.fullFilePath)
-            def hash = utils().stringToSHA1(dockerfileContent + "/n" + args.dockerBuildString)
-            return docker.build(hash, args.dockerBuildString)
-        }
-    }
-    return null;
+protected Map<String, Closure> checksWithCoverage(Config config, boolean forceSonarQube) {
+    return this.createChecks(config, {
+        gradleWrapper "check"
+    }, {
+        gradleWrapper "jacocoTestReport"
+        sonarqube(config.sonarArgs, config.metadata.branchName, forceSonarQube)
+        coveralls(config.coverallsToken)
+    })
 }
+
+
