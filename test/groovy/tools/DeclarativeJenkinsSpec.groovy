@@ -20,20 +20,23 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     @Shared DeclarativePipelineTest jenkinsTest;
     @Shared Binding binding
     @Shared PipelineTestHelper helper
+    @Shared FakeCredentialStorage credentials
 
     def setupSpec() {
         jenkinsTest = new DeclarativePipelineTest() {}
         jenkinsTest.setUp()
+        credentials = new FakeCredentialStorage()
+
         helper = jenkinsTest.helper
         binding = jenkinsTest.binding
         addLackingDSLTerms()
-
         populateJenkinsDefaultEnvironment(binding)
         registerPipelineFakeMethods(helper)
     }
 
     def cleanup() {
-       helper?.callStack?.clear()
+        helper?.callStack?.clear()
+        credentials.wipe()
     }
 
     private static void populateJenkinsDefaultEnvironment(Binding binding) {
@@ -53,7 +56,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         }
     }
 
-    private static void registerPipelineFakeMethods(PipelineTestHelper helper) {
+    private void registerPipelineFakeMethods(PipelineTestHelper helper) {
         helper.with {
             registerAllowedMethod("sendSlackNotification", [String, boolean]) {}
             registerAllowedMethod("junit", [LinkedHashMap]) {}
@@ -62,6 +65,16 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("publishHTML", [HashMap]) {}
             registerAllowedMethod("fileExists", [String]) {String path -> new File(path).exists() }
             registerAllowedMethod("readFile", [String]) {String path -> new File(path).text }
+            registerAllowedMethod("usernamePassword", [Map]) {credentials.usernamePassword(it) }
+            registerAllowedMethod("string", [Map]) { params ->
+                return params.containsKey("name")?
+                        jenkinsTest.paramInterceptor : //string() from parameters clause
+                        credentials.string(params) //string() from withCredentials() context
+            }
+            registerAllowedMethod("withCredentials", [List.class, Closure.class], {
+                List creds, Closure cls -> credentials.bindCredentials(creds, cls)
+            })
+            //needed as utils scripts are dependent on jenkins sandbox
             registerAllowedMethod("utils", []) {[stringToSHA1 : { content -> "fakesha" }]}
         }
     }
@@ -71,22 +84,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         WhenDeclaration.metaClass.beforeAgent = { bool -> null }
         PostDeclaration.metaClass.cleanup = { clj -> clj() }
         PostDeclaration.metaClass.cleanWs = {}
-    }
 
-    protected boolean hasShCallWith(Closure assertion) {
-        return hasMethodCallWith("sh") {
-            MethodCall call -> assertion(call.argsToString())
-        }
-    }
-
-    protected boolean hasMethodCallWith(String methodName, Closure assertion) {
-        return getMethodCalls(methodName).any(assertion)
-    }
-
-    protected MethodCall[] getMethodCalls(String methodName) {
-        return helper.callStack.findAll { call ->
-            call.methodName == methodName
-        }
     }
 
     protected Script loadScript(String name, Closure varBindingOps={}, boolean reloadSideScripts = true) {
@@ -96,6 +94,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerSideScript("vars/gradleWrapper.groovy", binding)
             registerSideScripts("src/net/wooga/jenkins/pipeline/scripts", "utils.groovy")
         }
+
         return helper.loadScript(name, binding)
     }
 
@@ -132,6 +131,22 @@ abstract class DeclarativeJenkinsSpec extends Specification {
                 return callParams[index]?.cast(args[index])
             }.toArray()
             method.invoke(base, args)
+        }
+    }
+
+    protected boolean hasShCallWith(Closure assertion) {
+        return hasMethodCallWith("sh") {
+            MethodCall call -> assertion(call.argsToString())
+        }
+    }
+
+    protected boolean hasMethodCallWith(String methodName, Closure assertion) {
+        return getMethodCalls(methodName).any(assertion)
+    }
+
+    protected MethodCall[] getMethodCalls(String methodName) {
+        return helper.callStack.findAll { call ->
+            call.methodName == methodName
         }
     }
 }
