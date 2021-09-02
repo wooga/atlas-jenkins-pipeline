@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-import net.wooga.jenkins.pipeline.TestHelper
+import net.wooga.jenkins.pipeline.config.Config
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -9,22 +9,9 @@ import net.wooga.jenkins.pipeline.TestHelper
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [:]) {
-  //set config defaults
-  config.platforms = config.plaforms ?: ['unix']
-  config.platforms = config.platforms ?: ['unix']
-  config.testEnvironment = config.testEnvironment ?: []
-  config.testLabels = config.testLabels ?: []
-  config.labels = config.labels ?: ''
-  config.dockerArgs = config.dockerArgs ?: [:]
-  config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
-  config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
-  config.dockerArgs.dockerBuildArgs = config.dockerArgs.dockerBuildArgs ?: []
-  config.dockerArgs.dockerArgs = config.dockerArgs.dockerArgs ?: []
-
-  def platforms = config.platforms
-  def mainPlatform = platforms[0] == '' ? 'unix' : platforms[0] 
-  def helper = new TestHelper()
+def call(Map configMap = [:]) {
+  Config config = Config.fromConfigMap(configMap, this.binding.variables)
+  def mainPlatform = config.platforms[0].name
 
   pipeline {
     agent none
@@ -39,6 +26,7 @@ def call(Map config = [:]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+      booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONARQUBE')
     }
 
     stages {
@@ -57,81 +45,41 @@ def call(Map config = [:]) {
             return params.RELEASE_TYPE == "snapshot"
           }
         }
-
         steps {
           script {
-            def stepsForParallel = platforms.collectEntries {
-              def environment = []
-              def labels = config.labels
-
-              if (config.testEnvironment) {
-                if (config.testEnvironment instanceof List) {
-                  environment = config.testEnvironment
-                } else {
-                  environment = (config.testEnvironment[it]) ?: []
-                }
-              }
-
-              environment << "COVERALLS_PARALLEL=true"
-
-              if (config.testLabels) {
-                if (config.testLabels instanceof List) {
-                  labels = config.testLabels
-                } else {
-                  labels = (config.testLabels[it]) ?: config.labels
-                }
-              }
-
-              def testConfig = config.clone()
-              testConfig.labels = labels
-
-              def checkStep = { gradleWrapper "check" }
-              def finalizeStep = {
-                if (!currentBuild.result) {
-                  def command = (config.coverallsToken) ? "jacocoTestReport coveralls" : "jacocoTestReport"
-                  withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
-                    gradleWrapper command
-                    publishHTML([
-                            allowMissing         : true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll              : true,
-                            reportDir            : 'build/reports/jacoco/test/html',
-                            reportFiles          : 'index.html',
-                            reportName           : "Coverage ${it}",
-                            reportTitles         : ''
-                    ])
-                  }
-                }
-                junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
-                cleanWs()
-              }
-
-              ["check ${it}": helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
+            withEnv(["COVERALLS_PARALLEL=true"]) {
+              def checksForParallel = check(config).checksWithCoverage(params.RUN_SONARQUBE)
+              parallel checksForParallel
             }
-
-            parallel stepsForParallel
           }
         }
 
         post {
-            success {
+          cleanup {
+            cleanWs()
+          }
+          success {
+            script {
+              if(config.coverallsToken) {
                 httpRequest httpMode: 'POST', ignoreSslErrors: true, url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+              }
             }
+          }
         }
       }
 
       stage('publish') {
+        when {
+          beforeAgent true
+          expression {
+            return params.RELEASE_TYPE != "snapshot"
+          }
+        }
         agent {
           label "$mainPlatform && atlas"
         }
 
         environment {
-          OSSRH = credentials('ossrh.publish')
-          OSSRH_SIGNING_KEY = credentials('ossrh.signing.key')
-          OSSRH_SIGNING_KEY_ID = credentials('ossrh.signing.key_id')
-          OSSRH_SIGNING_PASSPHRASE = credentials('ossrh.signing.passphrase')
-          OSSRH_USERNAME = "${OSSRH_USR}"
-          OSSRH_PASSWORD = "${OSSRH_PSW}"
           GRGIT = credentials('github_up')
           GRGIT_USER = "${GRGIT_USR}"
           GRGIT_PASS = "${GRGIT_PSW}"
@@ -140,7 +88,8 @@ def call(Map config = [:]) {
         }
 
         steps {
-          gradleWrapper "${params.RELEASE_TYPE.trim()} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE).ossrh(
+                  'ossrh.publish', 'ossrh.signing.key', 'ossrh.signing.key_id', 'ossrh.signing.passphrase')
         }
 
         post {
