@@ -1,8 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import net.wooga.jenkins.pipeline.step.SonarQubeStep
-import net.wooga.jenkins.pipeline.step.Step
-
 class SonarQubeArgs {
 
     static SonarQubeArgs fromConfigMap(Map config) {
@@ -20,12 +17,5 @@ class SonarQubeArgs {
 
     boolean shouldRunSonarQube(String branchName, boolean force=false) {
         return force || (token != null && branchName =~ branchPattern)
-    }
-
-    Step jvmSonarqubeStep(String branchName, boolean force=false) {
-        if(shouldRunSonarQube(branchName, force)) {
-            return new SonarQubeStep(token, [:])
-        }
-        return null
     }
 }

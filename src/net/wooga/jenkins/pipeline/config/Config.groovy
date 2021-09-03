@@ -9,7 +9,7 @@ class Config {
     final SonarQubeArgs sonarArgs
     final String coverallsToken
 
-    static Config fromConfigMap(Map config, Map jenkinsBindings) {
+    static Config fromConfigMap(Map config,  Object jenkinsScript) {
         config.platforms = config.platforms ?: ['macos','windows']
         def platforms = config.platforms.collect { String platformName ->
             Platform.fromConfigMap(platformName, config)
@@ -17,7 +17,7 @@ class Config {
         def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
         def sonarArgs = SonarQubeArgs.fromConfigMap(config)
         def coverallsToken = config.coverallsToken as String
-        def metadata = JenkinsMetadata.fromScript(jenkinsBindings)
+        def metadata = JenkinsMetadata.fromScript(jenkinsScript)
         return new Config(metadata, platforms, dockerArgs, sonarArgs, coverallsToken)
     }
 

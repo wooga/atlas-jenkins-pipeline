@@ -1,4 +1,4 @@
-package net.wooga.jenkins.pipeline.scripts
+
 
 import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 

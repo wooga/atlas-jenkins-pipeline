@@ -92,7 +92,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         varBindingOps(binding.variables)
         if(reloadSideScripts) {
             registerSideScript("vars/gradleWrapper.groovy", binding)
-            registerSideScripts("src/net/wooga/jenkins/pipeline/scripts", "utils.groovy")
+            registerSideScripts("vars/scripts", "utils.groovy")
         }
 
         return helper.loadScript(name, binding)

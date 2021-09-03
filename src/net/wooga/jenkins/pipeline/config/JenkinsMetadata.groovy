@@ -5,10 +5,10 @@ class JenkinsMetadata {
     final int buildNumber
     final String branchName
 
-    static JenkinsMetadata fromScript(Map bindings) {
+    static JenkinsMetadata fromScript(Object jenkinsScript) {
         return new JenkinsMetadata(
-                bindings["BUILD_NUMBER"] as int,
-                bindings["BRANCH_NAME"] as String
+                jenkinsScript.BUILD_NUMBER as int,
+                jenkinsScript.BRANCH_NAME as String
         )
     }
 

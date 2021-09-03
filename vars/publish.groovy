@@ -1,4 +1,4 @@
-package net.wooga.jenkins.pipeline.scripts
+
 
 def call(String releaseType, String releaseScope) {
     return [
@@ -60,9 +60,9 @@ def artifactoryOSSRH(String releaseType, String releaseScope, String artifactory
 
 def ossrhSigningCredentials(String keySecret, String keyIdSecret, String passphraseSecret) {
     return [
-        string(credentialsId: signingKeySecret, variable: "OSSRH_SIGNING_KEY"),
-        string(credentialsId: signingKeyIdSecret, variable: "OSSRH_SIGNING_KEY_ID"),
-        string(credentialsId: signingPassphraseSecret, variable: "OSSRH_SIGNING_PASSPHRASE")
+        string(credentialsId: keySecret, variable: "OSSRH_SIGNING_KEY"),
+        string(credentialsId: keyIdSecret, variable: "OSSRH_SIGNING_KEY_ID"),
+        string(credentialsId: passphraseSecret, variable: "OSSRH_SIGNING_PASSPHRASE")
     ]
 }
 
