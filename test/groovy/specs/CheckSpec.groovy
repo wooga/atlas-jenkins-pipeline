@@ -8,8 +8,8 @@ import tools.DeclarativeJenkinsSpec
 import java.util.concurrent.atomic.AtomicBoolean
 
 
-class JavaLibCheckSpec extends DeclarativeJenkinsSpec {
-    private static final String SCRIPT_PATH = "src/net/wooga/jenkins/pipeline/scripts/check.groovy"
+class CheckSpec extends DeclarativeJenkinsSpec {
+    private static final String SCRIPT_PATH = "vars/scripts/check.groovy"
 
     def setupSpec() {
         helper.registerAllowedMethod("isUnix") { true }

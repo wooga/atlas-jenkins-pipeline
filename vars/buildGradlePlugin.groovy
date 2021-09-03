@@ -11,7 +11,7 @@ import net.wooga.jenkins.pipeline.config.Config
 
 def call(Map configMap = [:]) {
   //organize configs inside neat object. Defaults are defined there as well
-  Config config = Config.fromConfigMap(configMap, this.binding.variables)
+  Config config = Config.fromConfigMap(configMap, this)
   def mainPlatform = config.platforms[0].name
 
   pipeline {
@@ -50,6 +50,7 @@ def call(Map configMap = [:]) {
         steps {
           script {
             withEnv(["COVERALLS_PARALLEL=true"]) {
+              //TODO: make coverage only to be executed once
               def checksForParallel = check(config).checksWithCoverage(params.RUN_SONARQUBE)
               parallel checksForParallel
             }

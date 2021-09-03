@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/buildSrc/build/nebulatest/integration.VersionPluginIntegrationSpec/creates-updates-remote-branches-and-tags-when-updating-from-0-0-1-to-0-0-2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/buildSrc/build/nebulatest/integration.VersionPluginIntegrationSpec/creates-updates-remote-branches-and-tags-when-updating-from-0-0-1-to-0-1-0" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/buildSrc/build/nebulatest/integration.VersionPluginIntegrationSpec/creates-updates-remote-branches-and-tags-when-updating-from-0-1-0-to-0-2-0" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/buildSrc/build/nebulatest/integration.VersionPluginIntegrationSpec/creates-updates-remote-branches-and-tags-when-updating-from-0-1-0-to-1-0-0" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/buildSrc/build/nebulatest/integration.VersionPluginIntegrationSpec/creates-updates-remote-branches-and-tags-when-updating-from-1-1-0-to-2-0-0" vcs="Git" />
+  </component>
+</project>

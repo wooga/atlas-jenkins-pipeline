@@ -1,4 +1,4 @@
-package net.wooga.jenkins.pipeline.scripts
+
 
 def call(String token) {
     if (token) {

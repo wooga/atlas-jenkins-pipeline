@@ -23,8 +23,8 @@ class Platform {
         this.testLabels = testLabels
     }
 
-    String getTestLabels() {
-        def nodeLabels = Optional.ofNullable(testLabels).orElse(labels)
+    String getTestLabels() { //TODO: test this
+        def nodeLabels = testLabels?: labels
         nodeLabels = "${nodeLabels} && ${name}"
         if (runsOnDocker) {
             nodeLabels = "${nodeLabels} && docker"
