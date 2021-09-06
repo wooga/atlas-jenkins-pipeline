@@ -1,5 +1,8 @@
 package net.wooga.jenkins.pipeline.config
 
+import groovy.transform.EqualsAndHashCode
+
+@EqualsAndHashCode
 class SonarQubeArgs {
 
     static SonarQubeArgs fromConfigMap(Map config) {
@@ -15,7 +18,7 @@ class SonarQubeArgs {
         this.branchPattern = branchPattern
     }
 
-    boolean shouldRunSonarQube(String branchName, boolean force=false) {
-        return force || (token != null && branchName =~ branchPattern)
+    boolean shouldRunSonarQube(String branchName) {
+        return (token != null && branchName =~ branchPattern)
     }
 }

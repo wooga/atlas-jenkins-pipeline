@@ -1,6 +1,8 @@
 package net.wooga.jenkins.pipeline.config
 
+import groovy.transform.EqualsAndHashCode
 
+@EqualsAndHashCode
 class Config {
 
     final Platform[] platforms

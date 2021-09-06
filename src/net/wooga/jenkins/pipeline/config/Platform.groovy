@@ -1,5 +1,8 @@
 package net.wooga.jenkins.pipeline.config
 
+import groovy.transform.EqualsAndHashCode
+
+@EqualsAndHashCode
 class Platform {
 
     final String name
@@ -20,10 +23,10 @@ class Platform {
         this.name = name
         this.labels = labels
         this.testEnvironment = testEnvironment
-        this.testLabels = testLabels
+        this.testLabels = testLabels?.join(" && ")
     }
 
-    String getTestLabels() { //TODO: test this
+    String generateTestLabelsString() {
         def nodeLabels = testLabels?: labels
         nodeLabels = "${nodeLabels} && ${name}"
         if (runsOnDocker) {
@@ -50,7 +53,7 @@ class Platform {
             return []
         }
         if(obj instanceof Map) {
-            return obj[platformName] as Collection
+            return obj[platformName] as Collection ?: []
         }
         if(obj instanceof Collection) {
             return obj as Collection
