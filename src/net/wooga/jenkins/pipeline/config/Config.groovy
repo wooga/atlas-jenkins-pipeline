@@ -1,8 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import groovy.transform.EqualsAndHashCode
-
-@EqualsAndHashCode
 class Config {
 
     final Platform[] platforms
@@ -30,5 +27,30 @@ class Config {
         this.sonarArgs = sonarArgs
         this.dockerArgs = dockerArgs
         this.coverallsToken = coverallsToken
+    }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        Config config = (Config) o
+
+        if (coverallsToken != config.coverallsToken) return false
+        if (dockerArgs != config.dockerArgs) return false
+        if (metadata != config.metadata) return false
+        if (!Arrays.equals(platforms, config.platforms)) return false
+        if (sonarArgs != config.sonarArgs) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = (platforms != null ? Arrays.hashCode(platforms) : 0)
+        result = 31 * result + (metadata != null ? metadata.hashCode() : 0)
+        result = 31 * result + (dockerArgs != null ? dockerArgs.hashCode() : 0)
+        result = 31 * result + (sonarArgs != null ? sonarArgs.hashCode() : 0)
+        result = 31 * result + (coverallsToken != null ? coverallsToken.hashCode() : 0)
+        return result
     }
 }

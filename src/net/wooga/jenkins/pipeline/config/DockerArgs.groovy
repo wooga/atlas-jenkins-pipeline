@@ -1,10 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import com.cloudbees.groovy.cps.NonCPS
-import groovy.transform.EqualsAndHashCode
-import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
-
-@EqualsAndHashCode
 class DockerArgs {
 
     final String image
@@ -42,6 +37,31 @@ class DockerArgs {
 
     String getDockerImageArgs() {
         return imageArgs.join(" ")
+    }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        DockerArgs that = (DockerArgs) o
+
+        if (!Arrays.equals(buildArgs, that.buildArgs)) return false
+        if (fileDirectory != that.fileDirectory) return false
+        if (fileName != that.fileName) return false
+        if (image != that.image) return false
+        if (!Arrays.equals(imageArgs, that.imageArgs)) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = (image != null ? image.hashCode() : 0)
+        result = 31 * result + (fileName != null ? fileName.hashCode() : 0)
+        result = 31 * result + (fileDirectory != null ? fileDirectory.hashCode() : 0)
+        result = 31 * result + (buildArgs != null ? Arrays.hashCode(buildArgs) : 0)
+        result = 31 * result + (imageArgs != null ? Arrays.hashCode(imageArgs) : 0)
+        return result
     }
 }
 

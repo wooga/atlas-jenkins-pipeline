@@ -21,14 +21,17 @@ Closure nodeEnclosure(Platform platform, int buildNumber,
     def testEnvironment = platform.testEnvironment +
             ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
     return {
-        node("atlas && ${platform.generateTestLabelsString()}") {
+        def platformLabels = platform.generateTestLabelsString()
+        def nodeLabels = platformLabels && !platformLabels.empty?
+                "atlas && ${platform.generateTestLabelsString()}" : "atlas"
+        node(nodeLabels) {
             withEnv(testEnvironment) {
                 try {
                     mainCls()
                 } catch(Exception e) {
-                    catchCls(e)
+                    catchCls?.call(e)
                 }finally {
-                    finallyCls()
+                    finallyCls?.call()
                 }
             }
         }

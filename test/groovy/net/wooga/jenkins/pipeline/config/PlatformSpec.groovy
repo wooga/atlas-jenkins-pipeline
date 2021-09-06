@@ -34,21 +34,22 @@ class PlatformSpec extends Specification {
     def "generates test label string"() {
         given: "a valid platform"
         def platform = new Platform(platName, labels, [], testLabels)
-        when:"generating test label string"
+        when: "generating test label string"
         def labelsStr = platform.generateTestLabelsString()
         then:
-        def expLabels = labelsStr.split("&&").collect{it.trim()}
+        def expLabels = labelsStr.split("&&").collect { it.trim() }
         expLabels.contains(platName)
-        onDocker? expLabels.contains("docker") : true
-        testLabels?
-                testLabels.every {testLabel -> expLabels.any{it == testLabel}}:
-                 expLabels.join(" && ").contains(labels)
+        onDocker ? expLabels.contains("docker") : true
+        testLabels ?
+                testLabels.every { testLabel -> expLabels.any { it == testLabel } } :
+                expLabels.join(" && ").contains(labels?:"")
 
         where:
         testLabels    | labels           | platName   | onDocker
-        ["testlabel"] | "label"          | "platname" | false
+        null          | null             | "platname" | false
         null          | "label && other" | "platname" | false
         ["testlabel"] | null             | "platname" | false
+        ["testlabel"] | "label"          | "platname" | false
         ["testlabel"] | "label"          | "linux"    | true
     }
 }
