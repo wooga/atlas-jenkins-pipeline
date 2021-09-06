@@ -1,8 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import groovy.transform.EqualsAndHashCode
-
-@EqualsAndHashCode
 class SonarQubeArgs {
 
     static SonarQubeArgs fromConfigMap(Map config) {
@@ -20,5 +17,24 @@ class SonarQubeArgs {
 
     boolean shouldRunSonarQube(String branchName) {
         return (token != null && branchName =~ branchPattern)
+    }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        SonarQubeArgs that = (SonarQubeArgs) o
+
+        if (branchPattern != that.branchPattern) return false
+        if (token != that.token) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = (token != null ? token.hashCode() : 0)
+        result = 31 * result + (branchPattern != null ? branchPattern.hashCode() : 0)
+        return result
     }
 }

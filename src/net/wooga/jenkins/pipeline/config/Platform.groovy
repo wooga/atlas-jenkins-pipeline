@@ -1,8 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import groovy.transform.EqualsAndHashCode
-
-@EqualsAndHashCode
 class Platform {
 
     final String name
@@ -27,12 +24,16 @@ class Platform {
     }
 
     String generateTestLabelsString() {
-        def nodeLabels = testLabels?: labels
-        nodeLabels = "${nodeLabels} && ${name}"
+        def generatedLabels = [name]
         if (runsOnDocker) {
-            nodeLabels = "${nodeLabels} && docker"
+            generatedLabels.add("docker")
         }
-        return nodeLabels
+        def configLabelsStr = testLabels?: labels
+        def generatedLabelsStr = generatedLabels.join(" && ")
+
+        return configLabelsStr != null && !configLabelsStr.empty?
+                "${configLabelsStr} && ${generatedLabelsStr}" :
+                generatedLabelsStr
     }
 
     boolean getRunsOnDocker() {
@@ -59,5 +60,28 @@ class Platform {
             return obj as Collection
         }
         throw new IllegalArgumentException("testEnvironment should be a collection or a Map of [platName:collection]")
+    }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        Platform platform = (Platform) o
+
+        if (labels != platform.labels) return false
+        if (name != platform.name) return false
+        if (testEnvironment != platform.testEnvironment) return false
+        if (testLabels != platform.testLabels) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = (name != null ? name.hashCode() : 0)
+        result = 31 * result + (labels != null ? labels.hashCode() : 0)
+        result = 31 * result + (testLabels != null ? testLabels.hashCode() : 0)
+        result = 31 * result + (testEnvironment != null ? testEnvironment.hashCode() : 0)
+        return result
     }
 }

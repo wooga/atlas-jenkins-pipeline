@@ -11,11 +11,13 @@ Map<String, Closure> call(Config config) {
 protected Map<String, Closure> createChecks(Config config, Closure testStep, Closure analysisStep) {
     return config.platforms.collectEntries { platform ->
         def mainClosure = basicCheckStructure(testStep, analysisStep)
+        def catchClosure = {throw it}
+        def finallyClosure = {cleanWs()}
 
         def enclosurer = enclosure(platform, config)
         def checkStep = platform.runsOnDocker?
-                    enclosurer.withDocker(mainClosure):
-                    enclosurer.simple(mainClosure)
+                    enclosurer.withDocker(mainClosure, catchClosure, finallyClosure):
+                    enclosurer.simple(mainClosure, catchClosure, finallyClosure)
         return [("check ${platform.name}".toString()): checkStep]
     }
 }
@@ -27,7 +29,6 @@ protected Closure basicCheckStructure(Closure testStep, Closure analysisStep) {
             analysisStep()
         }
         junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
-        cleanWs()
     }
 }
 
