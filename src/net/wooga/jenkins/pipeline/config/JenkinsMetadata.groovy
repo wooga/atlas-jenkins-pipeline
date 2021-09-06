@@ -1,5 +1,8 @@
 package net.wooga.jenkins.pipeline.config
 
+import groovy.transform.EqualsAndHashCode
+
+@EqualsAndHashCode
 class JenkinsMetadata {
 
     final int buildNumber

@@ -1,9 +1,10 @@
 package net.wooga.jenkins.pipeline.config
 
 import com.cloudbees.groovy.cps.NonCPS
+import groovy.transform.EqualsAndHashCode
 import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 
-
+@EqualsAndHashCode
 class DockerArgs {
 
     final String image
@@ -42,25 +43,6 @@ class DockerArgs {
     String getDockerImageArgs() {
         return imageArgs.join(" ")
     }
-
-    Object createImage(Object docker) {
-        if (this.image) {
-            return docker.image(this.image)
-        } else {
-            def dockerFile = new File("${this.fileDirectory}/${this.fileName}") //not allowed in jenkins space
-            if (dockerFile.exists()) {
-                def dockerfileContent = dockerFile.text
-                def buildArgs = this.buildArgs.join(' ')
-                def hash = Utils.stringToSHA1(dockerfileContent + "/n" + buildArgs) //needs jenkins space
-                return docker.build(hash, "-f ${this.fileName} " + buildArgs + " ${this.fileDirectory}")
-            }
-        }
-        return null;
-    }
-
-    @NonCPS
-    static String generateSha1(String content) {
-        return (content)
-
-    }
 }
+
+
