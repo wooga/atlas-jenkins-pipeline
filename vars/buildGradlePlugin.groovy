@@ -1,6 +1,5 @@
 #!/usr/bin/env groovy
 import net.wooga.jenkins.pipeline.config.Config
-import net.wooga.jenkins.pipeline.check.Checks
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -82,8 +81,9 @@ def call(Map configMap = [:]) {
 
 
         steps {
-            publish(params.RELEASE_TYPE, params.RELEASE_SCOPE).
-                gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
+          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+            gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
+          }
         }
 
         post {

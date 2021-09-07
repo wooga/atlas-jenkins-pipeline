@@ -1,5 +1,7 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.model.Gradle
+
 class Coveralls {
 
     Object jenkins

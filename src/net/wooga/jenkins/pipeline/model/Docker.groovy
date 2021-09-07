@@ -1,4 +1,4 @@
-package net.wooga.jenkins.pipeline.check
+package net.wooga.jenkins.pipeline.model
 
 import net.wooga.jenkins.pipeline.config.DockerArgs
 

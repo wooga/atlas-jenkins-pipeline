@@ -1,18 +1,17 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.model.Gradle
+
 class Commands {
 
     static Commands fromJenkins(Object jenkinsScript) {
-        def gradle = new Gradle(jenkinsScript, jenkinsScript.params, jenkinsScript.env)
-        return new Commands(gradle, new Sonarqube(), new Coveralls(jenkinsScript))
+        return new Commands(new Sonarqube(), new Coveralls(jenkinsScript))
     }
 
-    final Gradle gradle
     final Sonarqube sonarqube
     final Coveralls coveralls
 
-    Commands(Gradle gradle, Sonarqube sonarqube, Coveralls coveralls) {
-        this.gradle = gradle
+    Commands(Sonarqube sonarqube, Coveralls coveralls) {
         this.sonarqube = sonarqube
         this.coveralls = coveralls
     }
