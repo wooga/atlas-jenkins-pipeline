@@ -1,6 +1,8 @@
 package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.model.Docker
+import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
@@ -10,7 +12,8 @@ class Checks {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, config.metadata.buildNumber)
         def enclosures = new Enclosures(config, docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, config, enclosures)
-        return new Checks(jenkinsScript, config, checkCreator, commands)
+        def gradle = Gradle.fromJenkins(jenkinsScript)
+        return new Checks(jenkinsScript, config, checkCreator, gradle, commands)
     }
 
     final Object jenkins
@@ -21,11 +24,11 @@ class Checks {
     final Sonarqube sonarqube
     final Coveralls coveralls
 
-    Checks(Object jenkinsScript, Config config, CheckCreator checkCreator, Commands commands) {
+    Checks(Object jenkinsScript, Config config, CheckCreator checkCreator, Gradle gradle, Commands commands) {
         this.jenkins = jenkinsScript
         this.config = config
         this.checkCreator = checkCreator
-        this.gradle = commands.gradle
+        this.gradle = gradle
         this.sonarqube = commands.sonarqube
         this.coveralls = commands.coveralls
     }

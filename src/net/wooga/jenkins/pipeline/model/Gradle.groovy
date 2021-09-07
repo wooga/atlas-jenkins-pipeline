@@ -1,6 +1,10 @@
-package net.wooga.jenkins.pipeline.check
+package net.wooga.jenkins.pipeline.model
 
 class Gradle {
+
+    static Gradle fromJenkins(Object jenkinsScript) {
+        return new Gradle(jenkinsScript, jenkinsScript.params, jenkinsScript.env)
+    }
 
     Object jenkins
     private Map<String, Object> params

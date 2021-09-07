@@ -2,6 +2,7 @@ package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.config.Config
 import net.wooga.jenkins.pipeline.config.Platform
+import net.wooga.jenkins.pipeline.model.Docker
 
 class Enclosures {
 

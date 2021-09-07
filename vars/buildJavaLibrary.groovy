@@ -20,7 +20,7 @@ def call(Map configMap = [:]) {
     agent none
 
     options {
-      buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
+      buildDiscarder(logRotator(artifactNumToKeepStr: '40'))
     }
 
     parameters {
@@ -73,31 +73,31 @@ def call(Map configMap = [:]) {
         }
 
         environment {
-          GRGIT                 = credentials('github_up')
-          GRGIT_USER            = "${GRGIT_USR}"
-          GRGIT_PASS            = "${GRGIT_PSW}"
-          GITHUB_LOGIN          = "${GRGIT_USR}"
-          GITHUB_PASSWORD       = "${GRGIT_PSW}"
+          GRGIT = credentials('github_up')
+          GRGIT_USER = "${GRGIT_USR}"
+          GRGIT_PASS = "${GRGIT_PSW}"
+          GITHUB_LOGIN = "${GRGIT_USR}"
+          GITHUB_PASSWORD = "${GRGIT_PSW}"
         }
 
         steps {
-          script {
-            publish(params.RELEASE_TYPE, params.RELEASE_SCOPE).bintray('bintray.publish')
+          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+            bintray('bintray.publish')
           }
         }
 
-        post {
-          cleanup {
-            cleanWs()
+          post {
+            cleanup {
+              cleanWs()
+            }
           }
         }
       }
-    }
 
-    post {
-      always {
-        sendSlackNotification currentBuild.result, true
+      post {
+        always {
+          sendSlackNotification currentBuild.result, true
+        }
       }
     }
   }
-}

@@ -83,8 +83,9 @@ def call(Map configMap = [:]) {
         }
 
         steps {
-          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE).ossrh(
-                  'ossrh.publish', 'ossrh.signing.key', 'ossrh.signing.key_id', 'ossrh.signing.passphrase')
+          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+            ossrh('ossrh.publish', 'ossrh.signing.key', 'ossrh.signing.key_id', 'ossrh.signing.passphrase')
+          }
         }
 
         post {
