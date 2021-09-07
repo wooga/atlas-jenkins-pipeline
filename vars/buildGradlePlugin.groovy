@@ -40,6 +40,7 @@ def call(Map configMap = [:]) {
       }
 
       stage("check") {
+        agent any
         when {
           beforeAgent true
           expression {
@@ -77,7 +78,9 @@ def call(Map configMap = [:]) {
             return params.RELEASE_TYPE != "snapshot"
           }
         }
-
+        agent {
+          label "$mainPlatform && atlas"
+        }
 
         environment {
           GRGIT                 = credentials('github_up')
@@ -87,9 +90,6 @@ def call(Map configMap = [:]) {
           GITHUB_PASSWORD       = "${GRGIT_PSW}"
         }
 
-        agent {
-          label "$mainPlatform && atlas"
-        }
 
         steps {
           script {

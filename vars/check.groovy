@@ -34,6 +34,7 @@ protected Closure basicCheckStructure(Closure testStep, Closure analysisStep) {
 
 protected Map<String, Closure> checksWithCoverage(Config config, boolean forceSonarQube) {
     return this.createChecks(config, {
+        checkout scm
         gradleWrapper "check"
     }, {
         gradleWrapper "jacocoTestReport"
