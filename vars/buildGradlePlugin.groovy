@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
-
 import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.check.Checks
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -11,7 +11,7 @@ import net.wooga.jenkins.pipeline.config.Config
 
 def call(Map configMap = [:]) {
   //organize configs inside neat object. Defaults are defined there as well
-  Config config = Config.fromConfigMap(configMap, this)
+  def config = Config.fromConfigMap(configMap, this)
   def mainPlatform = config.platforms[0].name
 
   pipeline {
@@ -43,19 +43,11 @@ def call(Map configMap = [:]) {
         agent any
         when {
           beforeAgent true
-          expression {
-            return params.RELEASE_TYPE == "snapshot"
-          }
+          expression { return params.RELEASE_TYPE == "snapshot" }
         }
 
         steps {
-          script {
-            withEnv(["COVERALLS_PARALLEL=true"]) {
-              //TODO: make coverage only to be executed once
-              def checksForParallel = check(config).checksWithCoverage(params.RUN_SONARQUBE)
-              parallel checksForParallel
-            }
-          }
+          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
         }
         post {
           cleanup {
@@ -74,9 +66,7 @@ def call(Map configMap = [:]) {
       stage('publish') {
         when {
           beforeAgent true
-          expression {
-            return params.RELEASE_TYPE != "snapshot"
-          }
+          expression { return params.RELEASE_TYPE != "snapshot" }
         }
         agent {
           label "$mainPlatform && atlas"
@@ -92,10 +82,8 @@ def call(Map configMap = [:]) {
 
 
         steps {
-          script {
             publish(params.RELEASE_TYPE, params.RELEASE_SCOPE).
-                    gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
-          }
+                gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
         }
 
         post {
