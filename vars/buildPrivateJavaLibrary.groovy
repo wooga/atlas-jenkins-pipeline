@@ -41,17 +41,10 @@ def call(Map configMap = [:]) {
       stage("check") {
         when {
           beforeAgent true
-          expression {
-            return params.RELEASE_TYPE == "snapshot"
-          }
+          expression { return params.RELEASE_TYPE == "snapshot"}
         }
         steps {
-          script {
-            withEnv(["COVERALLS_PARALLEL=true"]) {
-              def checksForParallel = check(config).checksWithCoverage(params.RUN_SONARQUBE)
-              parallel checksForParallel
-            }
-          }
+          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
         }
 
         post {

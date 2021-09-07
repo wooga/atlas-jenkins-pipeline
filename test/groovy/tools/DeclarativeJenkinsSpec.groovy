@@ -2,6 +2,7 @@ package tools
 
 import com.lesfurets.jenkins.unit.MethodCall
 import com.lesfurets.jenkins.unit.PipelineTestHelper
+import com.lesfurets.jenkins.unit.declarative.DeclarativePipeline
 import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
 import com.lesfurets.jenkins.unit.declarative.PostDeclaration
@@ -90,7 +91,6 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         WhenDeclaration.metaClass.beforeAgent = { bool -> null }
         PostDeclaration.metaClass.cleanup = { clj -> clj() }
         PostDeclaration.metaClass.cleanWs = {}
-
     }
 
     protected Script loadScript(String name, Closure varBindingOps={}, boolean reloadSideScripts = true) {
@@ -98,13 +98,8 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         varBindingOps(binding.variables)
         if(reloadSideScripts) {
             registerSideScript("vars/gradleWrapper.groovy", binding)
-            registerSideScript("vars/dockerWrapper.groovy", binding)
-            registerSideScript("vars/check.groovy", binding)
-            registerSideScript("vars/coveralls.groovy", binding)
-            registerSideScript("vars/sonarqube.groovy", binding)
-            registerSideScript("vars/enclosure.groovy", binding)
+            registerSideScript("vars/javaLibCheck.groovy", binding)
             registerSideScript("vars/publish.groovy", binding)
-//            registerSideScripts("vars/scripts", "utils.groovy")
         }
 
         return helper.loadScript(name, binding)
@@ -120,19 +115,19 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     protected void registerSideScript(String scriptPath, Binding binding) {
         def scriptName = new File(scriptPath).name.replace(".groovy", "")
         def script = helper.loadScript(scriptPath, binding)
-        script.class.getDeclaredMethods().findAll {return it.name == "call" }.each {
-            callMethod -> registerAllowedMethod(scriptName, script, callMethod)
+        script.class.getDeclaredMethods().findAll {return it.name == "call" }.each { callMethod ->
+            def methodCall = registerAllowedMethod(scriptName, script, callMethod)
         }
     }
 
-    protected void registerAllowedMethod(String methodName, Object base, Method method) {
+    protected Closure registerAllowedMethod(String methodName, Object base, Method method) {
         List<Class> callParams = method.parameterTypes.collect {
             if(it.isPrimitive()) {
                 return ClassUtils.primitiveToWrapper(it)
             }
             return it
         }
-        helper.registerAllowedMethod(methodName, callParams) { Object... args ->
+        def call = { Object... args ->
             if(args == null) {
                 args = [null]
             }
@@ -144,6 +139,8 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             }.toArray()
             method.invoke(base, args)
         }
+        helper.registerAllowedMethod(methodName, callParams, call)
+        return call
     }
 
     protected boolean hasShCallWith(Closure assertion) {

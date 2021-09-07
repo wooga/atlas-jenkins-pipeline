@@ -46,12 +46,7 @@ def call(Map configMap = [:]) {
           }
         }
         steps {
-          script {
-            withEnv(["COVERALLS_PARALLEL=true"]) {
-              def checksForParallel = check(config).checksWithCoverage(params.RUN_SONARQUBE)
-              parallel checksForParallel
-            }
-          }
+          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
         }
 
         post {

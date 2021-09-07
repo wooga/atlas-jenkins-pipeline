@@ -6,13 +6,12 @@ import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 
 class CheckSpec extends DeclarativeJenkinsSpec {
-    private static final String SCRIPT_PATH = "vars/check.groovy"
+    private static final String TEST_SCRIPT_PATH = "test/resources/scripts/checkTest.groovy"
 
     def setupSpec() {
         helper.registerAllowedMethod("isUnix") { true }
@@ -22,7 +21,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("execute #name if their token(s) are present")
     def "execute coverage when its token is present" () {
         given: "loaded check in a running build"
-        def check = loadScript(SCRIPT_PATH) {
+        def check = loadScript(TEST_SCRIPT_PATH) {
             currentBuild["result"] = null
         }
         and: "configuration in the master branch and with tokens"
@@ -32,7 +31,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        check(config).checksWithCoverage(false).each {it.value()}
+        check(config).withCoverage(false).each {it.value()}
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
@@ -51,7 +50,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("#shouldRunSonar execute sonarqube if #branchName matches pattern when force is #forceSonar")
     def "Only executes sonarqube in branches matching pattern unless sonarqube is forced" () {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(SCRIPT_PATH) {
+        def check = loadScript(TEST_SCRIPT_PATH) {
             currentBuild["result"] = null
         }
         and: "configuration in the ${branchName} branch with token"
@@ -62,7 +61,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        check(config).checksWithCoverage(forceSonar).each {it.value()}
+        check(config).withCoverage(forceSonar).each {it.value()}
 
         then: "${shouldRunSonar} run sonar analysis"
         def sonarCalled = hasShCallWith { callString ->
@@ -88,12 +87,12 @@ class CheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("runs check step for #platforms")
     def "runs check step for all given platforms"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(SCRIPT_PATH)
+        def check = loadScript(TEST_SCRIPT_PATH)
         and:"configuration object with given platforms"
         def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
 
         when: "running check"
-        def checkSteps = check(config).checksWithCoverage(false) as Map<String, Closure>
+        def checkSteps = check(config).withCoverage(false) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
@@ -118,7 +117,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
         def dockerMock = createDockerMock(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
-        def check = loadScript(SCRIPT_PATH) {
+        def check = loadScript(TEST_SCRIPT_PATH) {
             docker = dockerMock
         }
         and:"linux configuration object with docker args"
@@ -128,7 +127,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
                              dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
         [BUILD_NUMBER: 1])
         when: "running linux platform step"
-        def checkSteps = check(config).checksWithCoverage(false) as Map<String, Closure>
+        def checkSteps = check(config).withCoverage(false) as Map<String, Closure>
         checkSteps["check linux"].call()
 
         then:
@@ -144,7 +143,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
 
     def "doesnt runs analysis twice on parallel check run"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(SCRIPT_PATH) {
+        def check = loadScript(TEST_SCRIPT_PATH) {
             currentBuild["result"] = null
         }
         and:"configuration object with more than one platform"
@@ -152,7 +151,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         and: "generated check steps"
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
-        Map<String, Closure> steps = check(config).createChecks(
+        Map<String, Closure> steps = check(config).simple(
                 { testCount.incrementAndGet() },
                 { analysisCount.incrementAndGet() }
         )
