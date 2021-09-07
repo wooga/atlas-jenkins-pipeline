@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 
 class CheckSpec extends DeclarativeJenkinsSpec {
-    private static final String SCRIPT_PATH = "vars/scripts/check.groovy"
+    private static final String SCRIPT_PATH = "vars/check.groovy"
 
     def setupSpec() {
         helper.registerAllowedMethod("isUnix") { true }
@@ -94,6 +94,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
+        getMethodCalls("checkout").length == 1
         checkSteps.collect {
             it -> it.key.replace("check", "").trim()
         } == platforms
