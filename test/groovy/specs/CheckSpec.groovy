@@ -5,7 +5,10 @@ import net.wooga.jenkins.pipeline.config.Config
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 
 class CheckSpec extends DeclarativeJenkinsSpec {
@@ -18,8 +21,8 @@ class CheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll("execute #name if their token(s) are present")
     def "execute coverage when its token is present" () {
-        given: "loaded buildJavaLib in a running build"
-        def buildJavaLib = loadScript(SCRIPT_PATH) {
+        given: "loaded check in a running build"
+        def check = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
         }
         and: "configuration in the master branch and with tokens"
@@ -29,7 +32,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        buildJavaLib(config).checksWithCoverage(false).each {it.value()}
+        check(config).checksWithCoverage(false).each {it.value()}
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
@@ -47,8 +50,8 @@ class CheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll("#shouldRunSonar execute sonarqube if #branchName matches pattern when force is #forceSonar")
     def "Only executes sonarqube in branches matching pattern unless sonarqube is forced" () {
-        given: "loaded buildJavaLib in a running jenkins build"
-        def buildJavaLib = loadScript(SCRIPT_PATH) {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
         }
         and: "configuration in the ${branchName} branch with token"
@@ -59,7 +62,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        buildJavaLib(config).checksWithCoverage(forceSonar).each {it.value()}
+        check(config).checksWithCoverage(forceSonar).each {it.value()}
 
         then: "${shouldRunSonar} run sonar analysis"
         def sonarCalled = hasShCallWith { callString ->
@@ -84,13 +87,13 @@ class CheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll("runs check step for #platforms")
     def "runs check step for all given platforms"() {
-        given: "loaded buildJavaLib in a running jenkins build"
-        def buildJavaLib = loadScript(SCRIPT_PATH)
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(SCRIPT_PATH)
         and:"configuration object with given platforms"
         def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
 
-        when: "running buildJavaLib"
-        def checkSteps = buildJavaLib(config).checksWithCoverage(false) as Map<String, Closure>
+        when: "running check"
+        def checkSteps = check(config).checksWithCoverage(false) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
@@ -110,12 +113,12 @@ class CheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll
     def "runs dockerized check for linux"() {
-        given: "buildJavaLib loaded in a jenkins build"
+        given: "check loaded in a jenkins build"
         and: "a fake dockerfile"
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
         def dockerMock = createDockerMock(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
-        def buildJavaLib = loadScript(SCRIPT_PATH) {
+        def check = loadScript(SCRIPT_PATH) {
             docker = dockerMock
         }
         and:"linux configuration object with docker args"
@@ -125,7 +128,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
                              dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
         [BUILD_NUMBER: 1])
         when: "running linux platform step"
-        def checkSteps = buildJavaLib(config).checksWithCoverage(false) as Map<String, Closure>
+        def checkSteps = check(config).checksWithCoverage(false) as Map<String, Closure>
         checkSteps["check linux"].call()
 
         then:
@@ -136,6 +139,34 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         null         | "image" | null        | null             | ["arg1"]
         "dockerfile" | null    | "dockerDir" | ["arg1", "arg2"] | ["arg1"]
         "dockerfile" | "image" | "dockerDir" | ["arg1", "arg2"] | ["arg1"]
+    }
+
+
+    def "doesnt runs analysis twice on parallel check run"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(SCRIPT_PATH) {
+            currentBuild["result"] = null
+        }
+        and:"configuration object with more than one platform"
+        def config = Config.fromConfigMap([platforms: ["plat1", "plat2"]], [BUILD_NUMBER: 1])
+        and: "generated check steps"
+        def testCount = new AtomicInteger(0)
+        def analysisCount = new AtomicInteger(0)
+        Map<String, Closure> steps = check(config).createChecks(
+                { testCount.incrementAndGet() },
+                { analysisCount.incrementAndGet() }
+        )
+
+        when: "running steps on parallel"
+        CompletableFuture<Void>[] futures = steps.
+                collect {CompletableFuture.runAsync(it.value)}.
+                toArray(new CompletableFuture<Void>[0])
+        CompletableFuture.allOf(futures).get() //wait for futures to be completed
+
+        then: "test step ran for all platforms"
+        testCount.get() == config.platforms.length
+        and: "analysis step ran only once"
+        analysisCount.get() == 1
     }
 
     def createTmpFile(String dir=".", String file) {
@@ -161,6 +192,5 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         return [image: {name -> name==image? imgMock: null},
                 build: {hash, args -> args == buildArgs? imgMock : null},
                 ran: ran]
-
     }
 }
