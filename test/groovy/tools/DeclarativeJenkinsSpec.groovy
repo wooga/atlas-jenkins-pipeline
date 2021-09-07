@@ -13,10 +13,13 @@ import spock.lang.Specification
 import java.lang.reflect.Method
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.concurrent.Semaphore
+import java.util.concurrent.locks.Lock
 import java.util.stream.IntStream
 
 abstract class DeclarativeJenkinsSpec extends Specification {
 
+    static Object lock = new Object()
     @Shared DeclarativePipelineTest jenkinsTest;
     @Shared Binding binding
     @Shared PipelineTestHelper helper
@@ -76,6 +79,9 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             })
             //needed as utils scripts are dependent on jenkins sandbox
             registerAllowedMethod("utils", []) {[stringToSHA1 : { content -> "fakesha" }]}
+            registerAllowedMethod("lock", [Closure]) { cls ->
+                synchronized (lock) { cls() }
+            }
         }
     }
 

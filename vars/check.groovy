@@ -1,5 +1,8 @@
+import groovy.transform.Field
 import net.wooga.jenkins.pipeline.config.Config
 
+@Field
+private boolean shouldRunAnalysis = true
 
 Map<String, Closure> call(Config config) {
     return [
@@ -25,7 +28,9 @@ protected Map<String, Closure> createChecks(Config config, Closure testStep, Clo
 protected Closure basicCheckStructure(Closure testStep, Closure analysisStep) {
     return {
         testStep()
-        if (!currentBuild.result) {
+        boolean runsAnalysis = false
+        lock { runsAnalysis = getAndLockAnalysis() }
+        if (runsAnalysis) {
             analysisStep()
         }
         junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
@@ -41,6 +46,12 @@ protected Map<String, Closure> checksWithCoverage(Config config, boolean forceSo
         sonarqube(config.sonarArgs, config.metadata.branchName, forceSonarQube)
         coveralls(config.coverallsToken)
     })
+}
+
+protected boolean getAndLockAnalysis() {
+    def val = shouldRunAnalysis
+    shouldRunAnalysis = false
+    return val
 }
 
 
