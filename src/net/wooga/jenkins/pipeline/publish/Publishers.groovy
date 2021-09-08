@@ -16,29 +16,29 @@ class Publishers {
     Publishers(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
         this.j = jenkinsScript
         this.gradle = gradle
-        this.releaseScope = releaseScope
-        this.releaseType = releaseType
+        this.releaseScope = releaseScope.trim()
+        this.releaseType = releaseType.trim()
     }
 
     def gradlePlugin(String publishKeySecret, String publishSecretSecret) {
         j.withCredentials([j.string(credentialsId: publishKeySecret, variable: "GRADLE_PUBLISH_KEY"),
                          j.string(credentialsId: publishSecretSecret, variable: "GRADLE_PUBLISH_SECRET")]) {
-            gradle.wrapper("${releaseType.trim()} " +
+            gradle.wrapper("${releaseType} " +
                     "-Pgradle.publish.key=${GRADLE_PUBLISH_KEY} " +
                     "-Pgradle.publish.secret=${GRADLE_PUBLISH_SECRET} " +
-                    "-Prelease.stage=${releaseType.trim()} " +
-                    "-Prelease.scope=${releaseScope.trim()} -x check")
+                    "-Prelease.stage=${releaseType} " +
+                    "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
     def bintray(String bintraySecret) {
         j.withCredentials([j.usernamePassword(credentialsId: bintraySecret, usernameVariable: "BINTRAY_USER",
                 passwordVariable: "BINTRAY_API_KEY")]) {
-            gradle.wrapper("${releaseType.trim()} " +
+            gradle.wrapper("${releaseType} " +
                         "-Pbintray.user=${BINTRAY_USER} " +
                         "-Pbintray.key=${BINTRAY_API_KEY} " +
-                        "-Prelease.stage=${releaseType.trim()} " +
-                        "-Prelease.scope=${releaseScope.trim()} -x check")
+                        "-Prelease.stage=${releaseType} " +
+                        "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
@@ -47,9 +47,9 @@ class Publishers {
                 usernameVariable:"OSSRH_USERNAME", passwordVariable: "OSSRH_PASSWORD")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         j.withCredentials(credentials) {
-            gradle.wrapper("${releaseType.trim()} " +
-                    "-Prelease.stage=${releaseType.trim()} " +
-                    "-Prelease.scope=${releaseScope.trim()} -x check")
+            gradle.wrapper("${releaseType} " +
+                    "-Prelease.stage=${releaseType} " +
+                    "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
@@ -58,11 +58,11 @@ class Publishers {
         def credentials = [j.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         j.withCredentials(credentials) {
-            gradle.wrapper("${releaseType.trim()} " +
+            gradle.wrapper("${releaseType} " +
                     "-Partifactory.user=${ARTIFACTORY_USER} " +
                     "-Partifactory.password=${ARTIFACTORY_PASS} " +
-                    "-Prelease.stage=${releaseType.trim()} " +
-                    "-Prelease.scope=${releaseScope.trim()} -x check")
+                    "-Prelease.stage=${releaseType} " +
+                    "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
@@ -74,7 +74,16 @@ class Publishers {
         ]
     }
 
-
-
+    def unityArtifactoryPaket(String unityPath, String artifactorySecret) {
+        j.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
+            j.withCredentials([j.string(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
+                               j.string(credentialsId: artifactorySecret, variable: "nugetkey")]) {
+                gradle.wrapper("${releaseType} " +
+                                    "-Prelease.stage=${releaseType} " +
+                                    "-Ppaket.publish.repository='${releaseType}' " +
+                                    "-Prelease.scope=${releaseScope} -x check")
+            }
+        }
+    }
 
 }

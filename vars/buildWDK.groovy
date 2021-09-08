@@ -7,6 +7,7 @@
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Deprecated
 def call(Map config = [unityVersions:[]]) {
   def unityVersions = config.unityVersions
   def mainVersionLabel = "unity_${unityVersions[0]}e"

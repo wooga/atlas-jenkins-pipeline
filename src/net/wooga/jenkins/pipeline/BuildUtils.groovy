@@ -3,13 +3,42 @@ package net.wooga.jenkins.pipeline
 import com.cloudbees.groovy.cps.NonCPS
 
 class BuildVersion {
+    /**
+     * For each entry in a versions map, if they are not in the standard format
+     * we process them into the newer format that supports optional arguments per version
+     * (such as if it's optional, etc).
+     * Example: '3001.x' -> [ version : '3001.x', optional : false ]
+     * @param versions
+     * @return
+     */
+    static BuildVersion parse(Object unityVerObj) {
+        if(unityVerObj == null){
+            throw new IllegalArgumentException("Entry cannot be null")
+        }
+
+        if (unityVerObj instanceof Closure) {
+            unityVerObj = unityVerObj.call()
+        }
+        if (unityVerObj instanceof BuildVersion) {
+            return unityVerObj
+        }
+        else if (unityVerObj instanceof Map) {
+            def unityVerMap = unityVerObj as Map
+            String version = Optional.ofNullable(unityVerMap["version"])
+                    .orElseThrow{ new IllegalArgumentException("Entry ${unityVerObj} does not contain version") }
+            boolean optional = unityVerMap["optional"]?: false
+            String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
+            return new BuildVersion(version, optional, apiCompatibilityLevel)
+        }
+        return new BuildVersion(unityVerObj.toString(), false, null)
+    }
 
     final String version
     final Boolean optional
     // net_4_6, net_standard_2_0 (DEFAULT)
     final String apiCompatibilityLevel
 
-    BuildVersion(version, optional, apiCompatibilityLevel = null) {
+    BuildVersion(String version, boolean optional, String apiCompatibilityLevel = null) {
         this.version = version
         this.optional = optional
         this.apiCompatibilityLevel = apiCompatibilityLevel
@@ -44,6 +73,27 @@ class BuildVersion {
         }
         return result
     }
+
+    boolean equals(o) {
+        if (this.is(o)) return true
+        if (getClass() != o.class) return false
+
+        BuildVersion that = (BuildVersion) o
+
+        if (apiCompatibilityLevel != that.apiCompatibilityLevel) return false
+        if (optional != that.optional) return false
+        if (version != that.version) return false
+
+        return true
+    }
+
+    int hashCode() {
+        int result
+        result = (version != null ? version.hashCode() : 0)
+        result = 31 * result + (optional != null ? optional.hashCode() : 0)
+        result = 31 * result + (apiCompatibilityLevel != null ? apiCompatibilityLevel.hashCode() : 0)
+        return result
+    }
 }
 
 /**
@@ -55,36 +105,5 @@ class BuildVersion {
  * @return
  */
 def parseVersions(versions) {
-
-    final versionKey = "version"
-    final optionalKey = "optional"
-    final apiCompatibilityLevelKey = "apiCompatibilityLevel"
-
-    versions.collect { v ->
-        if (v instanceof BuildVersion) {
-            return v
-        }
-
-        if (v instanceof Closure) {
-            v = v.call()
-        }
-
-        if (v instanceof Map) {
-
-            // Version
-            if (!v.containsKey(versionKey)) {
-                throw new Exception("Entry ${v} does not contain ${versionKey}")
-            }
-            // Optional
-            if (!v.containsKey(optionalKey)) {
-                throw new Exception("Entry ${v} does not contain ${optionalKey}")
-            }
-            // API Compatibility Level
-            def apiCompatibilityLevel = v[apiCompatibilityLevelKey]
-
-            return new BuildVersion(v[versionKey], v[optionalKey], apiCompatibilityLevel)
-        }
-
-        return new BuildVersion(v.toString(), false, null)
-    }
+    return versions.collect { v -> BuildVersion.parse(v) }
 }

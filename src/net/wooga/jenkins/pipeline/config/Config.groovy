@@ -11,7 +11,7 @@ class Config {
     static Config fromConfigMap(Map config,  Object jenkinsScript) {
         config.platforms = config.platforms ?: ['macos','windows']
         def platforms = config.platforms.collect { String platformName ->
-            Platform.fromConfigMap(platformName, config)
+            Platform.forJava(platformName, config)
         }
         def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
         def sonarArgs = SonarQubeArgs.fromConfigMap(config)
