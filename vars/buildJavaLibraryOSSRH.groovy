@@ -83,7 +83,7 @@ def call(Map configMap = [:]) {
         }
 
         steps {
-          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
             ossrh('ossrh.publish', 'ossrh.signing.key', 'ossrh.signing.key_id', 'ossrh.signing.passphrase')
           }
         }

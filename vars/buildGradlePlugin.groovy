@@ -81,7 +81,7 @@ def call(Map configMap = [:]) {
 
 
         steps {
-          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
             gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
           }
         }

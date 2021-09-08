@@ -81,7 +81,7 @@ def call(Map configMap = [:]) {
         }
 
         steps {
-          javaLibPublish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
             bintray('bintray.publish')
           }
         }
