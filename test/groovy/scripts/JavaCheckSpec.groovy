@@ -1,7 +1,8 @@
-package specs
+package scripts
 
-
+import com.lesfurets.jenkins.unit.MethodCall
 import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.config.Platform
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -10,11 +11,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 
-class CheckSpec extends DeclarativeJenkinsSpec {
+class JavaCheckSpec extends DeclarativeJenkinsSpec {
     private static final String TEST_SCRIPT_PATH = "test/resources/scripts/checkTest.groovy"
 
     def setupSpec() {
-        helper.registerAllowedMethod("isUnix") { true }
     }
 
 
@@ -31,12 +31,13 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        check(config).withCoverage(false).each {it.value()}
+        check(config).javaCoverage(config, false).each {it.value()}
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
-            hasShCallWith {
-                call -> call.contains("gradlew") && call.contains(element)
+            calls.has["sh"] { MethodCall call ->
+                String args = call.args[0]["script"]
+                args.contains("gradlew") && args.contains(element)
             }
         }}
 
@@ -61,10 +62,11 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        check(config).withCoverage(forceSonar).each {it.value()}
+        check(config).javaCoverage(config, forceSonar).each {it.value()}
 
         then: "${shouldRunSonar} run sonar analysis"
-        def sonarCalled = hasShCallWith { callString ->
+        def sonarCalled = calls.has["sh"] { MethodCall call ->
+            String callString = call.args[0]["script"]
             callString.contains("gradlew") &&
                     callString.contains("sonarqube") &&
                     callString.contains("-Dsonar.login=sonarToken")
@@ -92,22 +94,22 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
 
         when: "running check"
-        def checkSteps = check(config).withCoverage(false) as Map<String, Closure>
+        def checkSteps = check(config).javaCoverage(config, false) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
-        getMethodCalls("checkout").length == 1
+        calls["checkout"].length == platforms.size()
         checkSteps.collect {
             it -> it.key.replace("check", "").trim()
         } == platforms
-        getMethodCalls("sh").count {
+        calls["sh"].count {
             def argsString = it.argsToString()
             argsString.contains("gradlew") && argsString.contains("check")
         } == platforms.size()
         where:
         platforms << [
         ["macos"], ["windows"], ["linux"],
-        ["macos, linux"], ["windows, linux"], ["windows, macos"]]
+        ["macos", "linux"], ["windows", "linux"], ["windows", "macos"]]
     }
 
     @Unroll
@@ -120,18 +122,21 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         def check = loadScript(TEST_SCRIPT_PATH) {
             docker = dockerMock
         }
-        and:"linux configuration object with docker args"
+        and: "linux configuration object with docker args"
         def config = Config.fromConfigMap([
-                platforms: ["linux"],
-                dockerArgs: [image: image, dockerFileName: dockerfile,
+                platforms : ["linux"],
+                dockerArgs: [image              : image, dockerFileName: dockerfile,
                              dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
-        [BUILD_NUMBER: 1])
+                [BUILD_NUMBER: 1])
         when: "running linux platform step"
-        def checkSteps = check(config).withCoverage(false) as Map<String, Closure>
+        def checkSteps = check(config).javaCoverage(config, false) as Map<String, Closure>
         checkSteps["check linux"].call()
 
         then:
-        dockerMock.ran.get() && hasShCallWith {it.contains("gradlew") && it.contains("check")}
+        dockerMock.ran.get() && calls.has["sh"] { MethodCall call ->
+            String args = call.args[0]["script"]
+            args.contains("gradlew") && args.contains("check")
+        }
 
         where:
         dockerfile   | image   | dockerDir   | dockerBuildArgs  | dockerArgs
@@ -151,7 +156,7 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         and: "generated check steps"
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
-        Map<String, Closure> steps = check(config).simple(
+        Map<String, Closure> steps = check(config).simple(config,
                 { testCount.incrementAndGet() },
                 { analysisCount.incrementAndGet() }
         )
@@ -166,6 +171,50 @@ class CheckSpec extends DeclarativeJenkinsSpec {
         testCount.get() == config.platforms.length
         and: "analysis step ran only once"
         analysisCount.get() == 1
+    }
+
+    @Unroll
+    def "loads test environment on check"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(TEST_SCRIPT_PATH) {
+            BUILD_NUMBER=1
+        }
+        and:"configuration object with more than one platform"
+        def config = Config.fromConfigMap([platforms: platforms, testEnvironment:testEnvironment], [BUILD_NUMBER: 1])
+        and: "generated check steps"
+        Map<String, Map> checkEnvMap = platforms.collectEntries{[(it): [:]]}
+        Map<String, Map> analysisEnvMap = platforms.collectEntries{[(it): [:]]}
+        Map<String, Closure> steps = check(config).simple(config,
+                { Platform plat ->
+                    binding.env.every {checkEnvMap[plat.name][it.key] = it.value }
+                },
+                { Platform plat ->
+                    binding.env.every { analysisEnvMap[plat.name][it.key] = it.value }
+                }
+        )
+
+        when: "running steps"
+        steps.each {it.value.call()}
+
+        then: "test step ran for all platforms"
+        checkEnvMap.every { platEnv ->
+            platEnv.value["TRAVIS_JOB_NUMBER"] == "${config.metadata.buildNumber}.${platEnv.key.toUpperCase()}"
+        }
+        expectedInEnvironment.every {expPlatEnv ->
+            def actualPlatEnv = checkEnvMap[expPlatEnv.key]
+            actualPlatEnv.entrySet().containsAll(expPlatEnv.value.entrySet())
+        }
+        //analysis only runs once, so we only assert for first platform
+        def firstPlat = platforms[0]
+        def actualAnalysisPlatEnv = analysisEnvMap[firstPlat]
+        actualAnalysisPlatEnv.entrySet().containsAll(expectedInEnvironment[firstPlat].entrySet())
+
+        where:
+        platforms          | testEnvironment         | expectedInEnvironment
+        ["plat1"]          | ["a=b", "c=d"]          | [plat1: [a: "b", c: "d"]]
+        ["plat1"]          | [plat1: ["a=b", "c=d"]] | [plat1: [a: "b", c: "d"]]
+        ["plat1", "plat2"] | ["a=b", "c=d"]          | [plat1: [a: "b", c: "d"], plat2: [a: "b", c: "d"]]
+        ["plat1", "plat2"] | [plat2: ["a=b", "c=d"]] | [plat1: [:], plat2: [a: "b", c: "d"]]
     }
 
     def createTmpFile(String dir=".", String file) {

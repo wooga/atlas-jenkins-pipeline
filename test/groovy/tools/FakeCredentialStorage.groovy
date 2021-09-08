@@ -32,6 +32,12 @@ class FakeCredentialStorage {
         }
     }
 
+    def getAt(String name) {
+        return keychain[name].toString()
+    }
+
+
+    //TODO add to environment in a similar fashion to withEnv
     def bindCredentials(List creds, Closure operation) {
         def clsDelegate = [:]
         creds.each {

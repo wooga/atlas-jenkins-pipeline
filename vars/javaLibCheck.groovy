@@ -7,8 +7,8 @@ def call(Map configMap) {
     boolean forceSonarQube = configMap.forceSonarQube
 
     withEnv(["COVERALLS_PARALLEL=true"]) {
-        def checks = Checks.forConfig(this, config)
-        def checksForParallel = checks.withCoverage(forceSonarQube)
+        def checks = Checks.create(this, config.dockerArgs, config.metadata.buildNumber)
+        def checksForParallel = checks.javaCoverage(config, forceSonarQube)
         parallel checksForParallel
     }
 }

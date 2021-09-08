@@ -1,4 +1,4 @@
-package specs
+package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
@@ -10,7 +10,6 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
     def setupSpec() {
         binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
         binding.setVariable("BRANCH_NAME", "any")
-        helper.registerAllowedMethod("isUnix") { true }
     }
 
     def "posts coveralls results to coveralls server" () {
@@ -27,7 +26,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         buildJavaLibrary(coverallsToken: coverallsToken)
 
         then: "request is sent to coveralls webhook"
-        hasMethodCallWith("httpRequest"){ MethodCall call ->
+        calls.has["httpRequest"]{ MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -37,7 +36,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
 
     @Unroll("publishes #releaseType-#releaseScope release ")
     def "publishes with #release release type"() {
-        given: "credentials holder with bintray publish keys"
+        given: "credentials holder with ossrh publish keys"
         credentials.addUsernamePassword('ossrh.publish', "user", "key")
         credentials.addString('ossrh.signing.key', "signingKey")
         credentials.addString('ossrh.signing.key_id', "keyId")
@@ -53,7 +52,8 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         buildJavaLibrary()
 
         then: "runs gradle with parameters"
-        skipsRelease ^/*XOR*/ hasShCallWith { it ->
+        skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
+            String it = call.args[0]["script"]
             it.contains("gradlew") &&
             it.contains(releaseType) &&
             it.contains("-Prelease.stage=${releaseType}") &&

@@ -35,7 +35,7 @@ class ConfigSpec extends Specification {
     Config configWith(List<String> platforms, Map dockerArgs = [:], Map extraFields = [:], String coverallsToken = null) {
         def cfgMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: coverallsToken] + extraFields
         new Config(JenkinsMetadata.fromScript(jenkinsScript),
-                platforms.collect { Platform.fromConfigMap(it, cfgMap) },
+                platforms.collect { Platform.forJava(it, cfgMap) },
                 DockerArgs.fromConfigMap(dockerArgs), SonarQubeArgs.fromConfigMap(cfgMap), coverallsToken)
     }
 

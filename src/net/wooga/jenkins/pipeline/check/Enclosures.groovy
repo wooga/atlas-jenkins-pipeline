@@ -1,24 +1,25 @@
 package net.wooga.jenkins.pipeline.check
 
-import net.wooga.jenkins.pipeline.config.Config
+
+import net.wooga.jenkins.pipeline.config.DockerArgs
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.model.Docker
 
 class Enclosures {
 
-    private Config config
     private Docker docker
+    private DockerArgs dockerArgs
     private EnclosureCreator enclosureCreator
 
-    Enclosures(Config config, Docker docker, EnclosureCreator enclosureCreator) {
-        this.config = config
+    Enclosures(Docker docker, DockerArgs dockerArgs, EnclosureCreator enclosureCreator) {
         this.docker = docker
+        this.dockerArgs = dockerArgs
         this.enclosureCreator = enclosureCreator
     }
 
     def withDocker(Platform platform, Closure mainCls, Closure catchCls = {throw it}, Closure finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform, {
-            docker.runOnImage(config.dockerArgs, mainCls)
+            docker.runOnImage(dockerArgs, mainCls)
         }, catchCls, finallyCls)
     }
 

@@ -1,16 +1,15 @@
-package specs
+package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
-class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
-    private static final String SCRIPT_PATH = "vars/buildJavaLibrary.groovy"
+class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
+    private static final String SCRIPT_PATH = "vars/buildPrivateJavaLibrary.groovy"
 
     def setupSpec() {
-        binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
+        binding.setVariable("params", [RELEASE_TYPE: "snapshot", RELEASE_SCOPE: "patch"])
         binding.setVariable("BRANCH_NAME", "any")
-        helper.registerAllowedMethod("isUnix") { true }
     }
 
     def "posts coveralls results to coveralls server" () {
@@ -27,7 +26,7 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
         buildJavaLibrary(coverallsToken: coverallsToken)
 
         then: "request is sent to coveralls webhook"
-        hasMethodCallWith("httpRequest"){ MethodCall call ->
+        calls.has["httpRequest"]{ MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -37,11 +36,13 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
     @Unroll("publishes #releaseType-#releaseScope release ")
     def "publishes with #release release type"() {
-        given: "credentials holder with bintray publish keys"
-        credentials.addUsernamePassword('bintray.publish', "user", "key")
+        given: "credentials holder with ossrh and artifactory keys"
+        credentials.addUsernamePassword('artifactory_publish', "user", "key")
+        credentials.addString('ossrh.signing.key', "signingKey")
+        credentials.addString('ossrh.signing.key_id', "keyId")
+        credentials.addString('ossrh.signing.passphrase', "passphrase")
         and: "build plugin with publish parameters"
         def buildJavaLibrary = loadScript(SCRIPT_PATH) {
-            currentBuild["result"] = null
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
         }
@@ -50,31 +51,28 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
         buildJavaLibrary()
 
         then: "runs gradle with parameters"
-        skipsRelease ^/*XOR*/ hasShCallWith { it ->
+        skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
+            String it = call.args[0]["script"]
             it.contains("gradlew") &&
-            it.contains(releaseType) &&
-            it.contains("-Pbintray.user=user") &&
-            it.contains("-Pbintray.key=key") &&
-            it.contains("-Prelease.stage=${releaseType}") &&
-            it.contains("-Prelease.scope=${releaseScope}") &&
-            it.contains("-x check")
+                    it.contains(releaseType) &&
+                    it.contains("-Partifactory.user=user") &&
+                    it.contains("-Partifactory.password=key") &&
+                    it.contains("-Prelease.stage=${releaseType}") &&
+                    it.contains("-Prelease.scope=${releaseScope}") &&
+                    it.contains("-x check")
         }
 
         where:
         releaseType | releaseScope | skipsRelease
-        "snapshot"  | "patch"      | true
+        "snapshot"  | "patch"      | false
         "rc"        | "minor"      | false
         "final"     | "major"      | false
     }
 
     def "registers environment on publish"() {
-        given: "credentials holder with bintray publish keys"
-        credentials.addUsernamePassword('bintray.publish', "user", "key")
-        and: "build plugin with publish parameters"
+        given: "build plugin with publish parameters"
         def buildJavaLibrary = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
-            params.RELEASE_TYPE = "not-snapshot"
-            params.RELEASE_SCOPE = "any"
             env.GRGIT_USR = "usr"
             env.GRGIT_PSW = "pwd"
         }
@@ -85,7 +83,7 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
         then: "sets up GRGIT environment"
         def env = buildJavaLibrary.binding.env
-        env["GRGIT"] == 'github_up'
+        env["GRGIT"] == 'github_up' //credentials("github_up")
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"
