@@ -33,6 +33,9 @@ class FakeCredentialStorage {
     }
 
     def getAt(String name) {
+        if(keychain[name] instanceof List) {
+            return "${keychain[name][0]}:${keychain[name][1]}"
+        }
         return keychain[name].toString()
     }
 

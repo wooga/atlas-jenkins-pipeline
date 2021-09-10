@@ -18,7 +18,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     def "publishes WDK with #release release type"() {
         given: "credentials holder with publish keys"
         credentials.addString("artifactory_read", "usr:pwd")
-        credentials.addString("github_up", "usr:pwd")
+        credentials.addUsernamePassword('github_up', "usr", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
@@ -94,6 +94,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         "rc"        | "minor"
         "final"     | "major"
     }
+
     @Unroll("sets up WDK for #releaseType-#releaseScope release ")
     def "sets up WDK with given release data"() {
         given: "needed credentials"
