@@ -2,18 +2,19 @@ package net.wooga.jenkins.pipeline.model
 
 class Gradle {
 
-    static Gradle fromJenkins(Object jenkinsScript) {
-        return new Gradle(jenkinsScript, jenkinsScript.params, jenkinsScript.env)
+    private String logLevel
+    private boolean stackTrace
+
+    static Gradle fromJenkins(Object jenkinsScript, String logLevel, boolean stackTrace) {
+        return new Gradle(jenkinsScript, logLevel, stackTrace)
     }
 
     Object jenkins
-    private Map<String, Object> params
-    private Map<String, Object> env
 
-    Gradle(Object jenkins, Map<String, Object> params, Map<String, Object> env) {
+    Gradle(Object jenkins, String logLevel, boolean stackTrace) {
+        this.stackTrace = stackTrace
+        this.logLevel = logLevel
         this.jenkins = jenkins
-        this.params = params
-        this.env = env
     }
 
     /**
@@ -38,14 +39,12 @@ class Gradle {
         def result = command.replaceAll(regex, '')
 
         if (!containsOptions(result, "quiet", "warn", "info", "debug")) {
-            if (params.LOG_LEVEL) {
-                result += " --${params.LOG_LEVEL}"
-            } else if (env.LOG_LEVEL) {
-                result += " --${env.LOG_LEVEL}"
+            if (logLevel) {
+                result += " --${logLevel}"
             }
         }
 
-        if (params.STACK_TRACE == true && !containsOptions(result, "stacktrace")) {
+        if (stackTrace && !containsOptions(result, "stacktrace")) {
             result += " --stacktrace"
         }
 

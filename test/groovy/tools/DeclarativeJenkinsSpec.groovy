@@ -1,8 +1,7 @@
 package tools
 
-import com.lesfurets.jenkins.unit.MethodCall
+
 import com.lesfurets.jenkins.unit.PipelineTestHelper
-import com.lesfurets.jenkins.unit.declarative.DeclarativePipeline
 import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
 import com.lesfurets.jenkins.unit.declarative.PostDeclaration
@@ -11,12 +10,7 @@ import org.apache.commons.lang3.ClassUtils
 import spock.lang.Shared
 import spock.lang.Specification
 
-import javax.swing.text.html.Option
 import java.lang.reflect.Method
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.concurrent.Semaphore
-import java.util.concurrent.locks.Lock
 import java.util.stream.IntStream
 
 abstract class DeclarativeJenkinsSpec extends Specification {
@@ -27,15 +21,15 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     @Shared PipelineTestHelper helper
     @Shared FakeCredentialStorage credentials
     @Shared FakeMethodCalls calls
-    @Shared List<Map> usedEnvironments
+    @Shared FakeEnvironment environment
     @Shared Map<String, Map> jenkinsStash
 
     def setupSpec() {
-        usedEnvironments = new ArrayList<>()
         jenkinsStash = new HashMap<>()
         jenkinsTest = new DeclarativePipelineTest() {}
         jenkinsTest.setUp()
-        credentials = new FakeCredentialStorage()
+        environment = new FakeEnvironment(jenkinsTest.binding)
+        credentials = new FakeCredentialStorage(environment)
         calls = new FakeMethodCalls(jenkinsTest.helper)
 
         helper = jenkinsTest.helper
@@ -50,8 +44,12 @@ abstract class DeclarativeJenkinsSpec extends Specification {
 
     def cleanup() {
         helper?.callStack?.clear()
-        usedEnvironments.clear()
+        environment.wipe()
         credentials.wipe()
+    }
+
+    def getUsedEnvironments() {
+        return environment.usedEnvironments
     }
 
     private static void populateJenkinsDefaultEnvironment(Binding binding) {
@@ -78,17 +76,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("withEnv", [List, Closure]) { List<?> envStrs, Closure cls ->
                 def env = envStrs.collect{it.toString()}.
                             collectEntries{String envStr -> [(envStr.split("=")[0]): envStr.split("=")[1]]}
-                binding.env.putAll(env)
-                binding.variables.putAll(env)
-                try {
-                    cls()
-                } finally {
-                    usedEnvironments.add(deepCopy(binding.env)as Map)
-                    env.each {
-                        binding.env.remove(it.key)
-                        binding.variables.remove(it.key)
-                    }
-                }
+                environment.runWithEnv(env, cls)
             }
             registerAllowedMethod("cleanWs") {}
             registerAllowedMethod("checkout", [String]) {}
@@ -97,7 +85,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("readFile", [String]) {String path -> new File(path).text }
             registerAllowedMethod("usernamePassword", [Map], credentials.&usernamePassword)
             //TODO: make this generate KEY_USR and KEY_PWD environment
-            registerAllowedMethod("credentials", [String]) {String key -> credentials[key]}
+            registerAllowedMethod("credentials", [String], credentials.&getAt)
             registerAllowedMethod("string", [Map]) { Map params ->
                 return params.containsKey("name")?
                         jenkinsTest.paramInterceptor : //string() from parameters clause
@@ -161,12 +149,5 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         return methodCall
     }
 
-    protected static def deepCopy(orig) {
-        def bos = new ByteArrayOutputStream()
-        def oos = new ObjectOutputStream(bos)
-        oos.writeObject(orig); oos.flush()
-        def bin = new ByteArrayInputStream(bos.toByteArray())
-        def ois = new ObjectInputStream(bin)
-        return ois.readObject()
-    }
+
 }

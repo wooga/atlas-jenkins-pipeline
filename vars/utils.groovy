@@ -1,3 +1,4 @@
+import net.wooga.jenkins.pipeline.model.Gradle
 import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 
 def call() {

@@ -85,7 +85,7 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
 
     def initializeGrGit(String remote) {
         Grgit git = Grgit.init(dir: projectDir)
-        git.remote.add(name: remote, url: this.githubRepo.gitHttpTransportUrl())
+        git.remote.add(name: remote, url: this.githubRepo.httpTransportUrl)
         git.close()
 
         git = Grgit.open(dir: projectDir, credentials: new Credentials(this.githubRepo.userName, this.githubRepo.token))

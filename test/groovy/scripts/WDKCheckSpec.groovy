@@ -87,7 +87,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         calls["nunit"].count {
             Map args =  it.args[0] as Map
             return args["failIfNoResults"] == false &&
-            args["testResultsPattern"] =='**/build/reports/unity/**/*.xml'
+            args["testResultsPattern"] =='**/build/reports/unity/test*/*.xml'
         } == versions.size()
         calls["cleanWs"].length == versions.size()
 
@@ -120,7 +120,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         calls["nunit"].count {
             Map args =  it.args[0] as Map
             return args["failIfNoResults"] == false &&
-                    args["testResultsPattern"] =='**/build/reports/unity/**/*.xml'
+                    args["testResultsPattern"] =='**/build/reports/unity/test*/*.xml'
         } == versions.size()
         calls["cleanWs"].length == versions.size()
 

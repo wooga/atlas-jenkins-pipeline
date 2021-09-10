@@ -4,8 +4,8 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Assemblers {
 
-    static Assemblers fromJenkins(Object jenkinsScript, String releaseType, String releaseScope) {
-        return new Assemblers(jenkinsScript, Gradle.fromJenkins(jenkinsScript), releaseType, releaseScope)
+    static Assemblers fromJenkins(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
+        return new Assemblers(jenkinsScript, gradle, releaseType, releaseScope)
     }
 
     final Object j

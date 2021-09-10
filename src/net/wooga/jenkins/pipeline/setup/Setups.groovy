@@ -15,8 +15,8 @@ class Setups {
         this.forceRefreshDependencies = forceRefreshDependencies
     }
 
-    static Setups forJenkins(Object jenkinsScript, boolean forceRefreshDependencies) {
-        return new Setups(jenkinsScript, Gradle.fromJenkins(jenkinsScript), forceRefreshDependencies)
+    static Setups forJenkins(Object jenkinsScript, Gradle gradle, boolean forceRefreshDependencies) {
+        return new Setups(jenkinsScript, gradle, forceRefreshDependencies)
     }
 
     def wdk(String releaseType, String releaseScope) {
