@@ -70,20 +70,21 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
     }
 
     def "registers environment on publish"() {
-        given: "build plugin with publish parameters"
+        given: "needed credentials"
+        credentials.addUsernamePassword('github_up', "usr", "pwd")
+        and: "build plugin with publish parameters"
         def buildJavaLibrary = loadScript(SCRIPT_PATH) {
             currentBuild["result"] = null
             env.GRGIT_USR = "usr"
             env.GRGIT_PSW = "pwd"
         }
-        helper.registerAllowedMethod("credentials", [String]) {it -> it}
 
         when: "running buildJavaLibrary pipeline"
         buildJavaLibrary()
 
         then: "sets up GRGIT environment"
         def env = buildJavaLibrary.binding.env
-        env["GRGIT"] == 'github_up' //credentials("github_up")
+        env["GRGIT"] == credentials['github_up'] //credentials("github_up")
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"
