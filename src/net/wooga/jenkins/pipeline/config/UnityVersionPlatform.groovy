@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.config
 
+import com.cloudbees.groovy.cps.NonCPS
 import net.wooga.jenkins.pipeline.BuildVersion
 
 class UnityVersionPlatform {

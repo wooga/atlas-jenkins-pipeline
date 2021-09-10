@@ -3,8 +3,10 @@ package tools
 class FakeCredentialStorage {
 
     private final Map<String, Object> keychain
+    private FakeEnvironment environment
 
-    FakeCredentialStorage() {
+    FakeCredentialStorage(FakeEnvironment environment) {
+        this.environment = environment
         keychain = new HashMap<>()
     }
 
@@ -40,9 +42,9 @@ class FakeCredentialStorage {
     }
 
 
-    //TODO add to environment in a similar fashion to withEnv
+    //TODO add generated credentials to environment in a similar fashion to withEnv
     def bindCredentials(List creds, Closure operation) {
-        def clsDelegate = [:]
+        Map clsDelegate = [:]
         creds.each {
             if(it instanceof StringCredentials) {
                 def strCreds = it as StringCredentials
@@ -56,7 +58,7 @@ class FakeCredentialStorage {
             }
         }
         operation.setDelegate(clsDelegate)
-        operation()
+        environment.runWithEnv(clsDelegate, operation)
     }
 
     def wipe() {

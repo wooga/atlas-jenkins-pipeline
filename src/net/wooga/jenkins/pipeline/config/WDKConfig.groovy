@@ -11,7 +11,7 @@ class WDKConfig {
             def platform = Platform.forWDK(buildVersion, buildLabel, configMap)
             return new UnityVersionPlatform(platform, buildVersion)
         }
-        if(unityVersions.empty) throw new IllegalArgumentException("Please provide at least one unity version.")
+        if(unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
 
         boolean refreshDependencies = configMap.refreshDependencies ?: false
         String logLevel = configMap.logLevel ?: ''

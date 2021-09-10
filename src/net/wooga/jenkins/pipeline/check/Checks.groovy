@@ -9,13 +9,12 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
-    static Checks create(Object jenkinsScript, DockerArgs dockerArgs, int buildNumber) {
+    static Checks create(Object jenkinsScript, Gradle gradle, DockerArgs dockerArgs, int buildNumber) {
         def docker = new Docker(jenkinsScript)
         def commands = Commands.fromJenkins(jenkinsScript)
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
         def enclosures = new Enclosures(docker, dockerArgs, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
-        def gradle = Gradle.fromJenkins(jenkinsScript)
         return new Checks(jenkinsScript, checkCreator, gradle, commands)
     }
 

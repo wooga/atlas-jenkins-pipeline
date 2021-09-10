@@ -2,6 +2,7 @@
 import net.wooga.jenkins.pipeline.assemble.Assemblers
 import net.wooga.jenkins.pipeline.check.Checks
 import net.wooga.jenkins.pipeline.config.WDKConfig
+import net.wooga.jenkins.pipeline.model.Gradle
 import net.wooga.jenkins.pipeline.setup.Setups
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -48,7 +49,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           sendSlackNotification "STARTED", true
           script {
-            def setup = Setups.forJenkins(this, config.refreshDependencies || params.REFRESH_DEPENDENCIES == true)
+            def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+            def setup = Setups.forJenkins(this, gradle, config.refreshDependencies || params.REFRESH_DEPENDENCIES == true)
             setup.wdk(params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
           }
         }
@@ -79,7 +81,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
             steps {
               unstash 'setup_w'
               script {
-                def assembler = Assemblers.fromJenkins(this, params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+                def assembler = Assemblers.fromJenkins(this, gradle, params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
                 assembler.unityWDK("build")
               }
             }
@@ -107,7 +110,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
             steps {
               script {
-                  def checks = Checks.create(this, null, BUILD_NUMBER as int)
+                def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+                def checks = Checks.create(this, gradle, null, BUILD_NUMBER as int)
                   def stepsForParallel = checks.wdkCoverage(config,
                           params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
                   parallel stepsForParallel
@@ -133,9 +137,11 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           unstash 'setup_w'
           unstash 'wdk_output'
-          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+          script {
             def unityPath = "${APPLICATIONS_HOME}/${config.unityVersions[0].stepLabel}/${UNITY_EXEC_PACKAGE_PATH}"
-            unityArtifactoryPaket(unityPath, 'artifactory_publish')
+            publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+              unityArtifactoryPaket(unityPath, 'artifactory_publish')
+            }
           }
         }
 

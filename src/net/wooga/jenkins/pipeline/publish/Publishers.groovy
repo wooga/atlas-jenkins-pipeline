@@ -4,8 +4,8 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Publishers {
 
-    static Publishers fromJenkins(Object jenkinsScript, String releaseType, String releaseScope) {
-        return new Publishers(jenkinsScript, Gradle.fromJenkins(jenkinsScript), releaseType, releaseScope)
+    static Publishers fromJenkins(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
+        return new Publishers(jenkinsScript, gradle, releaseType, releaseScope)
     }
 
     final Object j
