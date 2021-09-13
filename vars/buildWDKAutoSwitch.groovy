@@ -181,7 +181,7 @@ def call(Map config = [ unityVersions:[] ]) {
                   }
 
                   def finalizeStep = {
-                    nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/**/*.xml'
+                    nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/test*/*.xml'
                     archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                     archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
                     publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
