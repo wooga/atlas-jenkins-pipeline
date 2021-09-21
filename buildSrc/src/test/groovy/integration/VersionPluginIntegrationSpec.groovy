@@ -1,6 +1,5 @@
 package integration
 
-
 import com.wooga.jenkins.VersionTask
 import com.wooga.spock.extensions.github.GithubRepository
 import com.wooga.spock.extensions.github.Repository
@@ -10,13 +9,17 @@ import nebula.test.IntegrationSpec
 import org.ajoberstar.grgit.Credentials
 import org.ajoberstar.grgit.Grgit
 import org.ajoberstar.grgit.Tag
-import org.apache.commons.lang3.RandomStringUtils
-import spock.lang.Unroll;
+import org.junit.Rule
+import org.junit.contrib.java.lang.system.EnvironmentVariables
+import spock.lang.Unroll
 
 class VersionPluginIntegrationSpec extends IntegrationSpec {
 
+    @Rule
+    EnvironmentVariables environment = new EnvironmentVariables()
+
     @GithubRepository(
-            repositoryNamePrefix = "pipeline-buildsrc",
+            repositoryNamePrefix = "atlas-jenkins-pipeline-integrationSpec",
             usernameEnv = "ATLAS_GITHUB_INTEGRATION_USER",
             tokenEnv = "ATLAS_GITHUB_INTEGRATION_PASSWORD",
             repositoryPostFixProvider = [TravisBuildNumberPostFix.class],
@@ -49,6 +52,10 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
             remote = "origin"
             updateType = "${updateType}"
         }"""
+
+        and: "credentials in the environment"
+        environment.set("GRGIT_USER", this.githubRepo.userName)
+        environment.set("GRGIT_PASS", this.githubRepo.token)
 
         when:
         runTasksSuccessfully(VersionTask.TASK_NAME)
@@ -85,7 +92,7 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
 
     def initializeGrGit(String remote) {
         Grgit git = Grgit.init(dir: projectDir)
-        git.remote.add(name: remote, url: this.githubRepo.gitHttpTransportUrl())
+        git.remote.add(name: remote, url: this.githubRepo.httpTransportUrl)
         git.close()
 
         git = Grgit.open(dir: projectDir, credentials: new Credentials(this.githubRepo.userName, this.githubRepo.token))

@@ -38,10 +38,6 @@ pipeline {
     agent any
     stages {
         stage("Check") {
-            environment {
-                GRGIT_USER = "${ATLAS_GITHUB_INTEGRATION_USR}"
-                GRGIT_PASS = "${ATLAS_GITHUB_INTEGRATION_PSW}"
-            }
             steps { gradleWrapper "check" }
             post {
                 always {
