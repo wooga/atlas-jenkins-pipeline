@@ -3,6 +3,7 @@ plugins {
     id 'maven-publish'
     id 'jacoco'
     id "org.sonarqube" version "3.2.0"
+    id 'net.wooga.jenkins-pipeline'
 }
 
 import com.wooga.jenkins.VersionPlugin
