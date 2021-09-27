@@ -15,7 +15,6 @@ def call(Map config = [:]) {
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
-  config.sonarQubeBranchPattern = config.sonarQubeBranchPattern ?: "^(master|main)\$"
   config.dockerArgs = config.dockerArgs ?: [:]
   config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
   config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
@@ -97,7 +96,7 @@ def call(Map config = [:]) {
                   if (config.coverallsToken) {
                     tasks += " coveralls"
                   }
-                  if(config.sonarToken && (BRANCH_NAME =~ config.sonarQubeBranchPattern || params.RUN_SONAR)) {
+                  if(config.sonarToken || params.RUN_SONAR) {
                     tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
                   }
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
