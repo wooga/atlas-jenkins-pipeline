@@ -7,7 +7,8 @@ import tools.DeclarativeJenkinsSpec
 
 class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
 
-    @Shared Script gradleWrapperScript;
+    @Shared
+    Script gradleWrapperScript;
 
     def setupSpec() {
         binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
@@ -18,7 +19,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         }
     }
 
-    def "should post coveralls results to coveralls server" () {
+    def "should post coveralls results to coveralls server"() {
         given: "loaded buildGradlePlugin in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
@@ -32,7 +33,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         buildGradlePlugin(coverallsToken: coverallsToken)
 
         then: "request is sent to coveralls webhook"
-        hasMethodCallWith("httpRequest"){ MethodCall call ->
+        hasMethodCallWith("httpRequest") { MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -41,7 +42,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     }
 
     @Unroll("should execute #name if their token(s) are present")
-    def "should execute coverage when its token is present" (){
+    def "should execute coverage when its token is present"() {
         given: "loaded buildGradlePlugin in a running build in the master branch"
         def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
             BRANCH_NAME = "master"
@@ -52,53 +53,48 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         buildGradlePlugin(sonarToken: sonarToken, coverallsToken: coverallsToken)
 
         then: "gradle coverage task is called"
-        hasShCallWith{ callString ->
+        hasShCallWith { callString ->
             callString.contains("gradlew") &&
-                    gradleCmdElements.every {callString.contains(it) }
+                    gradleCmdElements.every { callString.contains(it) }
         }
 
         where:
-        name                    | gradleCmdElements                                        | sonarToken   | coverallsToken
-        "SonarQube"             | ["sonarqube", "-Dsonar.login=sonarToken"]                | "sonarToken" | null
-        "Coveralls"             | ["coveralls"]                                            | null         | "coverallsToken"
-        "SonarQube & Coveralls" | ["coveralls", "sonarqube", "-Dsonar.login=sonarToken"]   |"sonarToken"  | "coverallsToken"
+        name                    | gradleCmdElements                                      | sonarToken   | coverallsToken
+        "SonarQube"             | ["sonarqube", "-Dsonar.login=sonarToken"]              | "sonarToken" | null
+        "Coveralls"             | ["coveralls"]                                          | null         | "coverallsToken"
+        "SonarQube & Coveralls" | ["coveralls", "sonarqube", "-Dsonar.login=sonarToken"] | "sonarToken" | "coverallsToken"
     }
 
-    @Unroll("#shouldRunSonar execute sonarqube if #branchName matches pattern when RUN_SONAR is #runSonarParam")
-    def "should only execute sonarqube in branches matching pattern unless RUN_SONAR is true" () {
-        given: "loaded build script in a running build in the ${branchName} branch"
+    @Unroll("should execute sonarqube on branch #branchName")
+    def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
+        given: "loaded build script in a running build in branch"
         def buildGradlePlugin = loadScript("vars/buildGradlePlugin.groovy") {
             BRANCH_NAME = branchName
             currentBuild["result"] = null
+            if (isPR) {
+                CHANGE_ID = "notnull"
+                CURRENT_BRANCH = prBranch
+            }
         }
-
-        and: "RUN_SONAR set to ${runSonarParam}"
-        binding.getVariable("params").with { RUN_SONAR = runSonarParam }
-
-        and: "sonarQubeBranchPattern config set to ${branchPattern?: "default (^main|master\$)"}"
-        def runConfig = [sonarToken: "sonarToken", sonarQubeBranchPattern: branchPattern]
+        and: "sonar token is set"
+        def runConfig = [sonarToken: "sonarToken"]
 
         when: "running gradle pipeline with sonar token"
         buildGradlePlugin(runConfig)
 
-        then: "${shouldRunSonar} run sonar analysis"
-        def sonarCalled = hasShCallWith { callString ->
+        then: "should run sonar analysis"
+        hasShCallWith { callString ->
             callString.contains("gradlew") &&
                     callString.contains("sonarqube") &&
-                    callString.contains("-Dsonar.login=sonarToken")
+                    callString.contains("-Dsonar.login=sonarToken") &&
+                    callString.contains("-Pgithub.branch.name=${expectedBranchProperty}")
         }
-        shouldRunSonar == "should"? sonarCalled : !sonarCalled
 
         where:
-        branchName              | branchPattern | runSonarParam | shouldRunSonar
-        "master"                | null          | true          | "should"
-        "master"                | null          | false         | "should"
-        "master"                | "^nomaster\$" | false         | "shouldn't"
-        "main"                  | null          | true          | "should"
-        "main"                  | null          | false         | "should"
-        "main"                  | "^nomaster\$" | false         | "shouldn't"
-        "nomaster"              | null          | true          | "should"
-        "nomaster"              | "^nomaster\$" | false         | "should"
-        "nomaster"              | null          | false         | "shouldn't"
+        branchName   | prBranch | isPR  | expectedBranchProperty
+        "master"     | null     | false | "master"
+        "not_master" | null     | false | "not_master"
+        "PR-123"     | "branch" | true  | ""
+        "branchpr"   | "branch" | true  | ""
     }
 }
