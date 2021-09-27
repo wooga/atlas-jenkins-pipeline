@@ -48,42 +48,38 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         "SonarQube & Coveralls" | [["coveralls"], ["sonarqube", "-Dsonar.login=sonarToken"]] | "sonarToken" | "coverallsToken"
     }
 
-    @Unroll("#shouldRunSonar execute sonarqube if #branchName matches pattern when force is #forceSonar")
-    def "Only executes sonarqube in branches matching pattern unless sonarqube is forced" () {
-        given: "loaded check in a running jenkins build"
+    @Unroll("should execute sonarqube on branch #branchName")
+    def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
+        given: "loaded build script in a running build in branch"
         def check = loadScript(TEST_SCRIPT_PATH) {
-            currentBuild["result"] = null
+            if (isPR) {
+                CHANGE_ID = "notnull"
+            }
         }
         and: "configuration in the ${branchName} branch with token"
-        and: "sonarQubeBranchPattern config set to ${branchPattern?: "default (^main|master\$)"}"
         def config = Config.fromConfigMap(
-                [sonarToken: "sonarToken", sonarQubeBranchPattern: branchPattern],
+                [sonarToken: "sonarToken"],
                 [BUILD_NUMBER: 1, BRANCH_NAME: branchName]
         )
 
-        when: "running gradle pipeline with coverage token"
-        check(config).javaCoverage(config, forceSonar).each {it.value()}
+        when: "running gradle pipeline with sonar token"
+        check(config).javaCoverage(config, isPR).each {it.value()}
 
-        then: "${shouldRunSonar} run sonar analysis"
-        def sonarCalled = calls.has["sh"] { MethodCall call ->
+        then: "should run sonar analysis"
+        calls.has["sh"] {  MethodCall call ->
             String callString = call.args[0]["script"]
             callString.contains("gradlew") &&
                     callString.contains("sonarqube") &&
-                    callString.contains("-Dsonar.login=sonarToken")
+                    callString.contains("-Dsonar.login=sonarToken") &&
+                    callString.contains("-Pgithub.branch.name=${expectedBranchProperty}")
         }
-        shouldRunSonar == "should"? sonarCalled : !sonarCalled
 
         where:
-        branchName              | branchPattern | forceSonar    | shouldRunSonar
-        "master"                | null          | true          | "should"
-        "master"                | null          | false         | "should"
-        "master"                | "^nomaster\$" | false         | "shouldn't"
-        "main"                  | null          | true          | "should"
-        "main"                  | null          | false         | "should"
-        "main"                  | "^nomaster\$" | false         | "shouldn't"
-        "nomaster"              | null          | true          | "should"
-        "nomaster"              | "^nomaster\$" | false         | "should"
-        "nomaster"              | null          | false         | "shouldn't"
+        branchName   | prBranch | isPR  | expectedBranchProperty
+        "master"     | null     | false | "master"
+        "not_master" | null     | false | "not_master"
+        "PR-123"     | "branch" | true  | ""
+        "branchpr"   | "branch" | true  | ""
     }
 
     @Unroll("runs check step for #platforms")

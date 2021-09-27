@@ -3,20 +3,17 @@ package net.wooga.jenkins.pipeline.config
 class SonarQubeArgs {
 
     static SonarQubeArgs fromConfigMap(Map config) {
-        String branchPattern = config.sonarQubeBranchPattern ?: "^(master|main)\$"
-        return new SonarQubeArgs(config.sonarToken as String, branchPattern)
+        return new SonarQubeArgs(config.sonarToken as String)
     }
 
     final String token
-    final String branchPattern;
 
-    SonarQubeArgs(String token, String branchPattern) {
+    SonarQubeArgs(String token) {
         this.token = token
-        this.branchPattern = branchPattern
     }
 
-    boolean shouldRunSonarQube(String branchName) {
-        return (token != null && branchName =~ branchPattern)
+    boolean shouldRunSonarQube() {
+        return (token != null)
     }
 
     boolean equals(o) {
@@ -25,16 +22,12 @@ class SonarQubeArgs {
 
         SonarQubeArgs that = (SonarQubeArgs) o
 
-        if (branchPattern != that.branchPattern) return false
         if (token != that.token) return false
 
         return true
     }
 
     int hashCode() {
-        int result
-        result = (token != null ? token.hashCode() : 0)
-        result = 31 * result + (branchPattern != null ? branchPattern.hashCode() : 0)
-        return result
+        return (token != null ? token.hashCode() : 0)
     }
 }
