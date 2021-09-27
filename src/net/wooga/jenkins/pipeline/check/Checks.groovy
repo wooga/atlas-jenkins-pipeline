@@ -33,13 +33,13 @@ class Checks {
         this.coveralls = commands.coveralls
     }
 
-    Map<String, Closure> javaCoverage(Config config, boolean forceSonarQube) {
+    Map<String, Closure> javaCoverage(Config config, boolean isPR) {
         return checkCreator.javaChecks(config.platforms, {
                 jenkins.checkout(jenkins.scm)
                 gradle.wrapper("check")
             }, {
                 gradle.wrapper("jacocoTestReport")
-                sonarqube.runGradle(gradle, config.sonarArgs, config.metadata.branchName, forceSonarQube)
+                sonarqube.runGradle(gradle, config.sonarArgs, isPR? null : config.metadata.branchName)
                 coveralls.runGradle(gradle, config.coverallsToken)
             })
     }

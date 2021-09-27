@@ -14,30 +14,26 @@ class SonarQubeArgsSpec extends Specification {
         config == expected
 
         where:
-        configMap                                                                 | expected
-        [sonarToken: null, sonarQubeBranchPattern: null]                          | new SonarQubeArgs(null, "^(master|main)\$")
-        [sonarToken: "token", sonarQubeBranchPattern: null]                       | new SonarQubeArgs("token", "^(master|main)\$")
-        [sonarToken: null, sonarQubeBranchPattern: "^pattern"]                    | new SonarQubeArgs(null, "^pattern")
-        [sonarToken: "token", sonarQubeBranchPattern: "^pattern"]                 | new SonarQubeArgs("token", "^pattern")
-        [other: "other", sonarToken: "token", sonarQubeBranchPattern: "^pattern"] | new SonarQubeArgs("token", "^pattern")
+        configMap                             | expected
+        [sonarToken: null]                    | new SonarQubeArgs(null)
+        [sonarToken: "token"]                 | new SonarQubeArgs("token")
+        [other: "other", sonarToken: "token"] | new SonarQubeArgs("token")
     }
 
-    def "indicates to run sonarqube if token is present and branch matches pattern"() {
+    def "indicates to run sonarqube if token is present"() {
         given: "a valid sonarqube args object"
-        def args = new SonarQubeArgs(token, pattern)
+        def args = new SonarQubeArgs(token)
 
         when: "checking if sonarqube should run"
-        def shouldRun = args.shouldRunSonarQube(branch)
+        def shouldRun = args.shouldRunSonarQube()
 
         then:
         shouldRun == runs
 
         where:
-        token   | branch      | pattern     | runs
-        "token" | "master"    | "^master\$" | true
-        "token" | "notmaster" | "^master\$" | false
-        null    | "master"    | "^master\$" | false
-        null    | "notmaster" | "^master\$" | false
+        token   | runs
+        "token" | true
+        null    | false
     }
 
 }
