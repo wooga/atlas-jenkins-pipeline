@@ -1,7 +1,5 @@
 package net.wooga.jenkins.pipeline
 
-//import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
-
 /**
  * Creates a "check" step for use in a jenkins pipeline
  **/
@@ -73,7 +71,7 @@ Closure createCheckStep(Map args) {
                                 image = docker.build(hash, "-f ${dockerArgs.dockerFileName} " + buildArgs + " ${dockerArgs.dockerFileDirectory}")
                             }
 
-                            def imageArgs = dockerArgs.dockerArgs.join(' ')
+                            def imageArgs = dockerArgs.imageArgs.join(' ')
                             image.inside(imageArgs) {
                                 args.checkClosure.call()
                             }

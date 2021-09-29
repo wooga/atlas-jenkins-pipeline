@@ -1,7 +1,9 @@
 #!/usr/bin/env groovy
-
-import net.wooga.jenkins.pipeline.TestHelper
-import net.wooga.jenkins.pipeline.BuildUtils
+import net.wooga.jenkins.pipeline.assemble.Assemblers
+import net.wooga.jenkins.pipeline.check.Checks
+import net.wooga.jenkins.pipeline.config.WDKConfig
+import net.wooga.jenkins.pipeline.model.Gradle
+import net.wooga.jenkins.pipeline.setup.Setups
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -10,24 +12,8 @@ import net.wooga.jenkins.pipeline.BuildUtils
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [ unityVersions:[] ]) {
-
-  def buildUtils = new BuildUtils()
-
-  // We need at least one valid unity version for now.
-  config.unityVersions = buildUtils.parseVersions(config.unityVersions)
-  if(config.unityVersions.isEmpty()) {
-    error "Please provide at least one unity version."
-  }
-
-  // Set defaults as needed
-  config.testEnvironment = config.testEnvironment ?: []
-  config.testLabels = config.testLabels ?: []
-  config.labels = config.labels ?: ''
-  config.refreshDependencies = config.refreshDependencies ?: false
-  config.logLevel = config.logLevel ?: ''
-
-  def helper = new TestHelper()
+def call(Map configMap = [ unityVersions:[] ]) {
+  def config = WDKConfig.fromConfigMap("macos", configMap)
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -42,7 +28,7 @@ def call(Map config = [ unityVersions:[] ]) {
       UVM_AUTO_SWITCH_UNITY_EDITOR  = "YES"
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
       LOG_LEVEL = "${config.logLevel}"
-      ATLAS_READ = credentials('artifactory_read')
+      ATLAS_READ = credentials('artifactory_read') //needed for gradle sto read private packages
     }
 
     parameters {
@@ -57,17 +43,16 @@ def call(Map config = [ unityVersions:[] ]) {
 
       stage('setup') {
         agent {
-          label "atlas && macos"
+          label "atlas && $config.buildLabel"
         }
 
         steps {
-          script {
-            if (config.refreshDependencies == true || params.REFRESH_DEPENDENCIES == true) {
-              gradleWrapper "--refresh-dependencies"
-            }
-          }
           sendSlackNotification "STARTED", true
-          gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=$params.RELEASE_SCOPE setup"
+          script {
+            def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+            def setup = Setups.forJenkins(this, gradle, config.refreshDependencies || params.REFRESH_DEPENDENCIES == true)
+            setup.wdk(params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+          }
         }
 
         post {
@@ -90,35 +75,31 @@ def call(Map config = [ unityVersions:[] ]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && macos"
-            }
-
-            environment {
-              UNITY_LOG_CATEGORY = "build"
+               label "atlas && $config.buildLabel"
             }
 
             steps {
               unstash 'setup_w'
-              gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} assemble"
+              script {
+                def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+                def assembler = Assemblers.fromJenkins(this, gradle, params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                assembler.unityWDK("build")
+              }
             }
 
             post {
-              success {
-                stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-              }
-
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
-
               cleanup {
                 cleanWs()
               }
             }
           }
+
           stage("check") {
             when {
               beforeAgent true
@@ -129,83 +110,11 @@ def call(Map config = [ unityVersions:[] ]) {
 
             steps {
               script {
-                def stepsForParallel = config.unityVersions.collectEntries { bv ->
-                  def environment = []
-                  def labels = config.labels
-
-                  def version = bv.version
-                  def stepLabel = bv.toLabel()
-                  def directoryName = bv.toDirectoryName()
-
-                  if(config.testEnvironment) {
-                    if(config.testEnvironment instanceof List) {
-                      environment.addAll(config.testEnvironment)
-                    }
-                    else {
-                      environment.addAll( (config.testEnvironment[bv]) ?: [])
-                    }
-                  }
-
-                  if(config.testLabels) {
-                    if(config.testLabels instanceof List) {
-                      labels = config.testLabels
-                    }
-                    else {
-                      labels = (config.testLabels[bv]) ?: config.labels
-                    }
-                  }
-
-                  def testConfig = config.clone()
-                  testConfig.labels = labels
-
-                  environment.addAll(["UVM_UNITY_VERSION=${version}", "UNITY_LOG_CATEGORY=check-${version}"])
-                  if (bv.apiCompatibilityLevel != null){
-                    environment.addAll(["UNITY_API_COMPATIBILITY_LEVEL=${bv.apiCompatibilityLevel}"])
-                  }
-
-                  def checkStep = {
-                    dir (directoryName) {
-                      checkout scm
-                      unstash 'setup_w'
-                      gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} check"
-                      if(config.sonarToken) {
-                        gradleWrapper "sonarqube -Dsonar.login=${config.sonarToken}"
-                      }
-                    }
-                  }
-
-                  def catchStep = { Exception e ->
-                    if (bv.optional){
-                      unstable(message: "Unity build for optional version ${version} is found to be unstable\n${e.toString()}")
-                    }
-                    else{
-                      throw e
-                    }
-                  }
-
-                  def finalizeStep = {
-                    nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/test*/*.xml'
-                    archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
-                    archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true
-                    publishCoverage adapters: [istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')], sourceFileResolver: sourceFiles('STORE_LAST_BUILD')
-                    dir (directoryName) {
-                      deleteDir()
-                    }
-                    cleanWs()
-                  }
-
-                  def Map args = [:]
-                  args.platform = "macos"
-                  args.testEnvironment = environment
-                  args.config = testConfig
-                  args.checkClosure = checkStep
-                  args.catchClosure = catchStep
-                  args.finallyClosure = finalizeStep
-                  args.skipCheckout = true
-
-                  ["check Unity-${stepLabel}" : helper.createCheckStep(args)]
-                }
-                parallel stepsForParallel
+                def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
+                def checks = Checks.create(this, gradle, null, BUILD_NUMBER as int)
+                  def stepsForParallel = checks.wdkCoverage(config,
+                          params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                  parallel stepsForParallel
               }
             }
           }
@@ -214,7 +123,7 @@ def call(Map config = [ unityVersions:[] ]) {
 
       stage('publish') {
         agent {
-           label "atlas && macos"
+           label "atlas && $config.buildLabel"
         }
 
         environment {
@@ -223,23 +132,23 @@ def call(Map config = [ unityVersions:[] ]) {
           GRGIT_PASS         = "${GRGIT_PSW}"
           GITHUB_LOGIN       = "${GRGIT_USR}"
           GITHUB_PASSWORD    = "${GRGIT_PSW}"
-          NUGET_KEY          = credentials('artifactory_publish')
-          nugetkey           = "${NUGET_KEY}"
-          UNITY_PATH         = "${APPLICATIONS_HOME}/Unity-${config.unityVersions[0]}/${UNITY_EXEC_PACKAGE_PATH}"
-          UNITY_LOG_CATEGORY = "build"
         }
 
         steps {
           unstash 'setup_w'
           unstash 'wdk_output'
-          gradleWrapper "${params.RELEASE_TYPE.trim()} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Ppaket.publish.repository='$params.RELEASE_TYPE' -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+          script {
+            def unityPath = "${APPLICATIONS_HOME}/${config.unityVersions[0].stepLabel}/${UNITY_EXEC_PACKAGE_PATH}"
+            publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+              unityArtifactoryPaket(unityPath, 'artifactory_publish')
+            }
+          }
         }
 
         post {
           always {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
-
           cleanup {
             cleanWs()
           }

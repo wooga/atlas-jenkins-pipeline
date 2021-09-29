@@ -1,5 +1,5 @@
 #!/usr/bin/env groovy
-
+import net.wooga.jenkins.pipeline.config.Config
 import net.wooga.jenkins.pipeline.TestHelper
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -9,18 +9,8 @@ import net.wooga.jenkins.pipeline.TestHelper
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map config = [:]) {
-  //set config defaults
-  config.platforms = config.plaforms ?: ['osx','windows']
-  config.platforms = config.platforms ?: ['osx','windows']
-  config.testEnvironment = config.testEnvironment ?: []
-  config.testLabels = config.testLabels ?: []
-  config.labels = config.labels ?: ''
-  config.dockerArgs = config.dockerArgs ?: [:]
-  config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
-  config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
-  config.dockerArgs.dockerBuildArgs = config.dockerArgs.dockerBuildArgs ?: []
-  config.dockerArgs.dockerArgs = config.dockerArgs.dockerArgs ?: []
+def call(Map configMap = [:]) {
+  Config config = Config.fromConfigMap(configMap, this.binding.variables)
 
   def platforms = config.platforms
   def mainPlatform = platforms[0]
@@ -30,12 +20,13 @@ def call(Map config = [:]) {
     agent none
 
     options {
-      buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
+      buildDiscarder(logRotator(artifactNumToKeepStr: '40'))
     }
 
     parameters {
       choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
       choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+      booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONARQUBE')
     }
 
     stages {
@@ -56,71 +47,16 @@ def call(Map config = [:]) {
         }
 
         steps {
-          script {
-            def stepsForParallel = platforms.collectEntries {
-              def environment = []
-              def labels = config.labels
+          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
 
-              if(config.testEnvironment) {
-                if(config.testEnvironment instanceof List) {
-                  environment = config.testEnvironment
-                }
-                else {
-                  environment = (config.testEnvironment[it]) ?: []
-                }
-              }
-
-              environment << "COVERALLS_PARALLEL=true"
-
-              if(config.testLabels) {
-                if(config.testLabels instanceof List) {
-                  labels = config.testLabels
-                }
-                else {
-                  labels = (config.testLabels[it]) ?: config.labels
-                }
-              }
-
-              def testConfig = config.clone()
-              testConfig.labels = labels
-
-              def checkStep = { gradleWrapper "check" }
-              def finalizeStep = {
-                if(!currentBuild.result) {
-                  if (config.coverallsToken) {
-                    tasks += " coveralls"
-                  }
-                  if(config.sonarToken) {
-                    tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
-                  }
-                  withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
-                    gradleWrapper command
-                    publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'build/reports/jacoco/test/html',
-                                reportFiles: 'index.html',
-                                reportName: "Coverage ${it}",
-                                reportTitles: ''
-                                ])
-                  }
-                }
-                junit allowEmptyResults: true, testResults: '**/build/test-results/**/*.xml'
-                cleanWs()
-              }
-
-              ["check ${it}" : helper.transformIntoCheckStep(it, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
-            }
-
-            parallel stepsForParallel
-          }
         }
 
         post {
           success {
-            if(config.coverallsToken) {
-              httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+            script {
+                if(config.coverallsToken) {
+                  httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+                }
             }
           }
         }
@@ -139,33 +75,31 @@ def call(Map config = [:]) {
         }
 
         environment {
-          BINTRAY               = credentials('bintray.publish')
-          GRGIT                 = credentials('github_up')
-
-          BINTRAY_USER          = "${BINTRAY_USR}"
-          BINTRAY_API_KEY       = "${BINTRAY_PSW}"
-          GRGIT_USER            = "${GRGIT_USR}"
-          GRGIT_PASS            = "${GRGIT_PSW}"
-          GITHUB_LOGIN          = "${GRGIT_USR}"
-          GITHUB_PASSWORD       = "${GRGIT_PSW}"
+          GRGIT = credentials('github_up')
+          GRGIT_USER = "${GRGIT_USR}"
+          GRGIT_PASS = "${GRGIT_PSW}"
+          GITHUB_LOGIN = "${GRGIT_USR}"
+          GITHUB_PASSWORD = "${GRGIT_PSW}"
         }
 
         steps {
-          gradleWrapper "${params.RELEASE_TYPE.trim()} -Pbintray.user=${BINTRAY_USER} -Pbintray.key=${BINTRAY_API_KEY} -Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} -x check"
+          publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
+            bintray('bintray.publish')
+          }
         }
 
-        post {
-          cleanup {
-            cleanWs()
+          post {
+            cleanup {
+              cleanWs()
+            }
           }
         }
       }
-    }
 
-    post {
-      always {
-        sendSlackNotification currentBuild.result, true
+      post {
+        always {
+          sendSlackNotification currentBuild.result, true
+        }
       }
     }
   }
-}
