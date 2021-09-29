@@ -14,7 +14,6 @@ def call(Map configMap = [:]) {
 
   def platforms = config.platforms
   def mainPlatform = platforms[0]
-  def helper = new TestHelper()
 
   pipeline {
     agent none
@@ -62,6 +61,26 @@ def call(Map configMap = [:]) {
         when {
           beforeAgent true
           expression {
+            //TODO only accept releases on release and master branches
+//            when {
+//              allOf {
+//                not {
+//                  changeRequest()
+//                }
+//                anyOf{
+//                  allOf {
+//                    branch comparator: 'GLOB', pattern: 'release/*'
+//                    environment name: 'RELEASE_TYPE', value: 'staging'
+//                  }
+//                  allOf {
+//                    branch comparator: 'GLOB', pattern: 'production'
+//                    environment name: 'RELEASE_TYPE', value: 'production'
+//                  }
+//                }
+//              }
+//              beforeAgent true
+//            }
+            //TODO: change to accept only RCs and Final releases (instead of negating snapshots)
             return params.RELEASE_TYPE != "snapshot"
           }
         }

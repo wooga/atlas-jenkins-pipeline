@@ -17,6 +17,7 @@ class Enclosures {
         this.enclosureCreator = enclosureCreator
     }
 
+    //TODO: maybe wrap single in docker, instead of two separated things?
     def withDocker(Platform platform, Closure mainCls, Closure catchCls = {throw it}, Closure finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform, {
             docker.runOnImage(dockerArgs, mainCls)

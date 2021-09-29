@@ -4,7 +4,7 @@ class Gradle {
 
     private String logLevel
     private boolean stackTrace
-
+    //TODO: refresh dependencies should be here!
     static Gradle fromJenkins(Object jenkinsScript, String logLevel, boolean stackTrace) {
         return new Gradle(jenkinsScript, logLevel, stackTrace)
     }

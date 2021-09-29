@@ -23,7 +23,6 @@ class CheckCreator {
                 jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
                 jenkins.cleanWs()
             }
-
             def checkStep = platform.runsOnDocker?
                         enclosures.withDocker(platform, mainClosure, catchClosure, finallyClosure):
                         enclosures.simple(platform, mainClosure, catchClosure, finallyClosure)

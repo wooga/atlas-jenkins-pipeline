@@ -55,7 +55,9 @@ class Publishers {
 
     def artifactoryOSSRH(String artifactorySecret,
                          String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret) {
-        def credentials = [j.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
+        def credentials = [j.usernamePassword(credentialsId: artifactorySecret,
+                                                usernameVariable:"ARTIFACTORY_USER",
+                                                passwordVariable: "ARTIFACTORY_PASS")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         j.withCredentials(credentials) {
             gradle.wrapper("${releaseType} " +
@@ -75,6 +77,7 @@ class Publishers {
     }
 
     def unityArtifactoryPaket(String unityPath, String artifactorySecret) {
+        //TODO: UNITY_PATH is not being used anymore, remove it
         j.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
             j.withCredentials([j.string(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
                                j.string(credentialsId: artifactorySecret, variable: "nugetkey")]) {

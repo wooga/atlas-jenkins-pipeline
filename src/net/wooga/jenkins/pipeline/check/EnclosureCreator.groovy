@@ -22,11 +22,16 @@ class EnclosureCreator {
             jenkins.node(nodeLabels) {
                 jenkins.withEnv(testEnvironment) {
                     try {
+                        //TODO: split main closure into main and success
+                        //TODO: success closure exceptions should "explode" (not be catch at all)
                         mainCls()
+                        //successCls?.call()
                     } catch (Exception e) {
                         catchCls?.call(e)
                     } finally {
+                        //TODO: split finally into finally and cleanup
                         finallyCls?.call()
+                        //cleanupCls?.call()
                     }
                 }
             }
