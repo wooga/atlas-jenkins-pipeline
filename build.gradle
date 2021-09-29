@@ -23,7 +23,7 @@ repositories {
 
 dependencies {
     implementation 'com.cloudbees:groovy-cps:1.12'
-    compile group: 'org.jenkinsci.plugins', name: 'pipeline-model-api', version: '1.8.4', ext: 'jar'
+    compile group: 'org.jenkinsci.plugins', name: 'pipeline-model-api', version: '1.9.2', ext: 'jar'
     compile group: 'org.jenkinsci.plugins', name: 'pipeline-model-definition', version: '1.2', ext: 'jar'
     compile group: 'org.jenkins-ci.plugins', name: 'docker-workflow', version: '1.26', ext: 'jar'
     implementation 'org.codehaus.groovy:groovy-all:2.4.12'
