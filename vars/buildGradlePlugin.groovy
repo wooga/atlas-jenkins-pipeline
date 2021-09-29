@@ -15,7 +15,6 @@ def call(Map config = [:]) {
   config.testEnvironment = config.testEnvironment ?: []
   config.testLabels = config.testLabels ?: []
   config.labels = config.labels ?: ''
-  config.sonarQubeBranchPattern = config.sonarQubeBranchPattern ?: "^(master|main)\$"
   config.dockerArgs = config.dockerArgs ?: [:]
   config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
   config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
@@ -39,7 +38,6 @@ def call(Map config = [:]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
-      booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONAR')
     }
 
     stages {
@@ -97,8 +95,14 @@ def call(Map config = [:]) {
                   if (config.coverallsToken) {
                     tasks += " coveralls"
                   }
-                  if(config.sonarToken && (BRANCH_NAME =~ config.sonarQubeBranchPattern || params.RUN_SONAR)) {
-                    tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
+                  if(config.sonarToken) {
+                      tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
+                    if(env.CHANGE_ID) { //if this is a PR branch
+                      //by default gradle plugin sets branch name, this is needed to unset it
+                      tasks += " -Pgithub.branch.name="
+                    } else {
+                      tasks += " -Pgithub.branch.name=${BRANCH_NAME}"
+                    }
                   }
                   withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
                     gradleWrapper tasks

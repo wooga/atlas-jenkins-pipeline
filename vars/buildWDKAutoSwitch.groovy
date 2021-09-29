@@ -168,6 +168,9 @@ def call(Map config = [ unityVersions:[] ]) {
                       checkout scm
                       unstash 'setup_w'
                       gradleWrapper "-Prelease.stage=${params.RELEASE_TYPE.trim()} -Prelease.scope=${params.RELEASE_SCOPE} check"
+                      if(config.sonarToken) {
+                        gradleWrapper "sonarqube -Dsonar.login=${config.sonarToken}"
+                      }
                     }
                   }
 
