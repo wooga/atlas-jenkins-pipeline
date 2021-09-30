@@ -68,6 +68,7 @@ class PlatformSpec extends Specification {
         [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | buildVersion("v")       | new Platform("v", "macos", false, "", ["t=a", "t2=b"], ["l", "l2"])
         [labels: "label", testLabels: ["t", "t2"]]                                        | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"])
         [labels: "label", testLabels: [v: ["t", "t2"]]]                                   | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"])
+        [labels: "label", testLabels: [v: "tag"]]                                         | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["tag"])
         [labels: "label", testLabels: [notv: ["t", "t2"]]]                                | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [])
         [labels: "label", testEnvironment: [v: ["t=a", "t2=b"]]]                          | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], [])
         [labels: "label", testEnvironment: [notv: ["t=a", "t2=b"]]]                       | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [])
@@ -96,6 +97,7 @@ class PlatformSpec extends Specification {
         null          | null             | "osname"
         null          | "label && other" | "osname"
         ["testlabel"] | null             | "osname"
+        ["testlabel"] | "label"          | "osname"
         ["testlabel"] | "label"          | "osname"
     }
 
