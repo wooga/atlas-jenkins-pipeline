@@ -58,7 +58,7 @@ class Platform {
         def generatedLabelsStr = generatedLabels.join(" && ")
 
         return configLabelsStr != null && !configLabelsStr.empty?
-                "${configLabelsStr} && ${generatedLabelsStr}" :
+                "${configLabelsStr} && ${generatedLabelsStr}".toString() :
                 generatedLabelsStr
     }
 
@@ -100,11 +100,16 @@ class Platform {
             return []
         }
         if(obj instanceof Map) {
-            return obj[mapKey] as Collection ?: []
+            def value = obj[mapKey]
+            if(value instanceof String || value instanceof GString) {
+                return [value?.toString()]?: []
+            } else {
+                return obj[mapKey] as Collection ?: []
+            }
         }
         if(obj instanceof Collection) {
             return obj as Collection
         }
-        throw new IllegalArgumentException("${obj} should be a Collection or a Map of [key:collection]")
+        throw new IllegalArgumentException("${obj} should be a Collection or a Map of [key:collection] or [key:string]")
     }
 }
