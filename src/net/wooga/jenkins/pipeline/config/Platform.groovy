@@ -58,7 +58,7 @@ class Platform {
         def generatedLabelsStr = generatedLabels.join(" && ")
 
         return configLabelsStr != null && !configLabelsStr.empty?
-                "${configLabelsStr} && ${generatedLabelsStr}" :
+                "${configLabelsStr} && ${generatedLabelsStr}".toString() :
                 generatedLabelsStr
     }
 
