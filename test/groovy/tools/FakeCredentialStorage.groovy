@@ -34,9 +34,17 @@ class FakeCredentialStorage {
         }
     }
 
+    StringCredentials usernameColonPassword(Map contents) {
+        return string(contents)
+    }
+
     def getAt(String name) {
+        return getSecretValueAsString(name)
+    }
+
+    def getSecretValueAsString(String name) {
         if(keychain[name] instanceof List) {
-            return "${keychain[name][0]}:${keychain[name][1]}"
+            return (keychain[name] as List).join(":")
         }
         return keychain[name].toString()
     }
@@ -48,7 +56,7 @@ class FakeCredentialStorage {
         creds.each {
             if(it instanceof StringCredentials) {
                 def strCreds = it as StringCredentials
-                clsDelegate[strCreds.variable] = keychain[strCreds.key]
+                clsDelegate[strCreds.variable] = getSecretValueAsString(strCreds.key)
             }
             if(it instanceof UsernamePasswordCredentials) {
                 def upCreds = it as UsernamePasswordCredentials
@@ -66,9 +74,6 @@ class FakeCredentialStorage {
     }
 }
 
-interface Credentials {
-    String getKey()
-}
 
 class StringCredentials {
     String key

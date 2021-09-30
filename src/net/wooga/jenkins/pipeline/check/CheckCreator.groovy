@@ -44,7 +44,6 @@ class CheckCreator {
                 }
             }
             def finallyClosure = {
-                
                 jenkins.nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/test*/*.xml'
                 jenkins.archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
                 jenkins.archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml' , allowEmptyArchive: true

@@ -8,10 +8,6 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildWDKAutoSwitch.groovy"
 
     def setupSpec() {
-        binding.variables.with {
-            APPLICATIONS_HOME = "home"
-            UNITY_EXEC_PACKAGE_PATH = "unity.exe"
-        }
     }
 
     @Unroll("publishes #releaseType-#releaseScope release ")
@@ -49,7 +45,6 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
             GRGIT_PASS == "pwd" &&//"${GRGIT_PSW}"
             GITHUB_LOGIN == "usr" &&//"${GRGIT_USR}"
             GITHUB_PASSWORD == "pwd" &&//"${GRGIT_PSW}"
-            UNITY_PATH == "home/Unity-2019/unity.exe" &&
             UNITY_LOG_CATEGORY == "build"
         }
 
@@ -64,7 +59,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     @Unroll("assemblies WDK for #releaseType-#releaseScope release ")
     def "assemblies WDK with given release data"() {
         given: "needed credentials"
-        credentials.addString("artifactory_read", "key")
+        credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
@@ -98,7 +93,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     @Unroll("sets up WDK for #releaseType-#releaseScope release ")
     def "sets up WDK with given release data"() {
         given: "needed credentials"
-        credentials.addString("artifactory_read", "key")
+        credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType

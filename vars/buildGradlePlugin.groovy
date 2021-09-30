@@ -46,7 +46,7 @@ def call(Map configMap = [:]) {
         }
 
         steps {
-          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
+          javaLibCheck config: config
         }
         post {
           cleanup {

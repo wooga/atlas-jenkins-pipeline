@@ -76,8 +76,8 @@ class Publishers {
 
     def unityArtifactoryPaket(String unityPath, String artifactorySecret) {
         j.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
-            j.withCredentials([j.string(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
-                               j.string(credentialsId: artifactorySecret, variable: "nugetkey")]) {
+            j.withCredentials([j.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
+                               j.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
                 gradle.wrapper("${releaseType} " +
                                     "-Prelease.stage=${releaseType} " +
                                     "-Ppaket.publish.repository='${releaseType}' " +

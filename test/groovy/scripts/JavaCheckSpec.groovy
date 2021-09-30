@@ -31,7 +31,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running gradle pipeline with coverage token"
-        check(config).javaCoverage(config, false).each {it.value()}
+        check(config).javaCoverage(config).each {it.value()}
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
@@ -51,19 +51,19 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("should execute sonarqube on branch #branchName")
     def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
         given: "loaded build script in a running build in branch"
-        def check = loadScript(TEST_SCRIPT_PATH) {
-            if (isPR) {
-                CHANGE_ID = "notnull"
-            }
+        def check = loadScript(TEST_SCRIPT_PATH)
+
+        and: "jenkins script object with needed properties"
+        def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: branchName, env: [:]]
+        if (isPR) {
+            jenkinsMeta.CHANGE_ID = "notnull"
+            jenkinsMeta.env["CHANGE_ID"] = "notnull"
         }
         and: "configuration in the ${branchName} branch with token"
-        def config = Config.fromConfigMap(
-                [sonarToken: "sonarToken"],
-                [BUILD_NUMBER: 1, BRANCH_NAME: branchName]
-        )
+        def config = Config.fromConfigMap([sonarToken: "sonarToken"], jenkinsMeta)
 
         when: "running gradle pipeline with sonar token"
-        check(config).javaCoverage(config, isPR).each {it.value()}
+        check(config).javaCoverage(config).each {it.value()}
 
         then: "should run sonar analysis"
         calls.has["sh"] {  MethodCall call ->
@@ -90,7 +90,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
 
         when: "running check"
-        def checkSteps = check(config).javaCoverage(config, false) as Map<String, Closure>
+        def checkSteps = check(config).javaCoverage(config) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
         then: "platform check registered on parallel operation"
@@ -125,7 +125,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
                              dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
                 [BUILD_NUMBER: 1])
         when: "running linux platform step"
-        def checkSteps = check(config).javaCoverage(config, false) as Map<String, Closure>
+        def checkSteps = check(config).javaCoverage(config) as Map<String, Closure>
         checkSteps["check linux"].call()
 
         then:

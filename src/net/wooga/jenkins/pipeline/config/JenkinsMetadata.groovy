@@ -4,17 +4,28 @@ class JenkinsMetadata {
 
     final int buildNumber
     final String branchName
+    final String prChangeId
 
     static JenkinsMetadata fromScript(Object jenkinsScript) {
+        if(jenkinsScript.BUILD_NUMBER == null) {
+            throw new IllegalStateException("Jenkins script object must have a BUILD_NUMBER property")
+        }
+        def envMap = jenkinsScript.env?: [:]
         return new JenkinsMetadata(
                 jenkinsScript.BUILD_NUMBER as int,
-                jenkinsScript.BRANCH_NAME as String
+                jenkinsScript.BRANCH_NAME as String,
+                envMap.CHANGE_ID as String //nullable
         )
     }
 
-    JenkinsMetadata(int buildNumber, String branchName) {
+    JenkinsMetadata(int buildNumber, String branchName, String prChangeId) {
+        this.prChangeId = prChangeId
         this.buildNumber = buildNumber
         this.branchName = branchName
+    }
+
+    boolean isPR() {
+        return prChangeId != null
     }
 
     boolean equals(o) {

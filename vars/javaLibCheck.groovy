@@ -9,8 +9,7 @@ def call(Map configMap) {
     withEnv(["COVERALLS_PARALLEL=true"]) {
         def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
         def checks = Checks.create(this, gradle, config.dockerArgs, config.metadata.buildNumber)
-        def isPR = env.CHANGE_ID as boolean
-        def checksForParallel = checks.javaCoverage(config, isPR)
+        def checksForParallel = checks.javaCoverage(config)
         parallel checksForParallel
     }
 }

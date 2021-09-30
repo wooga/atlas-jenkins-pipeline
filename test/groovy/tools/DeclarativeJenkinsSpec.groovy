@@ -84,6 +84,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("fileExists", [String]) {String path -> new File(path).exists() }
             registerAllowedMethod("readFile", [String]) {String path -> new File(path).text }
             registerAllowedMethod("usernamePassword", [Map], credentials.&usernamePassword)
+            registerAllowedMethod("usernameColonPassword", [Map], credentials.&usernameColonPassword)
             //TODO: make this generate KEY_USR and KEY_PWD environment
             registerAllowedMethod("credentials", [String], credentials.&getAt)
             registerAllowedMethod("string", [Map]) { Map params ->

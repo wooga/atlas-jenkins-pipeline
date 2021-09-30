@@ -33,13 +33,14 @@ class Checks {
         this.coveralls = commands.coveralls
     }
 
-    Map<String, Closure> javaCoverage(Config config, boolean isPR) {
+    Map<String, Closure> javaCoverage(Config config) {
         return checkCreator.javaChecks(config.platforms, {
                 jenkins.checkout(jenkins.scm)
                 gradle.wrapper("check")
             }, {
+                def branchName = config.metadata.isPR()? null : config.metadata.branchName
                 gradle.wrapper("jacocoTestReport")
-                sonarqube.runGradle(gradle, config.sonarArgs, isPR? null : config.metadata.branchName)
+                sonarqube.runGradle(gradle, config.sonarArgs, branchName)
                 coveralls.runGradle(gradle, config.coverallsToken)
             })
     }
@@ -61,10 +62,14 @@ class Checks {
                         "-Prelease.scope=${releaseScope.trim()} " +
                         "check")
             }
-        },{
+        },{ UnityVersionPlatform versionPlat ->
+            jenkins.dir(versionPlat.directoryName) {
+                def branchName = config.metadata.isPR() ? null : config.metadata.branchName
+                sonarqube.runGradle(gradle, config.sonarArgs, branchName)
+            }
             def coberturaAdapter = jenkins.istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')
             jenkins.publishCoverage adapters: [coberturaAdapter],
-                                    sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
+                    sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
         })
     }
 
