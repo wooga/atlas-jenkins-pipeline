@@ -13,7 +13,7 @@ import net.wooga.jenkins.pipeline.setup.Setups
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [ unityVersions:[] ]) {
-  def config = WDKConfig.fromConfigMap("macos", configMap)
+  def config = WDKConfig.fromConfigMap("macos", configMap, this)
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -111,7 +111,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
             steps {
               script {
                 def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
-                def checks = Checks.create(this, gradle, null, BUILD_NUMBER as int)
+                def checks = Checks.create(this, gradle, null, config.metadata.buildNumber as int)
                   def stepsForParallel = checks.wdkCoverage(config,
                           params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
                   parallel stepsForParallel

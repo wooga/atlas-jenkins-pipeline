@@ -11,27 +11,24 @@ import tools.DeclarativeJenkinsSpec
 class WDKCheckSpec extends DeclarativeJenkinsSpec {
     private static final String TEST_SCRIPT_PATH = "test/resources/scripts/checkTest.groovy"
 
-    def setupSpec() {
-
-    }
-
-    def "executes cobertura coverage" () {
+    def "executes cobertura coverage plugin"() {
         given: "loaded check in a running build"
-        def check = loadScript(TEST_SCRIPT_PATH) {
-            BUILD_NUMBER = 1
-        }
+        def check = loadScript(TEST_SCRIPT_PATH)
         and: "configuration in the master branch and with tokens"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019"])
+        def config = WDKConfig.fromConfigMap("label",
+                [unityVersions: "2019"],
+                [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
+        )
         and: "mocked coverage methods"
-        helper.registerAllowedMethod("istanbulCoberturaAdapter", [String]) {it -> it}
-        helper.registerAllowedMethod("sourceFiles", [String]) {it -> it}
-        helper.registerAllowedMethod("publishCoverage", [Map]) {it -> it}
+        helper.registerAllowedMethod("istanbulCoberturaAdapter", [String]) { it -> it }
+        helper.registerAllowedMethod("sourceFiles", [String]) { it -> it }
+        helper.registerAllowedMethod("publishCoverage", [Map]) { it -> it }
         and: "stashed setup data"
         def stashKey = "setup_w"
         jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running gradle pipeline with coverage token"
-        check().wdkCoverage(config, "any", "any", stashKey).each {it.value()}
+        check().wdkCoverage(config, "any", "any", stashKey).each { it.value() }
 
         then: "jenkins coverage plugins are called"
         calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
@@ -42,24 +39,116 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         }
         calls.has["publishCoverage"] { MethodCall call ->
             call.args.length == 1 &&
-            call.args[0]["adapters"] == ["**/codeCoverage/Cobertura.xml"] &&
-            call.args[0]["sourceFileResolver"] == "STORE_LAST_BUILD"
+                    call.args[0]["adapters"] == ["**/codeCoverage/Cobertura.xml"] &&
+                    call.args[0]["sourceFileResolver"] == "STORE_LAST_BUILD"
         }
+    }
+
+    @Unroll("execute sonarqube when its token is present")
+    def "executes sonarqube when its token is present"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(TEST_SCRIPT_PATH)
+
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: sonarToken], [BUILD_NUMBER: 1])
+
+        and: "stashed setup data"
+        def stashKey = "setup_w"
+        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+
+        when: "running check with sonarqube token"
+        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
+        checkSteps.each { it.value.call() }
+
+        then: "gradle coverage task is called"
+        gradleCmdElements.every { it ->
+            it.every { element ->
+                calls.has["sh"] { MethodCall call ->
+                    String args = call.args[0]["script"]
+                    args.contains("gradlew") && args.contains("sonarqube") && args.contains(element)
+                }
+            }
+        }
+
+        where:
+        name        | gradleCmdElements              | sonarToken
+        "SonarQube" | [["-Dsonar.login=sonarToken"]] | "sonarToken"
+    }
+
+    @Unroll("does not executes sonarqube when its token is present")
+    def "does not executes sonarqube when its token is not present"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(TEST_SCRIPT_PATH)
+
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: "any"], [BUILD_NUMBER: 1])
+
+        and: "stashed setup data"
+        def stashKey = "setup_w"
+        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+
+        when: "running check with sonarqube token"
+        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
+        checkSteps.each { it.value.call() }
+
+        then: "gradle coverage task is called"
+        calls["sh"].
+                collect { MethodCall call -> call.args[0]["script"] as String}.
+                find {String args -> args.contains("gradlew")}.
+                every {String args -> !args.contains("sonarqube")}
+    }
+
+    @Unroll("executes sonarqube on branch #branchName")
+    def "executes sonarqube in PR and non-PR branches with correct arguments"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadScript(TEST_SCRIPT_PATH)
+
+        and: "jenkins script object with needed properties"
+        def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: branchName, env: [:]]
+        if (isPR) {
+            jenkinsMeta.env["CHANGE_ID"] = "notnull"
+        }
+        and: "configuration in the ${branchName} branch with token"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: "sonarToken"], jenkinsMeta)
+
+        and: "stashed setup data"
+        def stashKey = "setup_w"
+        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+
+        when: "running check with sonarqube token"
+        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
+        checkSteps.each { it.value.call() }
+
+        then: "should run sonar analysis"
+        calls.has["sh"] { MethodCall call ->
+            String callString = call.args[0]["script"]
+            callString.contains("gradlew") &&
+                    callString.contains("sonarqube") &&
+                    callString.contains("-Dsonar.login=sonarToken") &&
+                    callString.contains("-Pgithub.branch.name=${expectedBranchProperty}")
+        }
+
+        where:
+        branchName   | prBranch | isPR  | expectedBranchProperty
+        "master"     | null     | false | "master"
+        "not_master" | null     | false | "not_master"
+        "PR-123"     | "branch" | true  | ""
+        "branchpr"   | "branch" | true  | ""
     }
 
     @Unroll("runs check step for unity versions #versions")
     def "runs check step for all given versions"() {
         given: "loaded check in a running jenkins build"
         def check = loadScript(TEST_SCRIPT_PATH)
-        and:"configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions])
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions], [BUILD_NUMBER: 1])
         and: "stashed setup data"
         jenkinsStash[setupStashId] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
 
         when: "running check"
         def checkSteps = check().wdkCoverage(config, releaseType, releaseScope, setupStashId) as Map<String, Closure>
-        checkSteps.each {it.value.call()}
+        checkSteps.each { it.value.call() }
 
         then: "platform check registered on parallel operation"
         checkSteps.collect {
@@ -72,55 +161,56 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         and: "code checkouted, setup unstashed"
         calls["checkout"].length == versions.size()
-        calls["unstash"].count {it.args[0] == setupStashId } == versions.size()
+        calls["unstash"].count { it.args[0] == setupStashId } == versions.size()
 
         and: "gradle check was called"
         calls["sh"].count {
-            String call =  it.args[0]["script"]
+            String call = it.args[0]["script"]
             return call.contains("gradlew") &&
-            call.contains("-Prelease.stage=${releaseType.trim()}") &&
-            call.contains("-Prelease.scope=${releaseScope.trim()}") &&
-            call.contains("check")
+                    call.contains("-Prelease.stage=${releaseType.trim()}") &&
+                    call.contains("-Prelease.scope=${releaseScope.trim()}") &&
+                    call.contains("check")
         } == versions.size()
 
         and: "nunit results are stored"
         calls["nunit"].count {
-            Map args =  it.args[0] as Map
+            Map args = it.args[0] as Map
             return args["failIfNoResults"] == false &&
-            args["testResultsPattern"] =='**/build/reports/unity/test*/*.xml'
+                    args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
         calls["cleanWs"].length == versions.size()
 
         where:
         versions         | releaseType | releaseScope | setupStashId
-        ["2019"]         | "type"     | "scope" | "setup_w"
-        ["2019", "2020"] | "other "   | "others" | "stash"
+        ["2019"]         | "type"      | "scope"      | "setup_w"
+        ["2019", "2020"] | "other "    | "others"     | "stash"
     }
 
-    @Unroll("executes finally steps on check #throwsException for #versions" )
+    @Unroll("executes finally steps on check #throwsException for #versions")
     def "always executes finally steps on check run"() {
         given: "loaded check in a running jenkins build"
         def check = loadScript(TEST_SCRIPT_PATH)
-        and:"configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions])
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions], [BUILD_NUMBER: 1])
         and: "some failing script step"
-        helper.registerAllowedMethod("dir", [String, Closure]){
-            if(throwsException=="throwing") throw new InputMismatchException()
+        helper.registerAllowedMethod("dir", [String, Closure]) {
+            if (throwsException == "throwing") throw new InputMismatchException()
         }
 
         when: "running check"
-            def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-            checkSteps.each {
-                try {
-                    it.value.call()
-                } catch (InputMismatchException _ ) {} //ignores exception, it is tested in another test
-            }
+        def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
+        checkSteps.each {
+            try {
+                it.value.call()
+            } catch (InputMismatchException _) {
+            } //ignores exception, it is tested in another test
+        }
 
         then: "nunit results are stored"
         calls["nunit"].count {
-            Map args =  it.args[0] as Map
+            Map args = it.args[0] as Map
             return args["failIfNoResults"] == false &&
-                    args["testResultsPattern"] =='**/build/reports/unity/test*/*.xml'
+                    args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
         calls["cleanWs"].length == versions.size()
 
@@ -139,13 +229,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     def "optional version does not throw Exception on failure"() {
         given: "loaded check in a running jenkins build"
         def check = loadScript(TEST_SCRIPT_PATH)
-        and:"configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions:[version]])
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: [version]], [BUILD_NUMBER: 1])
         and: "some failing script step"
-        helper.registerAllowedMethod("dir", [String, Closure]){ throw new Exception() }
+        helper.registerAllowedMethod("dir", [String, Closure]) { throw new Exception() }
         when: "running check"
         def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-        checkSteps.each {it.value.call()}
+        checkSteps.each { it.value.call() }
 
         then:
         noExceptionThrown()
@@ -161,14 +251,14 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     def "non-optional version throws Exception on failure"() {
         given: "loaded check in a running jenkins build"
         def check = loadScript(TEST_SCRIPT_PATH)
-        and:"configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions:[version]])
+        and: "configuration object with given platforms"
+        def config = WDKConfig.fromConfigMap("label", [unityVersions: [version]], [BUILD_NUMBER: 1])
         and: "some failing script step"
         def expectedException = new InstantiationException() //some uncommon exception type
-        helper.registerAllowedMethod("dir", [String, Closure]){ throw expectedException }
+        helper.registerAllowedMethod("dir", [String, Closure]) { throw expectedException }
         when: "running check"
         def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-        checkSteps.each {it.value.call()}
+        checkSteps.each { it.value.call() }
 
         then:
         def e = thrown(InstantiationException)
@@ -182,14 +272,15 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     def "loads test environment on check"() {
         given: "loaded check in a running jenkins build"
         def check = loadScript(TEST_SCRIPT_PATH) {}
-        and:"configuration object with more than one platform"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions, testEnvironment:testEnvironment])
+        and: "configuration object with more than one platform"
+        def config = WDKConfig.fromConfigMap("label",
+                [unityVersions: versions, testEnvironment: testEnvironment], [BUILD_NUMBER: 1])
         and: "generated check steps"
-        Map<String, Map> checkEnvMap = versions.collectEntries{[(it): [:]]}
-        Map<String, Map> analysisEnvMap = versions.collectEntries{[(it): [:]]}
+        Map<String, Map> checkEnvMap = versions.collectEntries { [(it): [:]] }
+        Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         Map<String, Closure> steps = check().simple(config,
                 { UnityVersionPlatform uPlat ->
-                    binding.env.every {checkEnvMap[uPlat.platform.name][it.key] = it.value }
+                    binding.env.every { checkEnvMap[uPlat.platform.name][it.key] = it.value }
                 },
                 { UnityVersionPlatform uPlat ->
                     binding.env.every { analysisEnvMap[uPlat.platform.name][it.key] = it.value }
@@ -197,15 +288,15 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         )
 
         when: "running steps"
-        steps.each {it.value.call()}
+        steps.each { it.value.call() }
 
         then: "test step ran for all platforms"
         checkEnvMap.every { platEnv ->
             platEnv.value["TRAVIS_JOB_NUMBER"] == "1.${platEnv.key.toUpperCase()}" &&
-            platEnv.value["UVM_UNITY_VERSION"] == platEnv.key &&
-            platEnv.value["UNITY_LOG_CATEGORY"] == "check-${platEnv.key}"
+                    platEnv.value["UVM_UNITY_VERSION"] == platEnv.key &&
+                    platEnv.value["UNITY_LOG_CATEGORY"] == "check-${platEnv.key}"
         }
-        expectedInEnvironment.every {expPlatEnv ->
+        expectedInEnvironment.every { expPlatEnv ->
             def actualPlatEnv = checkEnvMap[expPlatEnv.key]
             actualPlatEnv.entrySet().containsAll(expPlatEnv.value.entrySet())
         }

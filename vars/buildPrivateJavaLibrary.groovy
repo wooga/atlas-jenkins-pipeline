@@ -44,7 +44,7 @@ def call(Map configMap = [:]) {
           expression { return params.RELEASE_TYPE == "snapshot"}
         }
         steps {
-          javaLibCheck config: config, forceSonarQube: params.RUN_SONARQUBE
+          javaLibCheck config: config
         }
 
         post {
