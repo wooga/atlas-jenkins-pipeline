@@ -3,3 +3,4 @@
  */
 
 rootProject.name = 'atlas-jenkins-pipeline'
+includeBuild('atlas-jenkins-pipeline-gradle')
