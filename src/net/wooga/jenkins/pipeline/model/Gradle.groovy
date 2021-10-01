@@ -3,15 +3,15 @@ package net.wooga.jenkins.pipeline.model
 class Gradle {
 
     private String logLevel
-    private boolean stackTrace
+    private Boolean stackTrace
 
-    static Gradle fromJenkins(Object jenkinsScript, String logLevel, boolean stackTrace) {
+    static Gradle fromJenkins(Object jenkinsScript, String logLevel, Boolean stackTrace = false) {
         return new Gradle(jenkinsScript, logLevel, stackTrace)
     }
 
     Object jenkins
 
-    Gradle(Object jenkins, String logLevel, boolean stackTrace) {
+    Gradle(Object jenkins, String logLevel, Boolean stackTrace = false) {
         this.stackTrace = stackTrace
         this.logLevel = logLevel
         this.jenkins = jenkins
