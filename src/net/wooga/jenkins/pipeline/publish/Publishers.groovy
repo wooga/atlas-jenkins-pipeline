@@ -24,8 +24,8 @@ class Publishers {
         j.withCredentials([j.string(credentialsId: publishKeySecret, variable: "GRADLE_PUBLISH_KEY"),
                          j.string(credentialsId: publishSecretSecret, variable: "GRADLE_PUBLISH_SECRET")]) {
             gradle.wrapper("${releaseType} " +
-                    "-Pgradle.publish.key=${GRADLE_PUBLISH_KEY} " +
-                    "-Pgradle.publish.secret=${GRADLE_PUBLISH_SECRET} " +
+                    "-Pgradle.publish.key=${j.GRADLE_PUBLISH_KEY} " +
+                    "-Pgradle.publish.secret=${j.GRADLE_PUBLISH_SECRET} " +
                     "-Prelease.stage=${releaseType} " +
                     "-Prelease.scope=${releaseScope} -x check")
         }
