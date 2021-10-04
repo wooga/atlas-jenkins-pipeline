@@ -8,45 +8,45 @@ class Publishers {
         return new Publishers(jenkinsScript, gradle, releaseType, releaseScope)
     }
 
-    final Object j
+    final Object jenkins
     final Gradle gradle
     final String releaseType
     final String releaseScope
 
     Publishers(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
-        this.j = jenkinsScript
+        this.jenkins = jenkinsScript
         this.gradle = gradle
         this.releaseScope = releaseScope.trim()
         this.releaseType = releaseType.trim()
     }
 
     def gradlePlugin(String publishKeySecret, String publishSecretSecret) {
-        j.withCredentials([j.string(credentialsId: publishKeySecret, variable: "GRADLE_PUBLISH_KEY"),
-                         j.string(credentialsId: publishSecretSecret, variable: "GRADLE_PUBLISH_SECRET")]) {
+        jenkins.withCredentials([jenkins.string(credentialsId: publishKeySecret, variable: "GRADLE_PUBLISH_KEY"),
+                                 jenkins.string(credentialsId: publishSecretSecret, variable: "GRADLE_PUBLISH_SECRET")]) {
             gradle.wrapper("${releaseType} " +
-                    "-Pgradle.publish.key=${GRADLE_PUBLISH_KEY} " +
-                    "-Pgradle.publish.secret=${GRADLE_PUBLISH_SECRET} " +
+                    "-Pgradle.publish.key=${jenkins.GRADLE_PUBLISH_KEY} " +
+                    "-Pgradle.publish.secret=${jenkins.GRADLE_PUBLISH_SECRET} " +
                     "-Prelease.stage=${releaseType} " +
                     "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
     def bintray(String bintraySecret) {
-        j.withCredentials([j.usernamePassword(credentialsId: bintraySecret, usernameVariable: "BINTRAY_USER",
+        jenkins.withCredentials([jenkins.usernamePassword(credentialsId: bintraySecret, usernameVariable: "BINTRAY_USER",
                 passwordVariable: "BINTRAY_API_KEY")]) {
             gradle.wrapper("${releaseType} " +
-                        "-Pbintray.user=${BINTRAY_USER} " +
-                        "-Pbintray.key=${BINTRAY_API_KEY} " +
+                        "-Pbintray.user=${jenkins.BINTRAY_USER} " +
+                        "-Pbintray.key=${jenkins.BINTRAY_API_KEY} " +
                         "-Prelease.stage=${releaseType} " +
                         "-Prelease.scope=${releaseScope} -x check")
         }
     }
 
     def ossrh(String publishSecret, String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret) {
-        def credentials = [j.usernamePassword(credentialsId: publishSecret,
+        def credentials = [jenkins.usernamePassword(credentialsId: publishSecret,
                 usernameVariable:"OSSRH_USERNAME", passwordVariable: "OSSRH_PASSWORD")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
-        j.withCredentials(credentials) {
+        jenkins.withCredentials(credentials) {
             gradle.wrapper("${releaseType} " +
                     "-Prelease.stage=${releaseType} " +
                     "-Prelease.scope=${releaseScope} -x check")
@@ -55,12 +55,12 @@ class Publishers {
 
     def artifactoryOSSRH(String artifactorySecret,
                          String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret) {
-        def credentials = [j.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
+        def credentials = [jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
-        j.withCredentials(credentials) {
+        jenkins.withCredentials(credentials) {
             gradle.wrapper("${releaseType} " +
-                    "-Partifactory.user=${ARTIFACTORY_USER} " +
-                    "-Partifactory.password=${ARTIFACTORY_PASS} " +
+                    "-Partifactory.user=${jenkins.ARTIFACTORY_USER} " +
+                    "-Partifactory.password=${jenkins.ARTIFACTORY_PASS} " +
                     "-Prelease.stage=${releaseType} " +
                     "-Prelease.scope=${releaseScope} -x check")
         }
@@ -68,16 +68,16 @@ class Publishers {
 
     def ossrhSigningCredentials(String keySecret, String keyIdSecret, String passphraseSecret) {
         return [
-                j.string(credentialsId: keySecret, variable: "OSSRH_SIGNING_KEY"),
-                j.string(credentialsId: keyIdSecret, variable: "OSSRH_SIGNING_KEY_ID"),
-                j.string(credentialsId: passphraseSecret, variable: "OSSRH_SIGNING_PASSPHRASE")
+                jenkins.string(credentialsId: keySecret, variable: "OSSRH_SIGNING_KEY"),
+                jenkins.string(credentialsId: keyIdSecret, variable: "OSSRH_SIGNING_KEY_ID"),
+                jenkins.string(credentialsId: passphraseSecret, variable: "OSSRH_SIGNING_PASSPHRASE")
         ]
     }
 
     def unityArtifactoryPaket(String unityPath, String artifactorySecret) {
-        j.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
-            j.withCredentials([j.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
-                               j.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
+        jenkins.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
+            jenkins.withCredentials([jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
+                                     jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
                 gradle.wrapper("${releaseType} " +
                                     "-Prelease.stage=${releaseType} " +
                                     "-Ppaket.publish.repository='${releaseType}' " +
