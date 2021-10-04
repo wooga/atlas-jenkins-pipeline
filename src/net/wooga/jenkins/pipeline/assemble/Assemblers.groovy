@@ -8,20 +8,20 @@ class Assemblers {
         return new Assemblers(jenkinsScript, gradle, releaseType, releaseScope)
     }
 
-    final Object j
+    final Object jenkins
     final Gradle gradle
     final String releaseType
     final String releaseScope
 
     Assemblers(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
-        this.j = jenkinsScript
+        this.jenkins = jenkinsScript
         this.gradle = gradle
         this.releaseScope = releaseScope.trim()
         this.releaseType = releaseType.trim()
     }
 
     def unityWDK(String unityLogCategory) {
-        j.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
+        jenkins.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
             gradle.wrapper("-Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} assemble")
         }
     }

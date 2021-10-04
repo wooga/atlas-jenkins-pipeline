@@ -4,13 +4,13 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Setups {
 
-    Object j
+    Object jenkins
     Gradle gradle
     boolean forceRefreshDependencies
 
 
     Setups(Object jenkinsScript, Gradle gradle, boolean forceRefreshDependencies) {
-        this.j = jenkinsScript
+        this.jenkins = jenkinsScript
         this.gradle = gradle
         this.forceRefreshDependencies = forceRefreshDependencies
     }
