@@ -1,5 +1,6 @@
 package scripts
 
+
 import spock.lang.Issue
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
@@ -9,24 +10,37 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
 
     @Unroll
     @Issue("Tried to cover No signature of method: java.lang.Class.fromJenkins() is applicable for argument types: (gradleWrapper, java.lang.String, null) values: [gradleWrapper@7274fcad, info, null]")
-    def "gradle wrapper can be called with loglevel value #logLevel and stacktrace value #stackTrace"() {
+    def "gradle wrapper can be called with loglevel value #logLevel, stacktrace value #stackTrace and refreshDependencies value #refreshDependencies"() {
         given: "loaded gradleWrapper script"
         def gradleWrapper = loadScript(SCRIPT_PATH)
 
-        and: "set loglevel in env/params"
-        binding.setVariable("params", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace])
-        binding.setVariable("env", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace])
+        and: "set variables in params"
+        binding.setVariable("params", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace, REFRESH_DEPENDENCIES: refreshDependencies])
 
         when: "running gradle pipeline with coverallsToken parameter"
         gradleWrapper(command)
 
         then:
         noExceptionThrown()
+        calls["sh"].size() == 1
+        String callString = calls["sh"].args["script"][0]
+        callString.contains("gradlew")
+        callString.contains(command)
+        containsArgIf(callString, logLevel, "--${logLevel}".toString())
+        containsArgIf(callString, stackTrace, "--stacktrace")
+
+        containsArgIf(callString, refreshDependencies, "--refresh-dependencies")
 
         where:
-        command | logLevel | stackTrace
-        "tasks" | null     | null
-        "check" | "info"   | "true"
-        "check" | "debug"  | "false"
+        command | logLevel | stackTrace | refreshDependencies
+        "tasks" | null     | null       | null
+        "check" | "info"   | true       | null
+        "check" | "debug"  | false      | null
+        "check" | "debug"  | false      | true
+        "check" | "debug"  | false      | false
+    }
+
+    def containsArgIf(String callStr, def condition, String argStr) {
+        return condition as Boolean ? callStr.contains(argStr) : !callStr.contains(argStr)
     }
 }

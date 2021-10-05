@@ -4,23 +4,26 @@ class Gradle {
 
     private String logLevel
     private Boolean stackTrace
+    private boolean refreshDependencies
 
-    static Gradle fromJenkins(Object jenkinsScript, String logLevel, Boolean stackTrace = false) {
-        return new Gradle(jenkinsScript, logLevel, stackTrace)
+    static Gradle fromJenkins(Object jenkinsScript, String logLevel, Boolean stackTrace = false, Boolean refreshDependencies = false) {
+        return new Gradle(jenkinsScript, logLevel, stackTrace, refreshDependencies)
     }
 
     Object jenkins
 
-    Gradle(Object jenkins, String logLevel, Boolean stackTrace = false) {
+    Gradle(Object jenkins, String logLevel, Boolean stackTrace = false, Boolean refreshDependencies = false) {
         this.stackTrace = stackTrace
         this.logLevel = logLevel
         this.jenkins = jenkins
+        this.refreshDependencies = refreshDependencies
     }
 
     /**
      * execute gradlew or gradlew.bat based on current os
      */
-    def wrapper(String command, Boolean returnStatus = false, Boolean returnStdout = false) {
+    def wrapper(String command, Boolean returnStatus = false,
+                                Boolean returnStdout = false) {
 
         if (jenkins.isUnix()) {
             return jenkins.sh(script: "./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
@@ -38,14 +41,14 @@ class Gradle {
         def regex = /-P[\w\d.]+=\s/
         def result = command.replaceAll(regex, '')
 
-        if (!containsOptions(result, "quiet", "warn", "info", "debug")) {
-            if (logLevel) {
-                result += " --${logLevel}"
-            }
+        if (!containsOptions(result, "quiet", "warn", "info", "debug") && logLevel) {
+            result += " --${logLevel}"
         }
-
         if (stackTrace && !containsOptions(result, "stacktrace")) {
             result += " --stacktrace"
+        }
+        if(refreshDependencies && !containsOptions(result, "refresh-dependencies")) {
+            result += "--refresh-dependencies"
         }
 
         return result
