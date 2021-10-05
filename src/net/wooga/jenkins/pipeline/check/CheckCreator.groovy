@@ -6,17 +6,15 @@ import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
 class CheckCreator {
     final Object jenkins
     final Enclosures enclosures
-    protected boolean shouldRunAnalysis
 
     public CheckCreator(Object jenkinsScript, Enclosures enclosures) {
         this.jenkins = jenkinsScript
         this.enclosures = enclosures
-        this.shouldRunAnalysis = true
     }
 
     Map<String, Closure> javaChecks(Platform[] platforms, Closure testStep, Closure analysisStep) {
         return platforms.collectEntries { platform ->
-            def mainClosure = basicCheckStructure({ testStep(platform) },
+            def mainClosure = basicCheckStructure(platform, { testStep(platform) },
                                                 { analysisStep(platform) })
             def catchClosure = {throw it}
             def finallyClosure = {
@@ -33,8 +31,8 @@ class CheckCreator {
 
     Map<String, Closure> csWDKChecks(UnityVersionPlatform[] versions, Closure testStep, Closure analysisStep) {
         return versions.collectEntries { versionBuild ->
-            def mainClosure = basicCheckStructure({ testStep(versionBuild) },
-                                               { analysisStep(versionBuild) })
+            def mainClosure = basicCheckStructure(versionBuild.platform,
+                                {testStep(versionBuild)}, {analysisStep(versionBuild)})
             def catchClosure = { Throwable e ->
                 if (versionBuild.optional) {
                     jenkins.unstable(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
@@ -54,21 +52,13 @@ class CheckCreator {
         }
     }
 
-    protected Closure basicCheckStructure(Closure testStep, Closure analysisStep) {
+    protected Closure basicCheckStructure(Platform platform, Closure testStep, Closure analysisStep) {
         return {
             testStep()
-            boolean runsAnalysis = false
-            jenkins.lock { runsAnalysis = getAndLockAnalysis() }
-            if (runsAnalysis) {
+            if (platform.isMain()) {
                 analysisStep()
             }
         }
-    }
-
-    protected boolean getAndLockAnalysis() {
-        def val = shouldRunAnalysis
-        shouldRunAnalysis = false
-        return val
     }
 
 }

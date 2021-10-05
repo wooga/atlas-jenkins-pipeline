@@ -1,8 +1,6 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
-import net.wooga.jenkins.pipeline.config.Config
-import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
 import net.wooga.jenkins.pipeline.config.WDKConfig
 import spock.lang.Unroll
@@ -150,10 +148,12 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def checkSteps = check().wdkCoverage(config, releaseType, releaseScope, setupStashId) as Map<String, Closure>
         checkSteps.each { it.value.call() }
 
-        then: "platform check registered on parallel operation"
+        then: "check steps names are in the `check Unity-#version` format"
         checkSteps.collect {
             it -> it.key.replace("check Unity-", "").trim()
         } == versions
+        and: "first version is marked as main"
+        config.unityVersions[0].platform.main
 
         and: "working dir changed to version directory"
         calls["dir"].length == versions.size() + 1 //one for each check, plus one for single analysis step

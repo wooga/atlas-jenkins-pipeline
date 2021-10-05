@@ -10,8 +10,9 @@ class Config {
 
     static Config fromConfigMap(Map config,  Object jenkinsScript) {
         config.platforms = config.platforms ?: ['macos','windows']
-        def platforms = config.platforms.collect { String platformName ->
-            Platform.forJava(platformName, config)
+        def platNames = config.platforms as List<String>
+        def platforms = platNames.withIndex().collect { String platformName, int index ->
+            Platform.forJava(platformName, config, index == 0)
         }
         def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
         def sonarArgs = SonarQubeArgs.fromConfigMap(config)
@@ -28,6 +29,11 @@ class Config {
         this.dockerArgs = dockerArgs
         this.coverallsToken = coverallsToken
     }
+
+    Platform getMainPlatform() {
+        return platforms.find {it.main }
+    }
+
 
     boolean equals(o) {
         if (this.is(o)) return true
