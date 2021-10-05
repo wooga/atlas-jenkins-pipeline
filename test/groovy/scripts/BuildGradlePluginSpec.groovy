@@ -70,7 +70,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
 
     def "registers environment on publish"() {
         given: "set needed credentials"
-        credentials.addUsernamePassword('github_up', "usr", "pwd")
+        credentials.addUsernamePassword('github_access', "usr", "pwd")
         and: "build plugin with publish parameters"
         def buildGradlePlugin = loadScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = "not-snapshot"
@@ -84,7 +84,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
 
         then: "sets up GRGIT environment"
         def env = buildGradlePlugin.binding.env
-        env["GRGIT"] == credentials['github_up']
+        env["GRGIT"] == credentials['github_access']
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"

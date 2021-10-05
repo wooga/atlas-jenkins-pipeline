@@ -37,7 +37,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
             stage("check") {
 
                 environment {
-                    GRGIT                 = credentials('github_up')
+                    GRGIT                 = credentials('github_access')
                     GRGIT_USER            = "${GRGIT_USR}"
                     GRGIT_PASS            = "${GRGIT_PSW}"
                     GITHUB_LOGIN          = "${GRGIT_USR}"
@@ -89,7 +89,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
                 }
 
                 environment {
-                    GRGIT                 = credentials('github_up')
+                    GRGIT                 = credentials('github_access')
                     GRGIT_USER            = "${GRGIT_USR}"
                     GRGIT_PASS            = "${GRGIT_PSW}"
                     GITHUB_LOGIN          = "${GRGIT_USR}"

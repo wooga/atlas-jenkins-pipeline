@@ -72,7 +72,7 @@ def call(Map configMap = [:]) {
         }
 
         environment {
-          GRGIT                 = credentials('github_up')
+          GRGIT                 = credentials('github_access')
           GRGIT_USER            = "${GRGIT_USR}"
           GRGIT_PASS            = "${GRGIT_PSW}"
           GITHUB_LOGIN          = "${GRGIT_USR}"
