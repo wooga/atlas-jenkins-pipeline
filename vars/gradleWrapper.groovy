@@ -11,4 +11,3 @@ def call(String command, Boolean returnStatus = false, Boolean returnStdout = fa
                 params.REFRESH_DEPENDENCIES? params.REFRESH_DEPENDENCIES as Boolean : false)
     gradle.wrapper(command, returnStatus, returnStdout)
 }
-
