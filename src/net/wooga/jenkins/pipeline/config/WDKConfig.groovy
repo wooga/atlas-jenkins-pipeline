@@ -7,9 +7,11 @@ class WDKConfig {
     static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
         def unityVerObjs = configMap.unityVersions as List
-        def unityVersions = unityVerObjs.withIndex().collect { Object unityVersionObj, int index ->
+        def index = 0
+        def unityVersions = unityVerObjs.collect { Object unityVersionObj ->
             def buildVersion = BuildVersion.parse(unityVersionObj)
             def platform = Platform.forWDK(buildVersion, buildLabel, configMap, index == 0)
+            index++
             return new UnityVersionPlatform(platform, buildVersion)
         }
         if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
