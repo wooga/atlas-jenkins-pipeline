@@ -12,7 +12,7 @@ class PlatformSpec extends Specification {
         and: "a platform name"
 
         when: "generating new platform"
-        def platform = Platform.forJava(platName, config)
+        def platform = Platform.forJava(platName, config, isMain)
 
         then: "generated platform is valid and matches map values"
         platform.name == expected.name
@@ -24,19 +24,19 @@ class PlatformSpec extends Specification {
         platform.testLabels == expected.testLabels
 
         where:
-        config                                                                            | platName | expected
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | "name"   | new Platform("name", "name", false, "", [], [])
-        [testEnvironment: ["t=a", "t2=b"]]                                                | "name"   | new Platform("name", "name", false, "", ["t=a", "t2=b"], [])
-        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | "name"   | new Platform("name", "name", false, "", ["t=a", "t2=b"], ["l", "l2"])
-        [labels: "label", testLabels: ["t", "t2"]]                                        | "name"   | new Platform("name", "name", false, "label", [], ["t", "t2"])
-        [labels: "label", testLabels: [name: ["t", "t2"]]]                                | "name"   | new Platform("name", "name", false, "label", [], ["t", "t2"])
-        [labels: "label", testLabels: [notname: ["t", "t2"]]]                             | "name"   | new Platform("name", "name", false, "label", [], [])
-        [labels: "label", testEnvironment: [name: ["t=a", "t2=b"]]]                       | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], [])
-        [labels: "label", testEnvironment: [notname: ["t=a", "t2=b"]]]                    | "name"   | new Platform("name", "name", false, "label", [], [])
-        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], [])
-        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], ["l", "l2"])
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | "name"   | new Platform("name", "name", false, "", [], [])
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | "linux"  | new Platform("linux", "linux", true, "", [], [])
+        config                                                                            | isMain | platName | expected
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | true   | "name"   | new Platform("name", "name", false, "", [], [], true)
+        [testEnvironment: ["t=a", "t2=b"]]                                                | false  | "name"   | new Platform("name", "name", false, "", ["t=a", "t2=b"], [], false)
+        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | true   | "name"   | new Platform("name", "name", false, "", ["t=a", "t2=b"], ["l", "l2"], true)
+        [labels: "label", testLabels: ["t", "t2"]]                                        | false  | "name"   | new Platform("name", "name", false, "label", [], ["t", "t2"], false)
+        [labels: "label", testLabels: [name: ["t", "t2"]]]                                | false  | "name"   | new Platform("name", "name", false, "label", [], ["t", "t2"], false)
+        [labels: "label", testLabels: [notname: ["t", "t2"]]]                             | false  | "name"   | new Platform("name", "name", false, "label", [], [], false)
+        [labels: "label", testEnvironment: [name: ["t=a", "t2=b"]]]                       | false  | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], [], false)
+        [labels: "label", testEnvironment: [notname: ["t=a", "t2=b"]]]                    | false  | "name"   | new Platform("name", "name", false, "label", [], [], false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | false  | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], [], false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | "name"   | new Platform("name", "name", false, "label", ["t=a", "t2=b"], ["l", "l2"], false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | "name"   | new Platform("name", "name", false, "", [], [], false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | "linux"  | new Platform("linux", "linux", true, "", [], [], false)
     }
 
 
@@ -47,7 +47,7 @@ class PlatformSpec extends Specification {
 
         when: "generating new platform"
         def buildOS = "macos"
-        def platform = Platform.forWDK(buildVersion, buildOS, config)
+        def platform = Platform.forWDK(buildVersion, buildOS, config, isMain)
 
         then: "generated platform is valid, matches map values and contains unity environment"
         def unityEnv = ["UVM_UNITY_VERSION=${buildVersion.version}", "UNITY_LOG_CATEGORY=check-${buildVersion.version}"].with {
@@ -60,29 +60,30 @@ class PlatformSpec extends Specification {
         platform.labels == expected.labels
         platform.testEnvironment == expected.testEnvironment + unityEnv
         platform.testLabels == expected.testLabels
+        platform.main == expected.main
 
         where:
-        config                                                                            | buildVersion            | expected
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | buildVersion("v")       | new Platform("v", "macos", false, "", [], [])
-        [testEnvironment: ["t=a", "t2=b"]]                                                | buildVersion("v")       | new Platform("v", "macos", false, "", ["t=a", "t2=b"], [])
-        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | buildVersion("v")       | new Platform("v", "macos", false, "", ["t=a", "t2=b"], ["l", "l2"])
-        [labels: "label", testLabels: ["t", "t2"]]                                        | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"])
-        [labels: "label", testLabels: [v: ["t", "t2"]]]                                   | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"])
-        [labels: "label", testLabels: [v: "tag"]]                                         | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["tag"])
-        [labels: "label", testLabels: [notv: ["t", "t2"]]]                                | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [])
-        [labels: "label", testEnvironment: [v: ["t=a", "t2=b"]]]                          | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], [])
-        [labels: "label", testEnvironment: [notv: ["t=a", "t2=b"]]]                       | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [])
-        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], [])
-        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"])
-        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | buildVersion("v", "lv") | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"])
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | buildVersion("v")       | new Platform("v", "macos", false, "", [], [])
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | buildVersion("v", "lv") | new Platform("v", "macos", false, "", [], [])
+        config                                                                            | isMain | buildVersion            | expected
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | true   | buildVersion("v")       | new Platform("v", "macos", false, "", [], [], true)
+        [testEnvironment: ["t=a", "t2=b"]]                                                | false  | buildVersion("v")       | new Platform("v", "macos", false, "", ["t=a", "t2=b"], [], false)
+        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | true   | buildVersion("v")       | new Platform("v", "macos", false, "", ["t=a", "t2=b"], ["l", "l2"], true)
+        [labels: "label", testLabels: ["t", "t2"]]                                        | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"], false)
+        [labels: "label", testLabels: [v: ["t", "t2"]]]                                   | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["t", "t2"], false)
+        [labels: "label", testLabels: [v: "tag"]]                                         | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", [], ["tag"], false)
+        [labels: "label", testLabels: [notv: ["t", "t2"]]]                                | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [], false)
+        [labels: "label", testEnvironment: [v: ["t=a", "t2=b"]]]                          | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], [], false)
+        [labels: "label", testEnvironment: [notv: ["t=a", "t2=b"]]]                       | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", [], [], false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], [], false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("v")       | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("v", "lv") | new Platform("v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("v")       | new Platform("v", "macos", false, "", [], [], false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("v", "lv") | new Platform("v", "macos", false, "", [], [], false)
     }
 
     @Unroll
     def "generates test label string"() {
         given: "a valid platform"
-        def platform = new Platform("platname", os, false, labels, [], testLabels)
+        def platform = new Platform("platname", os, false, labels, [], testLabels, false)
         when: "generating test label string"
         def labelsStr = platform.generateTestLabelsString()
         then:

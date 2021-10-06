@@ -6,24 +6,26 @@ class Platform {
 
     final String name
     final String os
-    final boolean runsOnDocker
     final String labels
     final String testLabels
     final Collection<?> testEnvironment
+    final boolean runsOnDocker
+    final boolean main
 
 
-    static Platform forJava(String platformName, Map config) {
+    static Platform forJava(String platformName, Map config, boolean isMain) {
         return new Platform(
                 platformName,
                 platformName,
-                config.dockerArgs != null && platformName == "linux",
+                platformName == "linux",
                 (config.labels ?: '') as String,
                 mapOrCollection(platformName, config.testEnvironment),
-                mapOrCollection(platformName, config.testLabels)
+                mapOrCollection(platformName, config.testLabels),
+                isMain
         )
     }
 
-    static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config) {
+    static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
         def unityEnv = ["UVM_UNITY_VERSION=${buildVersion.version}",
                         "UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
         if (buildVersion.apiCompatibilityLevel != null){
@@ -35,18 +37,20 @@ class Platform {
                 false,
                 (config.labels ?: '') as String,
                 mapOrCollection(buildVersion.version, config.testEnvironment) + unityEnv,
-                mapOrCollection(buildVersion.version, config.testLabels)
+                mapOrCollection(buildVersion.version, config.testLabels),
+                isMain
         )
     }
 
     Platform(String name, String os, boolean runsOnDocker,
-             String labels, Collection<?> testEnvironment, Collection<?> testLabels) {
+             String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main) {
         this.name = name
         this.os = os
-        this.runsOnDocker = runsOnDocker
         this.labels = labels
         this.testEnvironment = testEnvironment
         this.testLabels = testLabels?.join(" && ")
+        this.runsOnDocker = runsOnDocker
+        this.main = main
     }
 
     String generateTestLabelsString() {
@@ -71,15 +75,17 @@ class Platform {
         }
     }
 
-
     boolean equals(o) {
         if (this.is(o)) return true
         if (getClass() != o.class) return false
 
         Platform platform = (Platform) o
 
+        if (main != platform.main) return false
+        if (runsOnDocker != platform.runsOnDocker) return false
         if (labels != platform.labels) return false
         if (name != platform.name) return false
+        if (os != platform.os) return false
         if (testEnvironment != platform.testEnvironment) return false
         if (testLabels != platform.testLabels) return false
 
@@ -89,9 +95,12 @@ class Platform {
     int hashCode() {
         int result
         result = (name != null ? name.hashCode() : 0)
+        result = 31 * result + (os != null ? os.hashCode() : 0)
         result = 31 * result + (labels != null ? labels.hashCode() : 0)
         result = 31 * result + (testLabels != null ? testLabels.hashCode() : 0)
         result = 31 * result + (testEnvironment != null ? testEnvironment.hashCode() : 0)
+        result = 31 * result + (runsOnDocker ? 1 : 0)
+        result = 31 * result + (main ? 1 : 0)
         return result
     }
 

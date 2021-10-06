@@ -57,9 +57,9 @@ class WDKConfigSpec extends Specification {
 
 
     def platsFor(List<?> unityVersionObj, String buildLabel) {
-        return unityVersionObj.collect {
+        return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
-            def platform = Platform.forWDK(buildVersion, buildLabel, [:])
+            def platform = Platform.forWDK(buildVersion, buildLabel, [:], index == 0 )
             return new UnityVersionPlatform(platform, buildVersion)
         }
     }

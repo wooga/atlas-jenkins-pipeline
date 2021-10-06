@@ -93,7 +93,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def checkSteps = check(config).javaCoverage(config) as Map<String, Closure>
         checkSteps.each {it.value.call()}
 
-        then: "platform check registered on parallel operation"
+        then:
         calls["checkout"].length == platforms.size()
         checkSteps.collect {
             it -> it.key.replace("check", "").trim()
@@ -150,11 +150,15 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and:"configuration object with more than one platform"
         def config = Config.fromConfigMap([platforms: ["plat1", "plat2"]], [BUILD_NUMBER: 1])
         and: "generated check steps"
+        Platform analysisPlatform = null
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
         Map<String, Closure> steps = check(config).simple(config,
                 { testCount.incrementAndGet() },
-                { analysisCount.incrementAndGet() }
+                { platform ->
+                    analysisPlatform = platform
+                    analysisCount.incrementAndGet()
+                }
         )
 
         when: "running steps on parallel"
@@ -167,6 +171,8 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         testCount.get() == config.platforms.length
         and: "analysis step ran only once"
         analysisCount.get() == 1
+        and: "analysis step ran on first platform"
+        analysisPlatform == config.platforms[0]
     }
 
     @Unroll
