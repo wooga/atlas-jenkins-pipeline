@@ -1,5 +1,4 @@
 #!/usr/bin/env groovy
-
 import net.wooga.jenkins.pipeline.config.Config
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -10,14 +9,15 @@ import net.wooga.jenkins.pipeline.config.Config
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [:]) {
-  Config config = Config.fromConfigMap(configMap, this)
+  //organize configs inside neat object. Defaults are defined there as well
+  def config = Config.fromConfigMap(configMap, this)
   def mainPlatform = config.platforms[0].name
 
   pipeline {
     agent none
 
     options {
-      buildDiscarder(logRotator(artifactNumToKeepStr: '40'))
+      buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
     }
 
     parameters {
@@ -39,16 +39,15 @@ def call(Map configMap = [:]) {
       }
 
       stage("check") {
+        agent any
         when {
           beforeAgent true
-          expression {
-            return params.RELEASE_TYPE == "snapshot"
-          }
+          expression { return params.RELEASE_TYPE == "snapshot" }
         }
+
         steps {
           javaLibCheck config: config
         }
-
         post {
           cleanup {
             cleanWs()
@@ -60,26 +59,24 @@ def call(Map configMap = [:]) {
               }
             }
           }
-        }
-      }
+       }
+     }
 
       stage('publish') {
         when {
           beforeAgent true
-          expression {
-            return params.RELEASE_TYPE != "snapshot"
-          }
+          expression { return params.RELEASE_TYPE != "snapshot" }
         }
         agent {
           label "$mainPlatform && atlas"
         }
 
         environment {
-          GRGIT = credentials('github_up')
-          GRGIT_USER = "${GRGIT_USR}"
-          GRGIT_PASS = "${GRGIT_PSW}"
-          GITHUB_LOGIN = "${GRGIT_USR}"
-          GITHUB_PASSWORD = "${GRGIT_PSW}"
+          GRGIT                 = credentials('github_up')
+          GRGIT_USER            = "${GRGIT_USR}"
+          GRGIT_PASS            = "${GRGIT_PSW}"
+          GITHUB_LOGIN          = "${GRGIT_USR}"
+          GITHUB_PASSWORD       = "${GRGIT_PSW}"
         }
 
         steps {
