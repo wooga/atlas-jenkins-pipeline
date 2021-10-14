@@ -23,9 +23,9 @@ class IntegrationSpec extends DeclarativeJenkinsSpec {
     def "test"() {
         given:
         when:
-        def script = runsInJenkinsSandbox(SCRIPT_PATH)
+        runsInJenkinsSandbox(SCRIPT_PATH)
         then:
-        false
+        noExceptionThrown()
 
     }
 }
