@@ -10,11 +10,8 @@ import net.wooga.jenkins.pipeline.TestHelper
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [:]) {
-  Config config = Config.fromConfigMap(configMap, this.binding.variables)
-
-  def platforms = config.platforms
-  def mainPlatform = platforms[0]
-  def helper = new TestHelper()
+  Config config = Config.fromConfigMap(configMap, this)
+  def mainPlatform = config.platforms[0].name
 
   pipeline {
     agent none
