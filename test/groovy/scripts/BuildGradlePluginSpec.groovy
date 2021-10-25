@@ -15,7 +15,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     def "posts coveralls results to coveralls server" () {
         given: "loaded buildGradlePlugin in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
-        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
+        def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = "SUCCESS"
         }
 
@@ -23,7 +23,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         def coverallsToken = "token"
 
         when: "running gradle pipeline with coverallsToken parameter"
-        buildGradlePlugin(coverallsToken: coverallsToken)
+        inSandbox { buildGradlePlugin(coverallsToken: coverallsToken) }
 
         then: "request is sent to coveralls webhook"
         calls.has["httpRequest"] { MethodCall call ->
@@ -40,14 +40,14 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         credentials.addString('gradle.publish.key', "key")
         credentials.addString('gradle.publish.secret', "secret")
         and: "build plugin with publish parameters"
-        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
+        def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = null
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
         }
 
         when: "running buildGradlePlugin pipeline"
-        buildGradlePlugin()
+        inSandbox { buildGradlePlugin() }
 
         then: "runs gradle with parameters"
         skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
@@ -72,7 +72,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         given: "set needed credentials"
         credentials.addUsernamePassword('github_access', "usr", "pwd")
         and: "build plugin with publish parameters"
-        def buildGradlePlugin = loadScript(SCRIPT_PATH) {
+        def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
             env.GRGIT_USR = "usr"
@@ -80,7 +80,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         }
 
         when: "running buildGradlePlugin pipeline"
-        buildGradlePlugin()
+        inSandbox { buildGradlePlugin() }
 
         then: "sets up GRGIT environment"
         def env = buildGradlePlugin.binding.env

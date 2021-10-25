@@ -1,8 +1,7 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
-import net.wooga.jenkins.pipeline.config.Config
-import net.wooga.jenkins.pipeline.config.Platform
+
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -17,21 +16,20 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     def setupSpec() {
     }
 
-
     @Unroll("execute #name if their token(s) are present")
     def "execute coverage when its token is present" () {
         given: "loaded check in a running build"
-        def check = loadScript(TEST_SCRIPT_PATH) {
-            currentBuild["result"] = null
-        }
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+
         and: "configuration in the master branch and with tokens"
-        def config = Config.fromConfigMap(
-                [sonarToken: sonarToken, coverallsToken: coverallsToken],
-                [BUILD_NUMBER: 1, BRANCH_NAME: "master"]
-        )
+        def configMap = [sonarToken: sonarToken, coverallsToken: coverallsToken]
+        def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: "master"]
 
         when: "running gradle pipeline with coverage token"
-        check(config).javaCoverage(config).each {it.value()}
+        inSandbox {
+            //class loaders are ~~hell~~ FUN
+            check.javaCoverage(configMap, jenkinsMeta).each {it.value()}
+        }
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it -> it.every {element ->
@@ -51,7 +49,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("should execute sonarqube on branch #branchName")
     def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
         given: "loaded build script in a running build in branch"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
         and: "jenkins script object with needed properties"
         def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: branchName, env: [:]]
@@ -60,10 +58,10 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
             jenkinsMeta.env["CHANGE_ID"] = "notnull"
         }
         and: "configuration in the ${branchName} branch with token"
-        def config = Config.fromConfigMap([sonarToken: "sonarToken"], jenkinsMeta)
+        def configMap = [sonarToken: "sonarToken"]
 
         when: "running gradle pipeline with sonar token"
-        check(config).javaCoverage(config).each {it.value()}
+        inSandbox { check.javaCoverage(configMap, jenkinsMeta).each {it.value()} }
 
         then: "should run sonar analysis"
         calls.has["sh"] {  MethodCall call ->
@@ -85,16 +83,21 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("runs check step for #platforms")
     def "runs check step for all given platforms"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and:"configuration object with given platforms"
-        def config = Config.fromConfigMap([platforms: platforms], [BUILD_NUMBER: 1])
+        def configMap = [platforms: platforms]
 
         when: "running check"
-        def checkSteps = check(config).javaCoverage(config) as Map<String, Closure>
-        checkSteps.each {it.value.call()}
+
+        Map<String, ?> checkSteps = inSandbox {
+            def checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1])
+            checkSteps.each {it.value.call()}
+            return checkSteps
+        }
 
         then:
         calls["checkout"].length == platforms.size()
+        checkSteps != null
         checkSteps.collect {
             it -> it.key.replace("check", "").trim()
         } == platforms
@@ -115,18 +118,21 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
         def dockerMock = createDockerMock(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
-        def check = loadScript(TEST_SCRIPT_PATH) {
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {
             docker = dockerMock
         }
         and: "linux configuration object with docker args"
-        def config = Config.fromConfigMap([
+        def configMap = [
                 platforms : ["linux"],
                 dockerArgs: [image              : image, dockerFileName: dockerfile,
-                             dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]],
-                [BUILD_NUMBER: 1])
+                             dockerFileDirectory: dockerDir, dockerBuildArgs: dockerBuildArgs, dockerArgs: dockerArgs]
+        ]
         when: "running linux platform step"
-        def checkSteps = check(config).javaCoverage(config) as Map<String, Closure>
-        checkSteps["check linux"].call()
+        inSandbox {
+            def checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1])
+            checkSteps["check linux"].call()
+        }
+
 
         then:
         dockerMock.ran.get() && calls.has["sh"] { MethodCall call ->
@@ -144,63 +150,64 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
 
     def "doesnt runs analysis twice on parallel check run"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH) {
-            currentBuild["result"] = null
-        }
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and:"configuration object with more than one platform"
-        def config = Config.fromConfigMap([platforms: ["plat1", "plat2"]], [BUILD_NUMBER: 1])
+        def configMap = [platforms: ["plat1", "plat2"]]
         and: "generated check steps"
-        Platform analysisPlatform = null
+        String analysisPlatform = null
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
-        Map<String, Closure> steps = check(config).simple(config,
-                { testCount.incrementAndGet() },
-                { platform ->
-                    analysisPlatform = platform
-                    analysisCount.incrementAndGet()
-                }
-        )
+        Map<String, Closure> steps = inSandbox {
+            return check.simple(configMap, [BUILD_NUMBER: 1],
+                    { testCount.incrementAndGet() },
+                    { platform ->
+                        analysisPlatform = platform.name
+                        analysisCount.incrementAndGet()
+                    }
+                )
+        }
 
         when: "running steps on parallel"
         CompletableFuture<Void>[] futures = steps.
-                collect {CompletableFuture.runAsync(it.value)}.
+                collect { entry -> CompletableFuture.runAsync({inSandbox(entry.value)})}.
                 toArray(new CompletableFuture<Void>[0])
         CompletableFuture.allOf(futures).get() //wait for futures to be completed
 
         then: "test step ran for all platforms"
-        testCount.get() == config.platforms.length
+        testCount.get() == configMap["platforms"].size()
         and: "analysis step ran only once"
         analysisCount.get() == 1
         and: "analysis step ran on first platform"
-        analysisPlatform == config.platforms[0]
+        analysisPlatform == configMap.platforms[0]
     }
 
     @Unroll
     def "loads test environment on check"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH) {
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {
             BUILD_NUMBER=1
         }
         and:"configuration object with more than one platform"
-        def config = Config.fromConfigMap([platforms: platforms, testEnvironment:testEnvironment], [BUILD_NUMBER: 1])
-        and: "generated check steps"
+        def configMap = [platforms: platforms, testEnvironment: testEnvironment]
+        def jenkinsMeta = [BUILD_NUMBER: 1]
+
+        when: "running check steps"
         Map<String, Map> checkEnvMap = platforms.collectEntries{[(it): [:]]}
         Map<String, Map> analysisEnvMap = platforms.collectEntries{[(it): [:]]}
-        Map<String, Closure> steps = check(config).simple(config,
-                { Platform plat ->
-                    binding.env.every {checkEnvMap[plat.name][it.key] = it.value }
+        inSandbox {
+            Map<String, Closure> steps = check.simple(configMap, jenkinsMeta,
+                { plat ->
+                    binding.env.every { entry -> checkEnvMap[plat.name][entry.key] = entry.value }
                 },
-                { Platform plat ->
-                    binding.env.every { analysisEnvMap[plat.name][it.key] = it.value }
-                }
-        )
-
-        when: "running steps"
-        steps.each {it.value.call()}
+                { plat ->
+                    binding.env.every { entry -> analysisEnvMap[plat.name][entry.key] = entry.value }
+                })
+            steps.each {entry -> entry.value.call()}
+        }
 
         then: "test step ran for all platforms"
         checkEnvMap.every { platEnv ->
-            platEnv.value["TRAVIS_JOB_NUMBER"] == "${config.metadata.buildNumber}.${platEnv.key.toUpperCase()}"
+            platEnv.value["TRAVIS_JOB_NUMBER"] == "${jenkinsMeta["BUILD_NUMBER"]}.${platEnv.key.toUpperCase()}"
         }
         expectedInEnvironment.every {expPlatEnv ->
             def actualPlatEnv = checkEnvMap[expPlatEnv.key]

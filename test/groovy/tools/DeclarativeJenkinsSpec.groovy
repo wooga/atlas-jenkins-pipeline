@@ -7,18 +7,27 @@ import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
 import com.lesfurets.jenkins.unit.declarative.PostDeclaration
 import com.lesfurets.jenkins.unit.declarative.WhenDeclaration
 import org.apache.commons.lang3.ClassUtils
+import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.GenericWhitelist
+import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.ProxyWhitelist
 import spock.lang.Shared
 import spock.lang.Specification
+import tools.sandbox.PackageWhitelist
+import tools.sandbox.SandboxDeclarativePipelineTest
+import tools.sandbox.SandboxPipelineTestHelper
 
 import java.lang.reflect.Method
 import java.util.stream.IntStream
 
+/**
+ * Abstract test specification for testing Jenkins Declarative Pipeline.
+ * Has fake environments and credential storage for testing, as well as support for sandboxed execution.
+ */
 abstract class DeclarativeJenkinsSpec extends Specification {
 
     static Object lock = new Object()
     @Shared DeclarativePipelineTest jenkinsTest;
     @Shared Binding binding
-    @Shared PipelineTestHelper helper
+    @Shared SandboxPipelineTestHelper helper
     @Shared FakeCredentialStorage credentials
     @Shared FakeMethodCalls calls
     @Shared FakeEnvironment environment
@@ -26,13 +35,17 @@ abstract class DeclarativeJenkinsSpec extends Specification {
 
     def setupSpec() {
         jenkinsStash = new HashMap<>()
-        jenkinsTest = new DeclarativePipelineTest() {}
+        jenkinsTest = new SandboxDeclarativePipelineTest(new ProxyWhitelist(
+                new GenericWhitelist(),
+                new PackageWhitelist("com.lesfurets.jenkins"),
+                new PackageWhitelist("net.wooga.jenkins.pipeline")
+        ))
         jenkinsTest.setUp()
         environment = new FakeEnvironment(jenkinsTest.binding)
         credentials = new FakeCredentialStorage(environment)
         calls = new FakeMethodCalls(jenkinsTest.helper)
 
-        helper = jenkinsTest.helper
+        helper = jenkinsTest.helper as SandboxPipelineTestHelper
         binding = jenkinsTest.binding
         addLackingDSLTerms()
         populateJenkinsDefaultEnvironment(binding)
@@ -113,25 +126,49 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         PostDeclaration.metaClass.cleanWs = {}
     }
 
-    protected Script loadScript(String name, Closure varBindingOps={}, boolean reloadSideScripts = true) {
+    /**
+     * Loads a script and the javaLibCheck and publish side scripts inside the sandbox.
+     * @param path - path to the script to be loaded.
+     * @param varBindingOps - convenience closure to execute operations over the binding
+     * object that will be passed to scripts
+     * @param reloadSideScripts - if the side scripts should be loaded, defaults to true.
+     * @return Script object representing the loaded script
+     */
+    Script loadSandboxedScript(String path, Closure varBindingOps={}, boolean reloadSideScripts = true) {
         varBindingOps.setDelegate(binding.variables)
         varBindingOps(binding.variables)
         if(reloadSideScripts) {
             registerSideScript("vars/javaLibCheck.groovy", binding)
             registerSideScript("vars/publish.groovy", binding)
         }
-
-        return helper.loadScript(name, binding)
+        return helper.loadSandboxedScript(path, binding)
     }
 
+
+    /**
+     * Loads a script to be used by another script. Registers its own call() method as an jenkins mock method,
+     * in order for it to be used by another script.
+     * @param path - path to the script to be loaded.
+     * @param varBindingOps - convenience closure to execute operations over the binding
+     * object that will be passed to scripts
+     * @param reloadSideScripts - if the side scripts should be loaded, defaults to true.
+     * @return Script object representing the loaded script
+     */
     protected void registerSideScript(String scriptPath, Binding binding) {
         def scriptName = new File(scriptPath).name.replace(".groovy", "")
-        def script = helper.loadScript(scriptPath, binding)
-        script.class.getDeclaredMethods().findAll {return it.name == "call" }.each { callMethod ->
+        def script = helper.loadSandboxedScript(scriptPath, binding)
+        script.class.getDeclaredMethods().findAll {it.name == "call" }.each { callMethod ->
             registerAllowedMethod(scriptName, script, callMethod)
         }
     }
 
+    /**
+     * Registers a given Method as a jenkins mock method..
+     * @param methodName Name to register the mock as;
+     * @param base Object from which method will be called
+     * @param method the method to be called
+     * @return Closure calling the registered method.
+     */
     protected Closure registerAllowedMethod(String methodName, Object base, Method method) {
         List<Class> methodParams = method.parameterTypes.collect {
             return it.isPrimitive()? ClassUtils.primitiveToWrapper(it) : it
@@ -148,6 +185,27 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         }
         helper.registerAllowedMethod(methodName, methodParams, methodCall)
         return methodCall
+    }
+
+    /**
+     * Runs a closure in sandbox environment.
+     *
+     * IMPORTANT:
+     * Avoid object exchange from in to outside the sandbox environment (ie. parameters pass or returns).
+     * As the sandbox environment has its own ClassLoader, trying to use any 'non-basic'
+     * (ie. not loaded by the bootstrap ClassLoader) JVM object will fail.
+     * If you are having trouble with inane ClassNotFoundException(s), this is probably the case.
+     *
+     * Example of safe classes are Map, String, Object, and primitives, but there are many others besides these.
+     *
+     * If you absolutely have to pass a custom object, you can try serializing the it, passing the bytes,
+     * and then deserialize it on the other side, for instance, using ObjectOutputStream/ObjectInputStream.
+     *
+     * @param cls function to run into the sandbox
+     * @return the return of the cls closure
+     */
+    protected <T> T inSandbox(Closure<T> cls) {
+        return helper.inSandbox(cls)
     }
 
 

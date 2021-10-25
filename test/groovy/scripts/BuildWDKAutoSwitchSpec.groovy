@@ -16,7 +16,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         credentials.addString("artifactory_read", "usr:pwd")
         credentials.addUsernamePassword('github_access', "usr", "pwd")
         and: "build plugin with publish parameters"
-        def buildWDK = loadScript(SCRIPT_PATH) {
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
             env.GRGIT_USR = "usr"
@@ -24,7 +24,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         }
 
         when: "running buildWDKAutoSwitch pipeline"
-        buildWDK(unityVersions: ["2019"], logLevel: "level")
+        inSandbox { buildWDK(unityVersions: ["2019"], logLevel: "level") }
 
         then: "runs gradle with parameters"
         skipsRelease ^/*XOR*/calls.has["sh"] { MethodCall call ->
@@ -61,13 +61,13 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         given: "needed credentials"
         credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
-        def buildWDK = loadScript(SCRIPT_PATH) {
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
         }
 
         when: "running buildWDKAutoSwitch pipeline"
-        buildWDK(unityVersions: ["2018"], logLevel: "level")
+        inSandbox { buildWDK(unityVersions: ["2018"], logLevel: "level") }
 
         then: "runs gradle with parameters"
         calls.has["sh"] { MethodCall call ->
@@ -95,13 +95,15 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         given: "needed credentials"
         credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
-        def buildWDK = loadScript(SCRIPT_PATH) {
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
         }
 
         when: "running buildWDKAutoSwitch pipeline"
-        buildWDK(unityVersions: ["2018"], logLevel: "level", forceRefreshDependencies: forceRefreshDependencies)
+        inSandbox {
+            buildWDK(unityVersions: ["2018"], logLevel: "level", forceRefreshDependencies: forceRefreshDependencies)
+        }
 
         then: "runs gradle with parameters"
         calls.has["sh"] { MethodCall call ->
