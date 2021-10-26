@@ -26,7 +26,6 @@ def call(Map configMap = [:]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
-      booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONARQUBE')
     }
 
     stages {
