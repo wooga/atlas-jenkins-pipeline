@@ -14,7 +14,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     def "publishes WDK with #release release type"() {
         given: "credentials holder with publish keys"
         credentials.addString("artifactory_read", "usr:pwd")
-        credentials.addUsernamePassword('github_up', "usr", "pwd")
+        credentials.addUsernamePassword('github_access', "usr", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = releaseType
@@ -40,7 +40,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         def env = usedEnvironments.last()
         skipsRelease ^ hasBaseEnvironment(env, "level")
         skipsRelease ^ env.with {
-            GRGIT == this.credentials['github_up'] &&
+            GRGIT == this.credentials['github_access'] &&
             GRGIT_USER == "usr" &&//"${GRGIT_USR}"
             GRGIT_PASS == "pwd" &&//"${GRGIT_PSW}"
             GITHUB_LOGIN == "usr" &&//"${GRGIT_USR}"

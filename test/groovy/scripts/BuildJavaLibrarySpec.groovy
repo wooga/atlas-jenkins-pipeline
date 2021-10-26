@@ -69,7 +69,7 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
     def "registers environment on publish"() {
         given: "credentials holder with bintray publish keys"
-        credentials.addUsernamePassword('github_up', "usr", "pwd")
+        credentials.addUsernamePassword('github_access', "usr", "pwd")
         credentials.addUsernamePassword('bintray.publish', "user", "key")
         and: "build plugin with publish parameters"
         def buildJavaLibrary = loadScript(SCRIPT_PATH) {
@@ -85,7 +85,7 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
         then: "sets up GRGIT environment"
         def env = buildJavaLibrary.binding.env
-        env["GRGIT"] == credentials['github_up']
+        env["GRGIT"] == credentials['github_access']
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"
