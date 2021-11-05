@@ -1,7 +1,5 @@
 plugins {
-    id 'groovy'
-    id 'java-gradle-plugin'
-    id 'jacoco'
+    id 'net.wooga.plugins-local' version '3.0.0-rc.1'
 }
 
 group = 'com.wooga'
@@ -37,77 +35,6 @@ dependencies {
     testImplementation ('com.netflix.nebula:nebula-test:[8,9)') {
         version {
             strictly '8.1.0'
-        }
-    }
-}
-
-//////////////////////////////////////////////
-// This will be provided by a custom plugin //
-//////////////////////////////////////////////
-
-setupIntegrationTestTask(project, tasks)
-configureJacocoTestReport(project, tasks.integrationTest, tasks.test)
-
-private static Test setupIntegrationTestTask(final Project project, final TaskContainer tasks) {
-    JavaPluginConvention javaConvention = project.getConvention().getPlugins().get("java") as JavaPluginConvention
-
-    def integrationTestSourceSet = setupIntegrationTestSourceSet(project, javaConvention)
-    setupIntegrationTestConfiguration(project, javaConvention)
-
-    Test integrationTestTask = tasks.create(name: "integrationTest", type: Test) as Test
-
-    integrationTestTask.with {
-        setTestClassesDirs(integrationTestSourceSet.output.classesDirs)
-        classpath = integrationTestSourceSet.runtimeClasspath
-        outputs.upToDateWhen { false }
-    }
-
-    def checkLifeCycleTask = tasks.getByName("check")
-    checkLifeCycleTask.dependsOn integrationTestTask
-
-    def testTask = tasks.getByName("test")
-    integrationTestTask.mustRunAfter testTask
-
-    integrationTestTask
-}
-
-private static void setupIntegrationTestConfiguration(Project project, final JavaPluginConvention javaConvention) {
-    def test = javaConvention.sourceSets.getByName("test")
-    def integrationTest = javaConvention.sourceSets.getByName("integrationTest")
-
-    test.implementationConfigurationName
-    def configurations = project.configurations
-    def testImplementation = configurations.getByName(test.implementationConfigurationName)
-    def testRuntimeOnly = configurations.getByName(test.runtimeOnlyConfigurationName)
-
-    def integrationTestImplementation = configurations.getByName(integrationTest.implementationConfigurationName)
-    integrationTestImplementation.extendsFrom(testImplementation)
-
-    def integrationTestRuntimeOnly = configurations.getByName(integrationTest.runtimeOnlyConfigurationName)
-    integrationTestRuntimeOnly.extendsFrom(testRuntimeOnly)
-}
-
-private static SourceSet setupIntegrationTestSourceSet(final Project project, final JavaPluginConvention javaConvention) {
-    def main = javaConvention.sourceSets.getByName("main")
-    def test = javaConvention.sourceSets.getByName("test")
-
-    SourceSet sourceSet = javaConvention.sourceSets.maybeCreate("integrationTest")
-    sourceSet.setCompileClasspath(project.files(main.compileClasspath, test.compileClasspath, sourceSet.compileClasspath))
-    sourceSet.setRuntimeClasspath(project.files(main.compileClasspath, test.compileClasspath, sourceSet.runtimeClasspath))
-
-    sourceSet.groovy.srcDir("src/" + sourceSet.getName() + "/groovy");
-    sourceSet.resources.srcDir("src/" + sourceSet.getName() + "/resources");
-    sourceSet
-}
-
-private static configureJacocoTestReport(final Project project, final Task integrationTestTask, Task testTask) {
-    project.tasks.withType(JacocoReport) { JacocoReport jacocoReport ->
-        if (jacocoReport.name == "jacoco" + JavaPlugin.TEST_TASK_NAME.capitalize() + "Report") {
-            jacocoReport.reports{ JacocoReportsContainer configurableReports ->
-                configurableReports.xml.enabled = true
-                configurableReports.html.enabled = true
-            }
-            jacocoReport.executionData(integrationTestTask, testTask)
         }
     }
 }
