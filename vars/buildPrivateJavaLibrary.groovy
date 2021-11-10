@@ -10,7 +10,7 @@ import net.wooga.jenkins.pipeline.config.Config
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [:]) {
-  Config config = Config.fromConfigMap(configMap, this.binding.variables)
+  Config config = Config.fromConfigMap(configMap, this)
   def mainPlatform = config.platforms[0].name
 
   pipeline {

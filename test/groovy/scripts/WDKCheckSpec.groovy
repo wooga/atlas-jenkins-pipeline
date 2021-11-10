@@ -1,8 +1,6 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
-import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
-import net.wooga.jenkins.pipeline.config.WDKConfig
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -11,12 +9,10 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
     def "executes cobertura coverage plugin"() {
         given: "loaded check in a running build"
-        def check = loadScript(TEST_SCRIPT_PATH)
-        and: "configuration in the master branch and with tokens"
-        def config = WDKConfig.fromConfigMap("label",
-                [unityVersions: "2019"],
-                [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
-        )
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration with unity platform"
+        def configMap = [unityVersions: "2019"]
+
         and: "mocked coverage methods"
         helper.registerAllowedMethod("istanbulCoberturaAdapter", [String]) { it -> it }
         helper.registerAllowedMethod("sourceFiles", [String]) { it -> it }
@@ -26,7 +22,9 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running gradle pipeline with coverage token"
-        check().wdkCoverage(config, "any", "any", stashKey).each { it.value() }
+        inSandbox {
+            check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", stashKey).each { it.value() }
+        }
 
         then: "jenkins coverage plugins are called"
         calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
@@ -45,18 +43,20 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("execute sonarqube when its token is present")
     def "executes sonarqube when its token is present"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
         and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: sonarToken], [BUILD_NUMBER: 1])
+        def configMap = [unityVersions: "2019", sonarToken: sonarToken]
 
         and: "stashed setup data"
         def stashKey = "setup_w"
         jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check with sonarqube token"
-        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", stashKey)
+            checkSteps.each { it.value.call() }
+        }
 
         then: "gradle coverage task is called"
         gradleCmdElements.every { it ->
@@ -73,21 +73,22 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         "SonarQube" | [["-Dsonar.login=sonarToken"]] | "sonarToken"
     }
 
-    @Unroll("does not executes sonarqube when its token is present")
     def "does not executes sonarqube when its token is not present"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
-        and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: "any"], [BUILD_NUMBER: 1])
+        and: "configuration object without sonarqube token"
+        def config = [unityVersions: "2019"]
 
         and: "stashed setup data"
         def stashKey = "setup_w"
         jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
-        when: "running check with sonarqube token"
-        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        when: "running check without sonarqube token"
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any", stashKey)
+            checkSteps.each { it.value.call() }
+        }
 
         then: "gradle coverage task is called"
         calls["sh"].
@@ -99,7 +100,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("executes sonarqube on branch #branchName")
     def "executes sonarqube in PR and non-PR branches with correct arguments"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
         and: "jenkins script object with needed properties"
         def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: branchName, env: [:]]
@@ -107,15 +108,17 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             jenkinsMeta.env["CHANGE_ID"] = "notnull"
         }
         and: "configuration in the ${branchName} branch with token"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: "2019", sonarToken: "sonarToken"], jenkinsMeta)
+        def configMap = [unityVersions: "2019", sonarToken: "sonarToken"]
 
         and: "stashed setup data"
         def stashKey = "setup_w"
         jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check with sonarqube token"
-        def checkSteps = check().wdkCoverage(config, "any", "any", stashKey) as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, jenkinsMeta, "any", "any", stashKey)
+            checkSteps.each { it.value.call() }
+        }
 
         then: "should run sonar analysis"
         calls.has["sh"] { MethodCall call ->
@@ -137,23 +140,23 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("runs check step for unity versions #versions")
     def "runs check step for all given versions"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions], [BUILD_NUMBER: 1])
+        def configMap = [unityVersions: versions]
         and: "stashed setup data"
         jenkinsStash[setupStashId] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
-
         when: "running check"
-        def checkSteps = check().wdkCoverage(config, releaseType, releaseScope, setupStashId) as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        def checkSteps = inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], releaseType, releaseScope, setupStashId)
+            checkSteps.each { it.value.call() }
+            return checkSteps
+        }
 
         then: "check steps names are in the `check Unity-#version` format"
         checkSteps.collect {
             it -> it.key.replace("check Unity-", "").trim()
         } == versions
-        and: "first version is marked as main"
-        config.unityVersions[0].platform.main
 
         and: "working dir changed to version directory"
         calls["dir"].length == versions.size() + 1 //one for each check, plus one for single analysis step
@@ -189,21 +192,23 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll("executes finally steps on check #throwsException for #versions")
     def "always executes finally steps on check run"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: versions], [BUILD_NUMBER: 1])
+        def configMap = [unityVersions: versions]
         and: "some failing script step"
         helper.registerAllowedMethod("dir", [String, Closure]) {
             if (throwsException == "throwing") throw new InputMismatchException()
         }
 
         when: "running check"
-        def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-        checkSteps.each {
-            try {
-                it.value.call()
-            } catch (InputMismatchException _) {
-            } //ignores exception, it is tested in another test
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            checkSteps.each {
+                try {
+                    it.value.call()
+                } catch (InputMismatchException _) {
+                } //ignores exception, it is tested in another test
+            }
         }
 
         then: "nunit results are stored"
@@ -228,14 +233,17 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
     def "optional version does not throw Exception on failure"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: [version]], [BUILD_NUMBER: 1])
+        def configMap = [unityVersions: [version]]
         and: "some failing script step"
         helper.registerAllowedMethod("dir", [String, Closure]) { throw new Exception() }
+
         when: "running check"
-        def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            checkSteps.each { it.value.call() }
+        }
 
         then:
         noExceptionThrown()
@@ -250,15 +258,18 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
     def "non-optional version throws Exception on failure"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH)
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def config = WDKConfig.fromConfigMap("label", [unityVersions: [version]], [BUILD_NUMBER: 1])
+        def config = [unityVersions: [version]]
         and: "some failing script step"
         def expectedException = new InstantiationException() //some uncommon exception type
         helper.registerAllowedMethod("dir", [String, Closure]) { throw expectedException }
+
         when: "running check"
-        def checkSteps = check().wdkCoverage(config, "any", "any", "setup_w") as Map<String, Closure>
-        checkSteps.each { it.value.call() }
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            checkSteps.each { it.value.call() }
+        }
 
         then:
         def e = thrown(InstantiationException)
@@ -271,24 +282,25 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     @Unroll
     def "loads test environment on check"() {
         given: "loaded check in a running jenkins build"
-        def check = loadScript(TEST_SCRIPT_PATH) {}
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {}
         and: "configuration object with more than one platform"
-        def config = WDKConfig.fromConfigMap("label",
-                [unityVersions: versions, testEnvironment: testEnvironment], [BUILD_NUMBER: 1])
-        and: "generated check steps"
+        def configMap = [unityVersions: versions, testEnvironment: testEnvironment]
+
+        when: "running check steps"
         Map<String, Map> checkEnvMap = versions.collectEntries { [(it): [:]] }
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
-        Map<String, Closure> steps = check().simple(config,
-                { UnityVersionPlatform uPlat ->
-                    binding.env.every { checkEnvMap[uPlat.platform.name][it.key] = it.value }
-                },
-                { UnityVersionPlatform uPlat ->
-                    binding.env.every { analysisEnvMap[uPlat.platform.name][it.key] = it.value }
-                }
-        )
+        inSandbox { _ ->
+            Map<String, Closure> steps = check.simpleWDK("label", configMap, [BUILD_NUMBER: 1],
+                    { uPlat ->
+                        binding.env.every { checkEnvMap[uPlat.platform.name][it.key] = it.value }
+                    },
+                    { uPlat ->
+                        binding.env.every { analysisEnvMap[uPlat.platform.name][it.key] = it.value }
+                    }
+            )
+            steps.each { it.value.call() }
+        }
 
-        when: "running steps"
-        steps.each { it.value.call() }
 
         then: "test step ran for all platforms"
         checkEnvMap.every { platEnv ->

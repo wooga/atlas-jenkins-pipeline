@@ -15,7 +15,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
     def "posts coveralls results to coveralls server" () {
         given: "loaded buildJavaLibrary in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
-        def buildJavaLibrary = loadScript(SCRIPT_PATH) {
+        def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = "SUCCESS"
         }
 
@@ -23,7 +23,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         def coverallsToken = "token"
 
         when: "running gradle pipeline with coverallsToken parameter"
-        buildJavaLibrary(coverallsToken: coverallsToken)
+        inSandbox { buildJavaLibrary(coverallsToken: coverallsToken) }
 
         then: "request is sent to coveralls webhook"
         calls.has["httpRequest"]{ MethodCall call ->
@@ -42,14 +42,14 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         credentials.addString('ossrh.signing.key_id', "keyId")
         credentials.addString('ossrh.signing.passphrase', "passphrase")
         and: "build plugin with publish parameters"
-        def buildJavaLibrary = loadScript(SCRIPT_PATH) {
+        def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = null
             params.RELEASE_TYPE = releaseType
             params.RELEASE_SCOPE = releaseScope
         }
 
         when: "running buildJavaLibrary pipeline"
-        buildJavaLibrary()
+        inSandbox { buildJavaLibrary() }
 
         then: "runs gradle with parameters"
         skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
@@ -73,7 +73,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         credentials.addUsernamePassword('github_access', "usr", "pwd")
         credentials.addUsernamePassword('bintray.publish', "user", "key")
         and: "build plugin with publish parameters"
-        def buildJavaLibrary = loadScript(SCRIPT_PATH) {
+        def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = null
             params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
@@ -82,7 +82,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         }
 
         when: "running buildJavaLibrary pipeline"
-        buildJavaLibrary()
+        inSandbox { buildJavaLibrary() }
 
         then: "sets up GRGIT environment"
         def env = buildJavaLibrary.binding.env

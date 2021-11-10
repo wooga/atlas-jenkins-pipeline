@@ -12,13 +12,13 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
     @Issue("Tried to cover No signature of method: java.lang.Class.fromJenkins() is applicable for argument types: (gradleWrapper, java.lang.String, null) values: [gradleWrapper@7274fcad, info, null]")
     def "gradle wrapper can be called with loglevel value #logLevel, stacktrace value #stackTrace and refreshDependencies value #refreshDependencies"() {
         given: "loaded gradleWrapper script"
-        def gradleWrapper = loadScript(SCRIPT_PATH)
+        def gradleWrapper = loadSandboxedScript(SCRIPT_PATH)
 
         and: "set variables in params"
         binding.setVariable("params", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace, REFRESH_DEPENDENCIES: refreshDependencies])
 
         when: "running gradle pipeline with coverallsToken parameter"
-        gradleWrapper(command)
+        inSandbox { gradleWrapper(command) }
 
         then:
         noExceptionThrown()
@@ -28,7 +28,6 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
         callString.contains(command)
         containsArgIf(callString, logLevel, "--${logLevel}".toString())
         containsArgIf(callString, stackTrace, "--stacktrace")
-
         containsArgIf(callString, refreshDependencies, "--refresh-dependencies")
 
         where:

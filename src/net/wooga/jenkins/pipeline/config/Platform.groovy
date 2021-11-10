@@ -8,7 +8,7 @@ class Platform {
     final String os
     final String labels
     final String testLabels
-    final Collection<?> testEnvironment
+    final Collection<?> testEnv
     final boolean runsOnDocker
     final boolean main
 
@@ -47,7 +47,7 @@ class Platform {
         this.name = name
         this.os = os
         this.labels = labels
-        this.testEnvironment = testEnvironment
+        this.testEnv = testEnvironment
         this.testLabels = testLabels?.join(" && ")
         this.runsOnDocker = runsOnDocker
         this.main = main
@@ -67,7 +67,7 @@ class Platform {
     }
 
     List<String> getTestEnvironment() {
-        return testEnvironment.collect { item ->
+        return testEnv.collect { item ->
             if (item instanceof Closure) {
                 return item.call().toString()
             }
@@ -86,7 +86,7 @@ class Platform {
         if (labels != platform.labels) return false
         if (name != platform.name) return false
         if (os != platform.os) return false
-        if (testEnvironment != platform.testEnvironment) return false
+        if (testEnv != platform.testEnvironment) return false
         if (testLabels != platform.testLabels) return false
 
         return true
@@ -98,7 +98,7 @@ class Platform {
         result = 31 * result + (os != null ? os.hashCode() : 0)
         result = 31 * result + (labels != null ? labels.hashCode() : 0)
         result = 31 * result + (testLabels != null ? testLabels.hashCode() : 0)
-        result = 31 * result + (testEnvironment != null ? testEnvironment.hashCode() : 0)
+        result = 31 * result + (testEnv != null ? testEnv.hashCode() : 0)
         result = 31 * result + (runsOnDocker ? 1 : 0)
         result = 31 * result + (main ? 1 : 0)
         return result
