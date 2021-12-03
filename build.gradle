@@ -39,7 +39,7 @@ dependencies {
     testImplementation("org.jenkins-ci.main:jenkins-core:2.303.1") {
         exclude module: "groovy-all"
     }
-    testImplementation "org.jenkins-ci.main:jenkins-test-harness:2.71"
+    testImplementation "org.jenkins-ci.main:jenkins-test-harness:1666.vd1360abbfe9e"
     testImplementation 'com.github.ben-manes.caffeine:caffeine:2.9.2'
 }
 
