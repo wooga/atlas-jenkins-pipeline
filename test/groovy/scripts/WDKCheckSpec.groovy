@@ -291,10 +291,10 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         inSandbox { _ ->
             Map<String, Closure> steps = check.simpleWDK("label", configMap, [BUILD_NUMBER: 1],
-                    { uPlat ->
+                    { uPlat, __ ->
                         binding.env.every { checkEnvMap[uPlat.platform.name][it.key] = it.value }
                     },
-                    { uPlat ->
+                    { uPlat, __ ->
                         binding.env.every { analysisEnvMap[uPlat.platform.name][it.key] = it.value }
                     }
             )

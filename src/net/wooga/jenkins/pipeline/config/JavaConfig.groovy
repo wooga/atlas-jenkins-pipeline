@@ -1,14 +1,15 @@
 package net.wooga.jenkins.pipeline.config
 
-class Config {
+class JavaConfig implements PipelineConfig {
 
     final Platform[] platforms
     final JenkinsMetadata metadata
     final DockerArgs dockerArgs
     final SonarQubeArgs sonarArgs
+    final GradleArgs gradleArgs
     final String coverallsToken
 
-    static Config fromConfigMap(Map config,  Object jenkinsScript) {
+    static JavaConfig fromConfigMap(Map config, Object jenkinsScript) {
         config.platforms = config.platforms ?: ['macos','windows']
         def platNames = config.platforms as List<String>
         def index = 0
@@ -19,17 +20,20 @@ class Config {
         }
         def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
         def sonarArgs = SonarQubeArgs.fromConfigMap(config)
+        def gradleArgs = GradleArgs.fromConfigMap(config)
         def coverallsToken = config.coverallsToken as String
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        return new Config(metadata, platforms, dockerArgs, sonarArgs, coverallsToken)
+        return new JavaConfig(metadata, platforms, dockerArgs, sonarArgs, gradleArgs, coverallsToken)
     }
 
-    Config(JenkinsMetadata metadata, List<Platform> platforms, DockerArgs dockerArgs, SonarQubeArgs sonarArgs,
-           String coverallsToken) {
+    JavaConfig(JenkinsMetadata metadata, List<Platform> platforms,
+               DockerArgs dockerArgs, SonarQubeArgs sonarArgs, GradleArgs gradleArgs,
+               String coverallsToken) {
         this.metadata = metadata
         this.platforms = platforms
         this.sonarArgs = sonarArgs
         this.dockerArgs = dockerArgs
+        this.gradleArgs = gradleArgs
         this.coverallsToken = coverallsToken
     }
 
@@ -42,7 +46,7 @@ class Config {
         if (this.is(o)) return true
         if (getClass() != o.class) return false
 
-        Config config = (Config) o
+        JavaConfig config = (JavaConfig) o
 
         if (coverallsToken != config.coverallsToken) return false
         if (dockerArgs != config.dockerArgs) return false

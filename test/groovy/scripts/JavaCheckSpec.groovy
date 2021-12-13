@@ -158,9 +158,11 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
         Map<String, Closure> steps = inSandbox {
-            return check.simple(configMap, [BUILD_NUMBER: 1],
-                    { testCount.incrementAndGet() },
-                    { platform ->
+            return check.parallel(configMap, [BUILD_NUMBER: 1],
+                    { _, __ ->
+                        testCount.incrementAndGet()
+                    },
+                    { platform, _ ->
                         analysisPlatform = platform.name
                         analysisCount.incrementAndGet()
                     }
@@ -195,11 +197,11 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> checkEnvMap = platforms.collectEntries{[(it): [:]]}
         Map<String, Map> analysisEnvMap = platforms.collectEntries{[(it): [:]]}
         inSandbox {
-            Map<String, Closure> steps = check.simple(configMap, jenkinsMeta,
-                { plat ->
+            Map<String, Closure> steps = check.parallel(configMap, jenkinsMeta,
+                { plat, _ ->
                     binding.env.every { entry -> checkEnvMap[plat.name][entry.key] = entry.value }
                 },
-                { plat ->
+                { plat, _ ->
                     binding.env.every { entry -> analysisEnvMap[plat.name][entry.key] = entry.value }
                 })
             steps.each {entry -> entry.value.call()}

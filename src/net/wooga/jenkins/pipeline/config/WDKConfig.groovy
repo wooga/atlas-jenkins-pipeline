@@ -2,7 +2,7 @@ package net.wooga.jenkins.pipeline.config
 
 import net.wooga.jenkins.pipeline.BuildVersion
 
-class WDKConfig {
+class WDKConfig implements PipelineConfig {
 
     static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
@@ -17,28 +17,30 @@ class WDKConfig {
         if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
 
         def sonarArgs = SonarQubeArgs.fromConfigMap(configMap)
+        def gradleArgs = GradleArgs.fromConfigMap(configMap)
         def jenkinsMetadata = JenkinsMetadata.fromScript(jenkinsScript)
-        boolean refreshDependencies = configMap.refreshDependencies ?: false
-        String logLevel = configMap.logLevel ?: ''
 
-        return new WDKConfig(unityVersions, sonarArgs, jenkinsMetadata, refreshDependencies, logLevel, buildLabel)
+        return new WDKConfig(unityVersions, sonarArgs, gradleArgs, jenkinsMetadata, buildLabel)
     }
 
     final UnityVersionPlatform[] unityVersions
     final SonarQubeArgs sonarArgs
+    final GradleArgs gradleArgs
     final JenkinsMetadata metadata
-    final boolean refreshDependencies
-    final String logLevel
     final String buildLabel
 
-    WDKConfig(List<UnityVersionPlatform> unityVersions, SonarQubeArgs sonarArgs, JenkinsMetadata metadata,
-              boolean refreshDependencies, String logLevel, String buildLabel) {
+    WDKConfig(List<UnityVersionPlatform> unityVersions, SonarQubeArgs sonarArgs, GradleArgs gradleArgs,
+              JenkinsMetadata metadata, String buildLabel) {
         this.unityVersions = unityVersions
         this.sonarArgs = sonarArgs
+        this.gradleArgs = gradleArgs
         this.metadata = metadata
-        this.refreshDependencies = refreshDependencies
-        this.logLevel = logLevel
         this.buildLabel = buildLabel
+    }
+
+    @Override
+    DockerArgs getDockerArgs() {
+        return null
     }
 }
 
