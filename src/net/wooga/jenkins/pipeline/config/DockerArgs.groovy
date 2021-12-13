@@ -59,8 +59,6 @@ class DockerArgs {
         result = (image != null ? image.hashCode() : 0)
         result = 31 * result + (fileName != null ? fileName.hashCode() : 0)
         result = 31 * result + (fileDirectory != null ? fileDirectory.hashCode() : 0)
-        result = 31 * result + (buildArgs != null ? Arrays.hashCode(buildArgs) : 0)
-        result = 31 * result + (imageArgs != null ? Arrays.hashCode(imageArgs) : 0)
         return result
     }
 }

@@ -1,17 +1,16 @@
 package net.wooga.jenkins.pipeline.check
 
-import net.wooga.jenkins.pipeline.config.JavaConfig
+
 import net.wooga.jenkins.pipeline.config.DockerArgs
 import net.wooga.jenkins.pipeline.config.GradleArgs
 import net.wooga.jenkins.pipeline.config.PipelineConfig
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.model.Docker
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
     Docker docker
-    Sonarqube sonarqube
-    Coveralls coveralls
     Gradle gradle
     EnclosureCreator enclosureCreator
     Enclosures enclosures
@@ -23,8 +22,6 @@ class Checks {
 
     private Checks(Object jenkinsScript, GradleArgs gradleArgs, DockerArgs dockerArgs, int buildNumber) {
         this.docker = new Docker(jenkinsScript)
-        this.sonarqube = new Sonarqube()
-        this.coveralls = new Coveralls(jenkinsScript)
         this.gradle = Gradle.fromJenkins(jenkinsScript, gradleArgs)
         this.enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
         this.enclosures = new Enclosures(docker, dockerArgs, enclosureCreator)
@@ -40,10 +37,10 @@ class Checks {
     }
 
     JavaChecks forJavaPipelines(Object jenkinsScript) {
-        return new JavaChecks(jenkinsScript, checkCreator, gradle, sonarqube, coveralls)
+        return new JavaChecks(jenkinsScript, checkCreator, gradle)
     }
 
     WDKChecks forWDKPipelines(Object jenkinsScript) {
-        return new WDKChecks(jenkinsScript, checkCreator, gradle, sonarqube, coveralls)
+        return new WDKChecks(jenkinsScript, checkCreator, gradle)
     }
 }

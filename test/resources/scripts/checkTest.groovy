@@ -2,7 +2,9 @@ package scripts
 
 import net.wooga.jenkins.pipeline.config.JavaConfig
 import net.wooga.jenkins.pipeline.check.Checks
+import net.wooga.jenkins.pipeline.config.PipelineConfig
 import net.wooga.jenkins.pipeline.config.WDKConfig
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 
 def javaCoverage(Map configMap, Map jenkinsVars) {
     def config = JavaConfig.fromConfigMap(configMap, jenkinsVars)
@@ -13,7 +15,6 @@ def wdkCoverage(String buildLabel, Map configMap, Map jenkinsVars, String releas
     def config = WDKConfig.fromConfigMap(buildLabel, configMap, jenkinsVars)
     def check = Checks.forWDKPipelines(this, config)
     return check.wdkCoverage(config, releaseType, releaseScope, stashKey)
-
 }
 
 def parallel(Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisCls) {
@@ -25,14 +26,26 @@ def parallel(Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisC
 def simpleWDK(String label, Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisCls) {
     def config = WDKConfig.fromConfigMap(label, configMap, jenkinsVars)
     def check = Checks.forWDKPipelines(this, config)
-    return check.simple(config, checkCls, analysisCls)
+    return check.parallel(config.unityVersions, checkCls, analysisCls)
 }
 
-def call(Map configMap, Map jenkinsVars) {
-    def config = JavaConfig.fromConfigMap(configMap, jenkinsVars)
-    if(configMap.containsKey("unityVersions")) {
-        return Checks.forWDKPipelines(this, config)
+def getConventions(Closure withClause={it -> it}) {
+    return new PipelineConventions().with(withClause)
+}
+
+def getConfig(Map configMap, Map jenkinsVars, String label=null) {
+    if(configMap.containsKey("unityVersions") && label != null) {
+        return WDKConfig.fromConfigMap(label, configMap, jenkinsVars)
     } else {
+        return JavaConfig.fromConfigMap(configMap, jenkinsVars)
+    }
+
+}
+
+def call(PipelineConfig config) {
+    if(config instanceof  WDKConfig) {
+        return Checks.forWDKPipelines(this, config)
+    } else if(config instanceof JavaConfig) {
         return Checks.forJavaPipelines(this, config)
     }
 }

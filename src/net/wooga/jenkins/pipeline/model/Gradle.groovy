@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
 import net.wooga.jenkins.pipeline.config.GradleArgs
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 
 class Gradle {
 
@@ -23,6 +24,10 @@ class Gradle {
         this.logLevel = logLevel
         this.jenkins = jenkins
         this.refreshDependencies = refreshDependencies
+    }
+
+    def check(String arguments = "", Boolean returnStatus = false, Boolean returnStdout = false) {
+        return wrapper(String.join(" ", arguments, PipelineConventions.checkTask), returnStatus, returnStdout)
     }
 
     /**

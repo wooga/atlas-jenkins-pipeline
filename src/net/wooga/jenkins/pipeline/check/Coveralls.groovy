@@ -4,16 +4,18 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Coveralls {
 
-    Object jenkins
+    final Object jenkins
+    final String task
 
-    Coveralls(Object jenkins) {
+    Coveralls(Object jenkins, String task) {
         this.jenkins = jenkins
+        this.task = task
     }
 
     void runGradle(Gradle gradle, String token) {
         if (token) {
             jenkins.withEnv(["COVERALLS_REPO_TOKEN=${token}"]) {
-                gradle.wrapper("coveralls")
+                gradle.wrapper(task)
                 jenkins.publishHTML([
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,

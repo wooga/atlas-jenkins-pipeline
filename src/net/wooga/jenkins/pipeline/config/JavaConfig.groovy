@@ -59,7 +59,6 @@ class JavaConfig implements PipelineConfig {
 
     int hashCode() {
         int result
-        result = (platforms != null ? Arrays.hashCode(platforms) : 0)
         result = 31 * result + (metadata != null ? metadata.hashCode() : 0)
         result = 31 * result + (dockerArgs != null ? dockerArgs.hashCode() : 0)
         result = 31 * result + (sonarArgs != null ? sonarArgs.hashCode() : 0)

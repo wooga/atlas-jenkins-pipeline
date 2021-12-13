@@ -8,63 +8,58 @@ class WDKChecks {
 
     final Object jenkins
     final CheckCreator checkCreator
-
     final Gradle gradle
-    final Sonarqube sonarqube
-    final Coveralls coveralls
 
-    WDKChecks(Object jenkinsScript, CheckCreator checkCreator, Gradle gradle, Sonarqube sonarqube, Coveralls coveralls) {
+    WDKChecks(Object jenkinsScript, CheckCreator checkCreator, Gradle gradle) {
         this.jenkins = jenkinsScript
         this.checkCreator = checkCreator
         this.gradle = gradle
-        this.sonarqube = sonarqube
-        this.coveralls = coveralls
     }
 
-    Map<String, Closure> simple(WDKConfig config, Closure testStep,
-                                Closure analysisStep) {
-        return parallel(config.unityVersions, testStep, analysisStep)
-    }
-
-    Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Closure checkStep) {
+    Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Closure checkStep,
+                                  PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
-            [("check Unity-${wdkPlatform.platform.name}".toString()): checkStep.curry(wdkPlatform, gradle)]
+            [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep.curry(wdkPlatform, gradle)]
         }
     }
 
-    Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Closure testStep, Closure analysisStep) {
+    Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Closure testStep, Closure analysisStep,
+                                  PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
             def checkStep = checkCreator.csWDKChecks(wdkPlatform,
                     { plat -> testStep(plat, gradle) }, { plat -> analysisStep(plat, gradle) })
-            return [("check Unity-${wdkPlatform.platform.name}".toString()): checkStep]
+            return [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep]
         }
     }
 
-    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, String setupStashId = "setup_w") {
-        def testStep = getWDKTestStep(releaseType, releaseScope, setupStashId)
-        def analysisStep = getWDKAnalysisStep(config, sonarqube)
-        return parallel(config.unityVersions, testStep, analysisStep)
+    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope,
+                                     String setupStashId = "setup_w",
+                                     PipelineConventions conventions = PipelineConventions.standard) {
+        def testStep = getWDKTestStep(releaseType, releaseScope, setupStashId, conventions.checkTask)
+        def analysisStep = getWDKAnalysisStep(config, conventions.wdkCoberturaFile, new Sonarqube(conventions.sonarqubeTask))
+        return parallel(config.unityVersions, testStep, analysisStep, conventions)
     }
 
-    Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId = "setup_w") {
+    Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId = "setup_w",
+                           String checkTask = PipelineConventions.standard.checkTask) {
         return { UnityVersionPlatform versionPlat, Gradle gradle ->
             jenkins.dir(versionPlat.directoryName) {
                 jenkins.checkout(jenkins.scm)
                 jenkins.unstash setupStashId
-                gradle.wrapper("-Prelease.stage=${releaseType.trim()} " +
-                        "-Prelease.scope=${releaseScope.trim()} " +
-                        "check")
+                gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} ${checkTask}")
             }
         }
     }
 
-    Closure getWDKAnalysisStep(WDKConfig config, Sonarqube sonarqube = new Sonarqube()) {
+    Closure getWDKAnalysisStep(WDKConfig config,
+                               String wdkCoberturaFile = PipelineConventions.standard.wdkCoberturaFile,
+                               Sonarqube sonarqube = new Sonarqube(PipelineConventions.standard.sonarqubeTask)) {
         return { UnityVersionPlatform versionPlat, Gradle gradle ->
             jenkins.dir(versionPlat.directoryName) {
                 def branchName = config.metadata.isPR() ? null : config.metadata.branchName
                 sonarqube.runGradle(gradle, config.sonarArgs, branchName)
             }
-            def coberturaAdapter = jenkins.istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')
+            def coberturaAdapter = jenkins.istanbulCoberturaAdapter(wdkCoberturaFile)
             jenkins.publishCoverage adapters: [coberturaAdapter],
                     sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
         }

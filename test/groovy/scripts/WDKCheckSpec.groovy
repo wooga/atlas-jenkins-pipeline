@@ -92,9 +92,9 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         then: "gradle coverage task is called"
         calls["sh"].
-                collect { MethodCall call -> call.args[0]["script"] as String}.
-                find {String args -> args.contains("gradlew")}.
-                every {String args -> !args.contains("sonarqube")}
+                collect { MethodCall call -> call.args[0]["script"] as String }.
+                find { String args -> args.contains("gradlew") }.
+                every { String args -> !args.contains("sonarqube") }
     }
 
     @Unroll("executes sonarqube on branch #branchName")
@@ -107,7 +107,8 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         if (isPR) {
             jenkinsMeta.env["CHANGE_ID"] = "notnull"
         }
-        and: "configuration in the ${branchName} branch with token"
+        and:
+        "configuration in the ${branchName} branch with token"
         def configMap = [unityVersions: "2019", sonarToken: "sonarToken"]
 
         and: "stashed setup data"
@@ -229,6 +230,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         ["2018", "2019"]                            | "not throwing"
         [[version: "2018", optional: true], "2019"] | "throwing"
         [[version: "2018", optional: true], "2019"] | "not throwing"
+
     }
 
     def "optional version does not throw Exception on failure"() {
@@ -262,7 +264,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with given platforms"
         def config = [unityVersions: [version]]
         and: "some failing script step"
-        def expectedException = new InstantiationException() //some uncommon exception type
+        def expectedException = new UnknownError() //some uncommon exception type
         helper.registerAllowedMethod("dir", [String, Closure]) { throw expectedException }
 
         when: "running check"
@@ -272,11 +274,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         }
 
         then:
-        def e = thrown(InstantiationException)
+        def e = thrown(UnknownError)
         e == expectedException
-
+        cleanup:
+        helper.registerAllowedMethod("dir", [String, Closure]) {_, cls -> cls()}
         where:
         version << [[version: "2019"]]
+
     }
 
     @Unroll
@@ -323,5 +327,49 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         ["2019"]         | ["2019": ["a=b", "c=d"]] | ["2019": [a: "b", c: "d"]]
         ["2019", "2020"] | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"], "2020": [a: "b", c: "d"]]
         ["2019", "2020"] | ["2020": ["a=b", "c=d"]] | ["2019": [:], "2020": [a: "b", c: "d"]]
+    }
+
+    def "applies convention to wdk check"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with given platforms"
+        def configMap = [unityVersions: ["any"]]
+        and: "stashed setup data"
+        jenkinsStash["stashKey"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+
+        when: "running check"
+        def checkSteps = inSandbox {
+            def conventions = check.getConventions {
+                it.checkTask = convCheck
+                it.sonarqubeTask = convSonarqube
+                it.wdkCoberturaFile = convWDKCoberturaFile
+                it.wdkParallelPrefix = convWDKParallelPrefix
+                return it
+            }
+            def config = check.getConfig(configMap, [BUILD_NUMBER: 1], "label")
+            def checks = check(config)
+            Map<String, Closure> checkSteps = checks.wdkCoverage(config, "releaseType", "releaseScope", "stashKey", conventions)
+            checkSteps.each { it.value.call() }
+            return checkSteps
+        }
+
+        then: "check step nams has the custom prefix"
+        checkSteps.collect { it -> it.key.startsWith(convWDKParallelPrefix) }
+
+        and: "custom gradle check task was called"
+        calls["sh"].count {
+            String call = it.args[0]["script"]
+            return call.contains("gradlew") &&
+                    call.contains(convCheck)
+        } == 1
+
+        then: "custom cobertura file was set"
+        calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
+            call.args.length == 1 && call.args[0] == convWDKCoberturaFile
+        }
+
+        where:
+        convCheck | convSonarqube | convWDKCoberturaFile | convWDKParallelPrefix
+        "otherchk"   | "othersonar"  | "otherCobertura"     | "otherprefix"
     }
 }
