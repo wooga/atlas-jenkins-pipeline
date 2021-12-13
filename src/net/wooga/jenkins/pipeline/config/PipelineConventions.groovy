@@ -8,6 +8,7 @@ class PipelineConventions {
     String sonarqubeTask = "sonarqube"
     String coverallsTask = "coveralls"
     String jacocoTask = "jacocoTestReport"
+    String setupTask = "setup"
 
     String javaParallelPrefix = "check "
     String wdkParallelPrefix = "check Unity-"
