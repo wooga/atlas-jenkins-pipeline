@@ -33,13 +33,16 @@ class BuildVersionSpec extends Specification {
     @Unroll("parses buildVersion #obj with version from ProjectVersion txt file")
     def "parses buildVersion with version from ProjectVersion txt file"() {
         given: "a valid ProjectVersion.txt file"
-        def projectVersionFile = new File("ProjectVersion.txt")
+        def projectVersionFile = new File("test/resources/ProjectVersion.txt")
+        projectVersionFile.delete()
         projectVersionFile << """m_EditorVersion: ${projectVersion}
 m_EditorVersionWithRevision: ${projectVersion} (ca5b14067cec)
 """
         projectVersionFile.deleteOnExit()
+        and: "A unity version file object"
+        def unityVersionFile = new UnityVersionFile(projectVersionFile.path, projectVersionFile.text)
         when:
-        def buildVersion = BuildVersion.parse(obj, projectVersionFile)
+        def buildVersion = BuildVersion.parse(obj, unityVersionFile)
         then:
         buildVersion.version == expected.version
         buildVersion.optional == expected.optional

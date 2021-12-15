@@ -4,11 +4,12 @@ import net.wooga.jenkins.pipeline.BuildVersion
 import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
+import tools.FakeJenkinsObject
 
 class WDKConfigSpec extends Specification {
 
     @Shared
-    def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
+    def jenkinsScript = new FakeJenkinsObject([BUILD_NUMBER: 1, BRANCH_NAME: "branch"])
 
 
     @Unroll("creates valid WDKConfig object from #configMap")
@@ -40,7 +41,7 @@ class WDKConfigSpec extends Specification {
     def "fails to create valid WDKConfig object if config map has null or empty unityVersions list"() {
         given: "a null or empty configuration map"
         when:
-        WDKConfig.fromConfigMap("any", [unityVersions: unityVersions], [:])
+        WDKConfig.fromConfigMap("any", [unityVersions: unityVersions], new FakeJenkinsObject([:]))
         then:
         def e = thrown(IllegalArgumentException)
         e.message == "Please provide at least one unity version."

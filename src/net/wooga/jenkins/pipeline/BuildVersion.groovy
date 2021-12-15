@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline
 
 import com.cloudbees.groovy.cps.NonCPS
+import net.wooga.jenkins.pipeline.config.UnityVersionFile
 
 class BuildVersion {
 
@@ -13,7 +14,7 @@ class BuildVersion {
      * @param versions
      * @return
      */
-    static BuildVersion parse(Object unityVerObj, File projectVersionFile = null) {
+    static BuildVersion parse(Object unityVerObj, UnityVersionFile unityVersionFile = null) {
         if(unityVerObj == null){
             throw new IllegalArgumentException("Entry cannot be null")
         }
@@ -21,37 +22,29 @@ class BuildVersion {
             return parse(unityVerObj())
         }
         if (unityVerObj instanceof BuildVersion) {
-            return new BuildVersion(parseVersionStr(unityVerObj.version, projectVersionFile), unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
+            return new BuildVersion(parseVersionStr(unityVerObj.version, unityVersionFile), unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
         }
         else if (unityVerObj instanceof Map) {
-            return fromBuildVersionMap(unityVerObj as Map, projectVersionFile)
+            return fromBuildVersionMap(unityVerObj as Map, unityVersionFile)
         }
-        return new BuildVersion(parseVersionStr(unityVerObj.toString(), projectVersionFile), false, null)
+        return new BuildVersion(parseVersionStr(unityVerObj.toString(), unityVersionFile), false, null)
     }
 
-    static BuildVersion fromBuildVersionMap(Map unityVerMap, File projectVersionFile = null) {
+    static BuildVersion fromBuildVersionMap(Map unityVerMap, UnityVersionFile unityVersionFile = null) {
         if(unityVerMap["version"] == null) {
             throw new IllegalArgumentException("Entry ${unityVerMap} does not contain version")
         }
         String version = unityVerMap["version"]
         boolean optional = unityVerMap["optional"]?: false
         String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
-        return new BuildVersion(parseVersionStr(version, projectVersionFile), optional, apiCompatibilityLevel)
+        return new BuildVersion(parseVersionStr(version, unityVersionFile), optional, apiCompatibilityLevel)
     }
 
     //TODO: test!
-    static String parseVersionStr(String versionStr, File projectVersionFile = null) {
+    static String parseVersionStr(String versionStr, UnityVersionFile unityVersionFile) {
         def normalizedVersionStr = versionStr.trim().toLowerCase()
-        if(normalizedVersionStr == "project_version" && projectVersionFile && projectVersionFile.exists()) {
-            def versionLine = projectVersionFile.readLines().find {
-                if(!it.trim().empty) {
-                    def parts = it.trim().split(":")
-                    def normalizedKey = parts[0].trim()
-                    return normalizedKey == "m_EditorVersion"
-                }
-                return false
-            }
-            return versionLine.split(":")[1].trim()
+        if(normalizedVersionStr == "project_version" && unityVersionFile) {
+            return unityVersionFile.editorVersion
         }
         return versionStr
     }

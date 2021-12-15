@@ -147,6 +147,15 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
         def configMap = [unityVersions: versions, wdkSetupStashId: setupStash]
+        and: "set up project version file"
+        if(fileProjectVersion != null) {
+            def projectVersionFile = new File("test/resources/ProjectVersion.txt")
+            projectVersionFile.delete()
+            projectVersionFile << """m_EditorVersion: ${fileProjectVersion}
+            m_EditorVersionWithRevision: ${fileProjectVersion} (ca5b14067cec)
+    """
+            projectVersionFile.deleteOnExit()
+        }
         and: "stashed setup data"
         jenkinsStash[setupStash] = [:]
         and: "wired checkout call"
@@ -164,7 +173,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "check steps names are in the `check Unity-#version` format"
         checkSteps.collect {
             it -> it.key.replace("check Unity-", "").trim()
-        } == versions
+        } == versions.collect { it.replace("project_version", fileProjectVersion?:"") }
 
         and: "code checkouted in the right dir"
         calls["checkout"].length == versions.size()
@@ -193,9 +202,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         calls["cleanWs"].length == versions.size()
 
         where:
-        versions         | releaseType | releaseScope | setupStash
-        ["2019"]         | "type"      | "scope"      | "setup_w"
-        ["2019", "2020"] | "other "    | "others"     | "stash"
+        versions                    | releaseType | releaseScope | setupStash   | fileProjectVersion
+        ["2019"]                    | "type"      | "scope"      | "setup_w"    | null
+        ["2019", "2020"]            | "other "    | "others"     | "stash"      | null
+        ["2019", "2020"]            | "other "    | "others"     | "stash"      | "2022"
+        ["project_version", "2020"] | "other "    | "others"     | "stash"      | "2022"
     }
 
     @Unroll("executes finally steps on check #throwsException for #versions")

@@ -98,8 +98,9 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("cleanWs") {}
             registerAllowedMethod("checkout", [String]) {}
             registerAllowedMethod("publishHTML", [HashMap]) {}
-            registerAllowedMethod("fileExists", [String]) {String path -> new File(path).exists() }
-            registerAllowedMethod("readFile", [String]) {String path -> new File(path).text }
+            registerAllowedMethod("fileExists", [String]) { String path -> new File(path).exists() }
+            registerAllowedMethod("readFile", [String]) { String path -> new File(path).text }
+            registerAllowedMethod("findFiles", [Map]) { Map args -> new FakeJenkinsObject().findFiles(args) }
             registerAllowedMethod("usernamePassword", [Map], credentials.&usernamePassword)
             registerAllowedMethod("usernameColonPassword", [Map], credentials.&usernameColonPassword)
             //TODO: make this generate KEY_USR and KEY_PWD environment
