@@ -20,15 +20,38 @@ class BuildVersionSpec extends Specification {
         where:
         obj                                                                 | expected
         new BuildVersion("2021", true, "a")                                 | new BuildVersion("2021", true, "a")
-        { -> new BuildVersion("2021", true, "a") }                          | new BuildVersion("2021", true, "a")
+                { -> new BuildVersion("2021", true, "a") } | new BuildVersion("2021", true, "a")
         "2020"                                                              | new BuildVersion("2020", false, null)
-        { -> "2020" }                                                       | new BuildVersion("2020", false, null)
+                { -> "2020" } | new BuildVersion("2020", false, null)
         [version: "2019"]                                                   | new BuildVersion("2019", false, null)
-        { -> [version: "2019"] }                                            | new BuildVersion("2019", false, null)
+                { -> [version: "2019"] } | new BuildVersion("2019", false, null)
         [version: "2019", optional: true]                                   | new BuildVersion("2019", true, null)
         [version: "2019", apiCompatibilityLevel: "net_4_6"]                 | new BuildVersion("2019", false, "net_4_6")
         [version: "2019", optional: true, apiCompatibilityLevel: "net_4_6"] | new BuildVersion("2019", true, "net_4_6")
     }
+
+    @Unroll("parses buildVersion #obj with version from ProjectVersion txt file")
+    def "parses buildVersion with version from ProjectVersion txt file"() {
+        given: "a valid ProjectVersion.txt file"
+        def projectVersionFile = new File("ProjectVersion.txt")
+        projectVersionFile << """m_EditorVersion: ${projectVersion}
+m_EditorVersionWithRevision: ${projectVersion} (ca5b14067cec)
+"""
+        projectVersionFile.deleteOnExit()
+        when:
+        def buildVersion = BuildVersion.parse(obj, projectVersionFile)
+        then:
+        buildVersion.version == expected.version
+        buildVersion.optional == expected.optional
+        buildVersion.apiCompatibilityLevel == expected.apiCompatibilityLevel
+        where:
+        obj                                                                            | projectVersion | expected
+        "project_version"                                                              | "2020.2.1f"    | new BuildVersion("2020.2.1f", false, null)
+        new BuildVersion("project_version", true, "a")                                 | "2020.2.1f"    | new BuildVersion("2020.2.1f", true, "a")
+        [version: "project_version", optional: true, apiCompatibilityLevel: "net_4_6"] | "2020.2.1f"    | new BuildVersion("2020.2.1f", true, "net_4_6")
+        [version: "project_version"]                                                   | "2020.2.1f"    | new BuildVersion("2020.2.1f", false, null)
+    }
+
 
     @Unroll("fails to parse #obj into buildVersion if no version source is provided")
     def "fails to parse buildVersion if no version source is provided"() {
@@ -39,9 +62,9 @@ class BuildVersionSpec extends Specification {
         def e = thrown(IllegalArgumentException)
         e.message == message
         where:
-        obj             | message
-        [optional:true] | "Entry ${obj} does not contain version"
-        null            | "Entry cannot be null"
+        obj              | message
+        [optional: true] | "Entry ${obj} does not contain version"
+        null             | "Entry cannot be null"
     }
 
     @Unroll

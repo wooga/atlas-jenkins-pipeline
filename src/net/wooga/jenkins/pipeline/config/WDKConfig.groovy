@@ -3,14 +3,32 @@ package net.wooga.jenkins.pipeline.config
 import net.wooga.jenkins.pipeline.BuildVersion
 import net.wooga.jenkins.pipeline.PipelineTools
 
+import java.nio.file.Files
+import java.nio.file.Paths
+
 class WDKConfig implements PipelineConfig {
+
+    private static File searchFile(String baseDir, String fileName) {
+        def walkStream = Files.walk(Paths.get(baseDir))
+        try {
+            return walkStream.
+                    filter{ p -> p.toFile().isFile() }.
+                    filter{ f -> f.toString().endsWith(fileName) }.
+                    findFirst().map{it.toFile() }.orElse(null);
+        } finally {
+            walkStream.close()
+        }
+    }
 
     static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
         def unityVerObjs = configMap.unityVersions as List
+        def projectVersionFile = configMap.projectVersionFile ?
+                                        new File(configMap.projectVersionFile as String) :
+                                        searchFile(".", "ProjectVersion.txt")
         def index = 0
         def unityVersions = unityVerObjs.collect { Object unityVersionObj ->
-            def buildVersion = BuildVersion.parse(unityVersionObj)
+            def buildVersion = BuildVersion.parse(unityVersionObj, projectVersionFile)
             def platform = Platform.forWDK(buildVersion, buildLabel, configMap, index == 0)
             index++
             return new UnityVersionPlatform(platform, buildVersion)
