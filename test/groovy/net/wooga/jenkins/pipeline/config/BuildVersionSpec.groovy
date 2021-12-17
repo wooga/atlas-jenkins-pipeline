@@ -30,32 +30,6 @@ class BuildVersionSpec extends Specification {
         [version: "2019", optional: true, apiCompatibilityLevel: "net_4_6"] | new BuildVersion("2019", true, "net_4_6")
     }
 
-    @Unroll("parses buildVersion #obj with version from ProjectVersion txt file")
-    def "parses buildVersion with version from ProjectVersion txt file"() {
-        given: "a valid ProjectVersion.txt file"
-        def projectVersionFile = new File("test/resources/ProjectVersion.txt")
-        projectVersionFile.delete()
-        projectVersionFile << """m_EditorVersion: ${projectVersion}
-m_EditorVersionWithRevision: ${projectVersion} (ca5b14067cec)
-"""
-        projectVersionFile.deleteOnExit()
-        and: "A unity version file object"
-        def unityVersionFile = new UnityVersionFile(projectVersionFile.path, projectVersionFile.text)
-        when:
-        def buildVersion = BuildVersion.parse(obj, unityVersionFile)
-        then:
-        buildVersion.version == expected.version
-        buildVersion.optional == expected.optional
-        buildVersion.apiCompatibilityLevel == expected.apiCompatibilityLevel
-        where:
-        obj                                                                            | projectVersion | expected
-        "project_version"                                                              | "2020.2.1f"    | new BuildVersion("2020.2.1f", false, null)
-        new BuildVersion("project_version", true, "a")                                 | "2020.2.1f"    | new BuildVersion("2020.2.1f", true, "a")
-        [version: "project_version", optional: true, apiCompatibilityLevel: "net_4_6"] | "2020.2.1f"    | new BuildVersion("2020.2.1f", true, "net_4_6")
-        [version: "project_version"]                                                   | "2020.2.1f"    | new BuildVersion("2020.2.1f", false, null)
-    }
-
-
     @Unroll("fails to parse #obj into buildVersion if no version source is provided")
     def "fails to parse buildVersion if no version source is provided"() {
         given: "a non-parseable object"

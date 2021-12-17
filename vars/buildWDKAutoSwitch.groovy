@@ -141,7 +141,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
           script {
             def applicationsHome = env.APPLICATIONS_HOME?: ""
             def unityExecPackagePath = env.UNITY_EXEC_PACKAGE_PATH?: ""
-            def unityPath = "${applicationsHome}/${config.unityVersions[0].stepLabel}/${unityExecPackagePath}"
+            def unityPath = "${applicationsHome}/${config.unityVersions[0].stepDescription}/${unityExecPackagePath}"
 
             def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
             publisher.unityArtifactoryPaket(unityPath, 'artifactory_publish')

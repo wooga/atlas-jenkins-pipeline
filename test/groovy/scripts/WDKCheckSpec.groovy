@@ -147,15 +147,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
         def configMap = [unityVersions: versions, wdkSetupStashId: setupStash]
-        and: "set up project version file"
-        if(fileProjectVersion != null) {
-            def projectVersionFile = new File("test/resources/ProjectVersion.txt")
-            projectVersionFile.delete()
-            projectVersionFile << """m_EditorVersion: ${fileProjectVersion}
-            m_EditorVersionWithRevision: ${fileProjectVersion} (ca5b14067cec)
-    """
-            projectVersionFile.deleteOnExit()
-        }
         and: "stashed setup data"
         jenkinsStash[setupStash] = [:]
         and: "wired checkout call"
@@ -173,7 +164,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "check steps names are in the `check Unity-#version` format"
         checkSteps.collect {
             it -> it.key.replace("check Unity-", "").trim()
-        } == versions.collect { it.replace("project_version", fileProjectVersion?:"") }
+        } == versions
 
         and: "code checkouted in the right dir"
         calls["checkout"].length == versions.size()
@@ -202,11 +193,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         calls["cleanWs"].length == versions.size()
 
         where:
-        versions                    | releaseType | releaseScope | setupStash   | fileProjectVersion
-        ["2019"]                    | "type"      | "scope"      | "setup_w"    | null
-        ["2019", "2020"]            | "other "    | "others"     | "stash"      | null
-        ["2019", "2020"]            | "other "    | "others"     | "stash"      | "2022"
-        ["project_version", "2020"] | "other "    | "others"     | "stash"      | "2022"
+        versions                    | releaseType | releaseScope | setupStash
+        ["2019"]                    | "type"      | "scope"      | "setup_w"
+        ["2019", "2020"]            | "other "    | "others"     | "stash"
+        ["2019", "2020"]            | "other "    | "others"     | "stash"
+        ["project_version", "2020"] | "other "    | "others"     | "stash"
     }
 
     @Unroll("executes finally steps on check #throwsException for #versions")
@@ -324,7 +315,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "test step ran for all platforms"
         checkEnvMap.every { platEnv ->
             platEnv.value["TRAVIS_JOB_NUMBER"] == "1.${platEnv.key.toUpperCase()}" &&
-                    platEnv.value["UVM_UNITY_VERSION"] == platEnv.key &&
+                    (platEnv.value["UVM_UNITY_VERSION"] == platEnv.key || platEnv.key == "platform_version") &&
                     platEnv.value["UNITY_LOG_CATEGORY"] == "check-${platEnv.key}"
         }
         expectedInEnvironment.every { expPlatEnv ->
@@ -337,11 +328,12 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         actualAnalysisPlatEnv.entrySet().containsAll(expectedInEnvironment[firstPlat].entrySet())
 
         where:
-        versions         | testEnvironment          | expectedInEnvironment
-        ["2019"]         | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"]]
-        ["2019"]         | ["2019": ["a=b", "c=d"]] | ["2019": [a: "b", c: "d"]]
-        ["2019", "2020"] | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"], "2020": [a: "b", c: "d"]]
-        ["2019", "2020"] | ["2020": ["a=b", "c=d"]] | ["2019": [:], "2020": [a: "b", c: "d"]]
+        versions             | testEnvironment          | expectedInEnvironment
+        ["platform_version"] | ["a=b", "c=d"]           | ["platform_version": [a: "b", c: "d"]]
+        ["2019"]             | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"]]
+        ["2019"]             | ["2019": ["a=b", "c=d"]] | ["2019": [a: "b", c: "d"]]
+        ["2019", "2020"]     | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"], "2020": [a: "b", c: "d"]]
+        ["2019", "2020"]     | ["2020": ["a=b", "c=d"]] | ["2019": [:], "2020": [a: "b", c: "d"]]
     }
 
     def "applies convention to wdk check"() {

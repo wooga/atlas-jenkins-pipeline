@@ -15,7 +15,7 @@ class UnityVersionPlatform {
         return buildVersion.version
     }
 
-    String getStepLabel() {
+    String getStepDescription() {
         return "Unity-${buildVersion.toLabel()}"
     }
 
