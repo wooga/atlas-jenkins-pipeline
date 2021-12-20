@@ -315,7 +315,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "test step ran for all platforms"
         checkEnvMap.every { platEnv ->
             platEnv.value["TRAVIS_JOB_NUMBER"] == "1.${platEnv.key.toUpperCase()}" &&
-                    (platEnv.value["UVM_UNITY_VERSION"] == platEnv.key || platEnv.key == "platform_version") &&
+                    (platEnv.value["UVM_UNITY_VERSION"] == platEnv.key || platEnv.key == "project_version") &&
                     platEnv.value["UNITY_LOG_CATEGORY"] == "check-${platEnv.key}"
         }
         expectedInEnvironment.every { expPlatEnv ->
@@ -328,12 +328,12 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         actualAnalysisPlatEnv.entrySet().containsAll(expectedInEnvironment[firstPlat].entrySet())
 
         where:
-        versions             | testEnvironment          | expectedInEnvironment
-        ["platform_version"] | ["a=b", "c=d"]           | ["platform_version": [a: "b", c: "d"]]
-        ["2019"]             | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"]]
-        ["2019"]             | ["2019": ["a=b", "c=d"]] | ["2019": [a: "b", c: "d"]]
-        ["2019", "2020"]     | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"], "2020": [a: "b", c: "d"]]
-        ["2019", "2020"]     | ["2020": ["a=b", "c=d"]] | ["2019": [:], "2020": [a: "b", c: "d"]]
+        versions            | testEnvironment          | expectedInEnvironment
+        ["project_version"] | ["a=b", "c=d"]           | ["project_version": [a: "b", c: "d"]]
+        ["2019"]            | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"]]
+        ["2019"]            | ["2019": ["a=b", "c=d"]] | ["2019": [a: "b", c: "d"]]
+        ["2019", "2020"]    | ["a=b", "c=d"]           | ["2019": [a: "b", c: "d"], "2020": [a: "b", c: "d"]]
+        ["2019", "2020"]    | ["2020": ["a=b", "c=d"]] | ["2019": [:], "2020": [a: "b", c: "d"]]
     }
 
     def "applies convention to wdk check"() {

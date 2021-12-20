@@ -110,8 +110,8 @@ class PlatformSpec extends Specification {
     }
 
     def "creates platform without version environment if build version is set to be found automatically"() {
-        given: "build version with 'platform_version' version label"
-        def autoBuildVer = buildVersion("platform_version")
+        given: "build version with 'project_version' version label"
+        def autoBuildVer = buildVersion("project_version")
 
         and: "config with other test environments"
         def config = [testEnvironment: ["env=a", "env2=b"]]
@@ -121,7 +121,7 @@ class PlatformSpec extends Specification {
 
         then: "created platform doesn't have the UVM_UNITY_VERSION environment"
         platform.testEnvironment.find{it.trim().startsWith("UVM_UNITY_VERSION=")} == null
-        platform.testEnvironment == config.testEnvironment + ["UNITY_LOG_CATEGORY=check-platform_version"]
+        platform.testEnvironment == config.testEnvironment + ["UNITY_LOG_CATEGORY=check-project_version"]
     }
 
 

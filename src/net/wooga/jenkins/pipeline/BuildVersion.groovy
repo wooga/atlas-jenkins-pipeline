@@ -4,7 +4,7 @@ import com.cloudbees.groovy.cps.NonCPS
 
 class BuildVersion {
 
-    static final String AUTO_UNITY_VERSION = "platform_version"
+    static final String AUTO_UNITY_VERSION = "project_version"
 
     /**
      * For each entry in a versions map, if they are not in the standard format
