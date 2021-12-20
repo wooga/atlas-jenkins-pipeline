@@ -81,8 +81,8 @@ class BuildVersion {
         return result
     }
 
-    boolean isAutoVersion() {
-        return version == AUTO_UNITY_VERSION
+    boolean hasVersion() {
+        return version != AUTO_UNITY_VERSION
     }
 
     boolean equals(o) {
