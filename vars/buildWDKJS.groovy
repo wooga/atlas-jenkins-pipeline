@@ -22,6 +22,7 @@ def call(Map config = [platforms:['osx'], testEnvironment:[], coverallsToken:nul
         parameters {
             choice(choices: ["snapshot", "candidate", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
             choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+            choice(choices: ["info", "quiet", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
             booleanParam( defaultValue: false, description: 'Build & Publish Artifacts', name: 'BUILD_ARTIFACTS')
         }
 
