@@ -32,12 +32,22 @@ class WDKChecks {
         }
     }
 
-    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope,
-                                     String setupStashId = "setup_w",
-                                     PipelineConventions conventions = PipelineConventions.standard) {
-        def testStep = getWDKTestStep(releaseType, releaseScope, setupStashId, conventions.checkTask)
-        def analysisStep = getWDKAnalysisStep(config, conventions.wdkCoberturaFile, new Sonarqube(conventions.sonarqubeTask))
-        return parallel(config.unityVersions, testStep, analysisStep, conventions)
+    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, Closure overrides = {}) {
+        WDKChecksParams params = new WDKChecksParams()
+        Closure cloned = overrides.clone() as Closure
+        cloned.setDelegate(params)
+        cloned(params)
+        return wdkCoverage(config, releaseType, releaseScope, params)
+    }
+
+    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, WDKChecksParams params) {
+        def conventions = params.conventions
+        def baseTestStep = getWDKTestStep(releaseType, releaseScope, params.setupStashId, conventions.checkTask)
+        def baseAnalysisStep = getWDKAnalysisStep(config, conventions.wdkCoberturaFile, params.sonarqubeOrDefault())
+
+        return parallel(config.unityVersions,
+                {versionPlat, gradle -> params.testWrapper(baseTestStep, versionPlat, gradle) },
+                {versionPlat, gradle -> params.analysisWrapper(baseAnalysisStep, versionPlat, gradle) }, conventions)
     }
 
     Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId = "setup_w",

@@ -14,8 +14,8 @@ class Sonarqube {
     void runGradle(Gradle gradle, SonarQubeArgs args, String branchName="") {
         if(args.shouldRunSonarQube()) {
             branchName = branchName == null? "" : branchName
-            gradle.wrapper(task + "-Dsonar.login=${args.token} " +
-                                     "-Pgithub.branch.name=${branchName.trim()}" as String)
+            gradle.wrapper(task + " -Dsonar.login=${args.token}" +
+                                     " -Pgithub.branch.name=${branchName.trim()}" as String)
         }
     }
 }

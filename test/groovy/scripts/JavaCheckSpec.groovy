@@ -238,17 +238,16 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         Map<String, ?> checkSteps = inSandbox {
-            def conventions = check.getConventions {
-                it.checkTask = convCheck
-                it.sonarqubeTask = convSonarqubeTask
-                it.jacocoTask = convJacocoTask
-                it.javaParallelPrefix = convJavaParallelPrefix
-                it.coverallsTask = convCoverallsTask
-                return it
-            }
             def config = check.getConfig(configMap, [BUILD_NUMBER: 1])
             def checks = check(config)
-            Map<String, Closure> checkSteps = checks.javaCoverage(config, conventions)
+            //Closure delegate object -> JavaCheckParams
+            Map<String, Closure> checkSteps = checks.javaCoverage(config) {
+                conventions.checkTask = convCheck
+                conventions.sonarqubeTask = convSonarqubeTask
+                conventions.jacocoTask = convJacocoTask
+                conventions.javaParallelPrefix = convJavaParallelPrefix
+                conventions.coverallsTask = convCoverallsTask
+            }
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -277,6 +276,49 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         where:
         convCheck  | convSonarqubeTask | convCoverallsTask | convJacocoTask | convJavaParallelPrefix
         "otherchk" | "othersq"         | "othercv"         | "otherjc"      | "othercheck"
+    }
+
+    def "wraps check and analysis step on closure wrapper"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with any platforms"
+        def configMap = [platforms: ["linux", "windows"], sonarToken: "token", coverallsToken: "token"]
+
+        when: "running check"
+        def testCount = new AtomicInteger(0)
+        def analysisCount = new AtomicInteger(0)
+        inSandbox {
+            def config = check.getConfig(configMap, [BUILD_NUMBER: 1])
+            def checks = check(config)
+            //Closure delegate object -> JavaCheckParams
+            Map<String, Closure> checkSteps = checks.javaCoverage(config) {
+                testWrapper = { testOp, platform, gradle ->
+                    testCount.incrementAndGet()
+                    testOp(platform, gradle)
+                }
+                analysisWrapper = { analysisOp, platform, gradle ->
+                    analysisCount.incrementAndGet()
+                    analysisOp(platform, gradle)
+                }
+            }
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "wrapper test step ran for all platforms"
+        def platformCount = configMap["platforms"].size()
+        testCount.get() == platformCount
+        and: "inner test step ran for all platforms"
+        calls["sh"].count {
+            def argsString = it.argsToString()
+            argsString.contains("gradlew") && argsString.contains("check")
+        } == platformCount
+        and: "wrapper analysis step ran only once"
+        analysisCount.get() == 1
+        and: "inner analysis step ran only once"
+        calls["sh"].count {
+            def argsString = it.argsToString()
+            argsString.contains("gradlew") && argsString.contains("sonarqube")
+        } == 1
     }
 
     def createTmpFile(String dir = ".", String file) {

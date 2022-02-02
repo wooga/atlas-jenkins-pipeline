@@ -1,8 +1,11 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
+
+import java.util.concurrent.atomic.AtomicInteger
 
 class WDKCheckSpec extends DeclarativeJenkinsSpec {
     private static final String TEST_SCRIPT_PATH = "test/resources/scripts/checkTest.groovy"
@@ -277,7 +280,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def e = thrown(UnknownError)
         e == expectedException
         cleanup:
-        helper.registerAllowedMethod("dir", [String, Closure]) {_, cls -> cls()}
+        helper.registerAllowedMethod("dir", [String, Closure]) { _, cls -> cls() }
         where:
         version << [[version: "2019"]]
 
@@ -339,16 +342,14 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         def checkSteps = inSandbox {
-            def conventions = check.getConventions {
-                it.checkTask = convCheck
-                it.sonarqubeTask = convSonarqube
-                it.wdkCoberturaFile = convWDKCoberturaFile
-                it.wdkParallelPrefix = convWDKParallelPrefix
-                return it
-            }
             def config = check.getConfig(configMap, [BUILD_NUMBER: 1], "label")
             def checks = check(config)
-            Map<String, Closure> checkSteps = checks.wdkCoverage(config, "releaseType", "releaseScope", "stashKey", conventions)
+            Map<String, Closure> checkSteps = checks.wdkCoverage(config, "releaseType", "releaseScope") {
+                conventions.checkTask = convCheck
+                conventions.sonarqubeTask = convSonarqube
+                conventions.wdkCoberturaFile = convWDKCoberturaFile
+                conventions.wdkParallelPrefix = convWDKParallelPrefix
+            }
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -369,7 +370,47 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         }
 
         where:
-        convCheck | convSonarqube | convWDKCoberturaFile | convWDKParallelPrefix
-        "otherchk"   | "othersonar"  | "otherCobertura"     | "otherprefix"
+        convCheck  | convSonarqube | convWDKCoberturaFile | convWDKParallelPrefix
+        "otherchk" | "othersonar"  | "otherCobertura"     | "otherprefix"
+    }
+
+    def "wraps check and analysis step on closure wrapper"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with given platforms"
+        def configMap = [unityVersions: ["any", "other"]]
+        and: "stashed setup data"
+        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+
+//        given: "loaded check in a running jenkins build"
+//        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+//        and: "configuration object with any platforms"
+//        def configMap = [platforms: ["linux", "windows"], sonarToken: "token", coverallsToken: "token"]
+
+        when: "running check"
+        def testCount = new AtomicInteger(0)
+        def analysisCount = new AtomicInteger(0)
+        inSandbox {
+            def config = check.getConfig(configMap, [BUILD_NUMBER: 1], "label")
+            def checks = check(config)
+            //Closure delegate object -> JavaCheckParams
+            Map<String, Closure> checkSteps = checks.wdkCoverage(config, "releaseType", "releaseScope") {
+                testWrapper = { testOp, unityPlatform, gradle ->
+                    testCount.incrementAndGet()
+                    testOp(unityPlatform, gradle)
+                }
+                analysisWrapper = { analysisOp, unityPlatform, gradle ->
+                    analysisCount.incrementAndGet()
+                    analysisOp(unityPlatform, gradle)
+                }
+            }
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "wrapper test step ran for all platforms"
+        def platformCount = configMap["unityVersions"].size()
+        testCount.get() == platformCount
+        and: "wrapper analysis step ran only once"
+        analysisCount.get() == 1
     }
 }
