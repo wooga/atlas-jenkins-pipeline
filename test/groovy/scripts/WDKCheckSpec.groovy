@@ -1,7 +1,7 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
-import net.wooga.jenkins.pipeline.config.PipelineConventions
+import net.wooga.jenkins.pipeline.check.WDKChecksParams
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -21,12 +21,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         helper.registerAllowedMethod("sourceFiles", [String]) { it -> it }
         helper.registerAllowedMethod("publishCoverage", [Map]) { it -> it }
         and: "stashed setup data"
-        def stashKey = "setup_w"
-        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running gradle pipeline with coverage token"
         inSandbox {
-            check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", stashKey).each { it.value() }
+            check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any").each { it.value() }
         }
 
         then: "jenkins coverage plugins are called"
@@ -52,12 +51,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [unityVersions: "2019", sonarToken: sonarToken]
 
         and: "stashed setup data"
-        def stashKey = "setup_w"
-        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", stashKey)
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -84,12 +82,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def config = [unityVersions: "2019"]
 
         and: "stashed setup data"
-        def stashKey = "setup_w"
-        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check without sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any", stashKey)
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -115,12 +112,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [unityVersions: "2019", sonarToken: "sonarToken"]
 
         and: "stashed setup data"
-        def stashKey = "setup_w"
-        jenkinsStash[stashKey] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, jenkinsMeta, "any", "any", stashKey)
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, jenkinsMeta, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -148,11 +144,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with given platforms"
         def configMap = [unityVersions: versions]
         and: "stashed setup data"
-        jenkinsStash[setupStashId] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        jenkinsStash[setupStash] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running check"
         def checkSteps = inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], releaseType, releaseScope, setupStashId)
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], releaseType, releaseScope, {
+                it.setupStashId = setupStash
+            })
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -163,12 +161,12 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         } == versions
 
         and: "working dir changed to version directory"
-        calls["dir"].length == versions.size() + 1 //one for each check, plus one for single analysis step
+        calls["dir"].length == versions.size()
         calls["dir"].eachWithIndex { it, i -> it.args[0] == versions[i] }
 
         and: "code checkouted, setup unstashed"
         calls["checkout"].length == versions.size()
-        calls["unstash"].count { it.args[0] == setupStashId } == versions.size()
+        calls["unstash"].count { it.args[0] == setupStash } == versions.size()
 
         and: "gradle check was called"
         calls["sh"].count {
@@ -188,7 +186,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         calls["cleanWs"].length == versions.size()
 
         where:
-        versions         | releaseType | releaseScope | setupStashId
+        versions         | releaseType | releaseScope | setupStash
         ["2019"]         | "type"      | "scope"      | "setup_w"
         ["2019", "2020"] | "other "    | "others"     | "stash"
     }
@@ -206,7 +204,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any")
             checkSteps.each {
                 try {
                     it.value.call()
@@ -246,7 +244,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -260,7 +258,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         version << [[version: "2019", optional: true]]
     }
 
-
     def "non-optional version throws Exception on failure"() {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
@@ -272,15 +269,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any", "setup_w")
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, [BUILD_NUMBER: 1], "any", "any")
             checkSteps.each { it.value.call() }
         }
 
         then:
         def e = thrown(UnknownError)
         e == expectedException
-        cleanup:
-        helper.registerAllowedMethod("dir", [String, Closure]) { _, cls -> cls() }
         where:
         version << [[version: "2019"]]
 
@@ -298,11 +293,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         inSandbox { _ ->
             Map<String, Closure> steps = check.simpleWDK("label", configMap, [BUILD_NUMBER: 1],
-                    { uPlat, __ ->
-                        binding.env.every { checkEnvMap[uPlat.platform.name][it.key] = it.value }
+                    { platform, __ ->
+                        binding.env.every { checkEnvMap[platform.name][it.key] = it.value }
                     },
-                    { uPlat, __ ->
-                        binding.env.every { analysisEnvMap[uPlat.platform.name][it.key] = it.value }
+                    { platform, __ ->
+                        binding.env.every { analysisEnvMap[platform.name][it.key] = it.value }
                     }
             )
             steps.each { it.value.call() }
@@ -382,11 +377,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "stashed setup data"
         jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
-//        given: "loaded check in a running jenkins build"
-//        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-//        and: "configuration object with any platforms"
-//        def configMap = [platforms: ["linux", "windows"], sonarToken: "token", coverallsToken: "token"]
-
         when: "running check"
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
@@ -412,5 +402,42 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         testCount.get() == platformCount
         and: "wrapper analysis step ran only once"
         analysisCount.get() == 1
+    }
+
+    @Unroll("runs test and analysis step on #checkDir overriding version-derived dir name")
+    def "runs test and analysis step on given checkDir overriding version-derived dir name"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with any platforms"
+        def configMap = [unityVersions: ["2019"], checkDir: checkDir]
+        and: "stashed setup"
+        jenkinsStash["setup_w"] = [:]
+
+
+        when: "running check"
+        def stepsDirs = []
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, [BUILD_NUMBER: 1], "any", "any") {
+                testWrapper = { testOp, platform, gradle ->
+                    stepsDirs.add(this.currentDir)
+                    testOp(platform, gradle)
+                }
+                analysisWrapper = { analysisOp, platform, gradle ->
+                    stepsDirs.add(this.currentDir)
+                    analysisOp(platform, gradle)
+                }
+            }
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "steps ran on given directory"
+        //checks steps + 1 analysis step
+        stepsDirs.size() == configMap.unityVersions.size() + 1
+        stepsDirs.every {it == checkDir}
+
+        where:
+        checkDir << [".", "dir", "dir/subdir"]
+
+
     }
 }

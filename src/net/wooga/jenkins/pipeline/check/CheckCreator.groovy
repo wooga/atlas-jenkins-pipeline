@@ -13,10 +13,9 @@ class CheckCreator {
     }
 
     Closure javaChecks(Platform platform, Closure testStep, Closure analysisStep) {
-        def mainClosure = basicCheckStructure(platform, {
-            testStep.call(platform)
-        },
-                                            { analysisStep(platform) })
+        def mainClosure = createCheck(platform,
+                { testStep.call(platform) },
+                { analysisStep(platform) })
         def catchClosure = {throw it}
         def finallyClosure = {
             jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
@@ -30,8 +29,8 @@ class CheckCreator {
     }
 
     Closure csWDKChecks(UnityVersionPlatform versionBuild, Closure testStep, Closure analysisStep) {
-        def mainClosure = basicCheckStructure(versionBuild.platform,
-                            {testStep(versionBuild)}, {analysisStep(versionBuild)})
+        def mainClosure = createCheck(versionBuild.platform,
+                            {testStep(versionBuild.platform)}, {analysisStep(versionBuild.platform)})
         def catchClosure = { Throwable e ->
             if (versionBuild.optional) {
                 jenkins.unstable(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
@@ -50,11 +49,14 @@ class CheckCreator {
         return checkStep
     }
 
-    protected Closure basicCheckStructure(Platform platform, Closure testStep, Closure analysisStep) {
+    protected Closure createCheck(Platform platform, Closure testStep, Closure analysisStep) {
         return {
-            testStep()
-            if (platform.isMain()) {
-                analysisStep()
+            jenkins.checkout(jenkins.scm)
+            jenkins.dir(platform.directory) {
+                testStep()
+                if (platform.isMain()) {
+                    analysisStep()
+                }
             }
         }
     }

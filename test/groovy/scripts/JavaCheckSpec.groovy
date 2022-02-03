@@ -278,7 +278,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         "otherchk" | "othersq"         | "othercv"         | "otherjc"      | "othercheck"
     }
 
-    def "wraps check and analysis step on closure wrapper"() {
+    def "wraps test and analysis step on closure wrapper"() {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms"
@@ -319,6 +319,40 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
             def argsString = it.argsToString()
             argsString.contains("gradlew") && argsString.contains("sonarqube")
         } == 1
+    }
+
+    @Unroll("runs test and analysis step on #checkDir")
+    def "runs test and analysis step on given checkDir"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with any platforms"
+        def configMap = [platforms: ["linux"], checkDir: checkDir]
+
+        when: "running check"
+        def stepsDirs = []
+        inSandbox {
+            Map<String, Closure> checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1]) {
+                testWrapper = { testOp, platform, gradle ->
+                    stepsDirs.add(this.currentDir)
+                    testOp(platform, gradle)
+                }
+                analysisWrapper = { analysisOp, platform, gradle ->
+                    stepsDirs.add(this.currentDir)
+                    analysisOp(platform, gradle)
+                }
+            }
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "steps ran on given directory"
+        //checks steps + 1 analysis step
+        stepsDirs.size() == configMap.platforms.size() + 1
+        stepsDirs.every {it == checkDir}
+
+
+        where:
+        checkDir << [".", "dir", "dir/subdir"]
+
     }
 
     def createTmpFile(String dir = ".", String file) {

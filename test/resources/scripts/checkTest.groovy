@@ -7,17 +7,15 @@ import net.wooga.jenkins.pipeline.config.PipelineConfig
 import net.wooga.jenkins.pipeline.config.WDKConfig
 import net.wooga.jenkins.pipeline.config.PipelineConventions
 
-def javaCoverage(Map configMap, Map jenkinsVars) {
+def javaCoverage(Map configMap, Map jenkinsVars, Closure overrides = {}) {
     def config = JavaConfig.fromConfigMap(configMap, jenkinsVars)
-    return Checks.forJavaPipelines(this, config).javaCoverage(config)
+    return Checks.forJavaPipelines(this, config).javaCoverage(config, overrides)
 }
 
-def wdkCoverage(String buildLabel, Map configMap, Map jenkinsVars, String releaseType, String releaseScope, String stashKey) {
+def wdkCoverage(String buildLabel, Map configMap, Map jenkinsVars, String releaseType, String releaseScope, Closure overrides={}) {
     def config = WDKConfig.fromConfigMap(buildLabel, configMap, jenkinsVars)
     def check = Checks.forWDKPipelines(this, config)
-    return check.wdkCoverage(config, releaseType, releaseScope) { WDKChecksParams it ->
-        it.setupStashId = stashKey
-    }
+    return check.wdkCoverage(config, releaseType, releaseScope, overrides)
 }
 
 def parallel(Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisCls) {

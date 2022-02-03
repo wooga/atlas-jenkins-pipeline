@@ -54,8 +54,7 @@ class JavaChecks {
     }
 
     Closure defaultJavaTestStep(String checkTask = PipelineConventions.standard.checkTask) {
-        return { Platform _, Gradle gradle ->
-            jenkins.checkout(jenkins.scm)
+        return { Platform plat, Gradle gradle ->
             gradle.wrapper(checkTask)
         }
     }
@@ -64,7 +63,7 @@ class JavaChecks {
                                     String jacocoTask = PipelineConventions.standard.jacocoTask,
                                     Sonarqube sonarqube = new Sonarqube(PipelineConventions.standard.sonarqubeTask),
                                     Coveralls coveralls = new Coveralls(jenkins, PipelineConventions.standard.coverallsTask)) {
-        return { Platform _, Gradle gradle ->
+        return { Platform plat, Gradle gradle ->
             def branchName = config.metadata.isPR() ? null : config.metadata.branchName
             gradle.wrapper(jacocoTask)
             sonarqube.runGradle(gradle, config.sonarArgs, branchName)

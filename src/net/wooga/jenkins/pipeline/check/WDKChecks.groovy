@@ -52,23 +52,18 @@ class WDKChecks {
 
     Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId = "setup_w",
                            String checkTask = PipelineConventions.standard.checkTask) {
-        return { UnityVersionPlatform versionPlat, Gradle gradle ->
-            jenkins.dir(versionPlat.directoryName) {
-                jenkins.checkout(jenkins.scm)
-                jenkins.unstash setupStashId
-                gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} ${checkTask}")
-            }
+        return { Platform platform, Gradle gradle ->
+            jenkins.unstash setupStashId
+            gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} ${checkTask}")
         }
     }
 
     Closure getWDKAnalysisStep(WDKConfig config,
                                String wdkCoberturaFile = PipelineConventions.standard.wdkCoberturaFile,
                                Sonarqube sonarqube = new Sonarqube(PipelineConventions.standard.sonarqubeTask)) {
-        return { UnityVersionPlatform versionPlat, Gradle gradle ->
-            jenkins.dir(versionPlat.directoryName) {
-                def branchName = config.metadata.isPR() ? null : config.metadata.branchName
-                sonarqube.runGradle(gradle, config.sonarArgs, branchName)
-            }
+        return { Platform platform, Gradle gradle ->
+            def branchName = config.metadata.isPR() ? null : config.metadata.branchName
+            sonarqube.runGradle(gradle, config.sonarArgs, branchName)
             def coberturaAdapter = jenkins.istanbulCoberturaAdapter(wdkCoberturaFile)
             jenkins.publishCoverage adapters: [coberturaAdapter],
                     sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
