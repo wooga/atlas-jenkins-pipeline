@@ -1,5 +1,7 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.check.steps.GradleSteps
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.*
 import net.wooga.jenkins.pipeline.model.Gradle
 
@@ -39,7 +41,7 @@ class WDKChecks {
     Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Step checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
-            [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep.asRunnable(wdkPlatform.platform)]
+            [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep.pack(wdkPlatform.platform)]
         }
     }
 

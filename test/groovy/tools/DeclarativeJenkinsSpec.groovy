@@ -148,6 +148,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         varBindingOps(binding.variables)
         if(reloadSideScripts) {
             registerSideScript("vars/javaLibCheck.groovy", binding)
+            registerSideScript("vars/javaLibs.groovy", binding)
             registerSideScript("vars/publish.groovy", binding)
         }
         return helper.loadSandboxedScript(path, binding)

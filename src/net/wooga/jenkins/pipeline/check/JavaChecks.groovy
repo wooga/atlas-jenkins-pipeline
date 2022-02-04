@@ -1,5 +1,7 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.check.steps.GradleSteps
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.*
 
 class JavaChecks {
@@ -26,7 +28,7 @@ class JavaChecks {
     Map<String, Closure> parallel(Platform[] platforms, Step checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return platforms.collectEntries { platform ->
-            [("${conventions.javaParallelPrefix}${platform.name}".toString()): checkStep.asRunnable(platform)]
+            [("${conventions.javaParallelPrefix}${platform.name}".toString()): checkStep.pack(platform)]
         }
     }
 
