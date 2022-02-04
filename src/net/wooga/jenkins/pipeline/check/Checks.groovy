@@ -8,6 +8,7 @@ class Checks {
     Object jenkins
     Docker docker
     Gradle gradle
+    GradleSteps steps
     EnclosureCreator enclosureCreator
     Enclosures enclosures
     CheckCreator checkCreator
@@ -18,25 +19,27 @@ class Checks {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
         def enclosures = new Enclosures(docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
+        def steps = GradleSteps.fromJenkins(jenkinsScript, gradle)
 
-        return new Checks(jenkinsScript, docker, gradle, enclosureCreator, enclosures, checkCreator)
+        return new Checks(jenkinsScript, docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
     }
 
-    private Checks(Object jenkins, Docker docker, Gradle gradle, EnclosureCreator enclosureCreator,
+    private Checks(Object jenkins, Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
            Enclosures enclosures, CheckCreator checkCreator) {
         this.jenkins = jenkins
         this.docker = docker
         this.gradle = gradle
+        this.steps = steps
         this.enclosureCreator = enclosureCreator
         this.enclosures = enclosures
         this.checkCreator = checkCreator
     }
 
     JavaChecks forJavaPipelines() {
-        return new JavaChecks(jenkins, checkCreator, gradle)
+        return new JavaChecks(jenkins, checkCreator, steps)
     }
 
     WDKChecks forWDKPipelines() {
-        return new WDKChecks(jenkins, checkCreator, gradle)
+        return new WDKChecks(jenkins, checkCreator, steps)
     }
 }

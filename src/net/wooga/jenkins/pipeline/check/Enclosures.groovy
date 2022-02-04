@@ -5,6 +5,8 @@ import net.wooga.jenkins.pipeline.config.DockerArgs
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.model.Docker
 
+import java.util.function.Consumer
+
 class Enclosures {
 
     private Docker docker
@@ -15,13 +17,13 @@ class Enclosures {
         this.enclosureCreator = enclosureCreator
     }
 
-    def withDocker(Platform platform, Closure mainCls, Closure catchCls = {throw it}, Closure finallyCls = {}) {
+    def withDocker(Platform platform, Runnable mainCls, Closure catchCls = {throw it}, Runnable finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform, {
             docker.runOnImage(mainCls)
         }, catchCls, finallyCls)
     }
 
-    def simple(Platform platform, Closure mainClosure, Closure catchCls = {throw it}, Closure finallyCls = {}) {
+    def simple(Platform platform, Runnable mainClosure,Closure catchCls = {throw it}, Runnable finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform, mainClosure, catchCls, finallyCls)
     }
 }
