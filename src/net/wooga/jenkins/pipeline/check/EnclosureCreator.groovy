@@ -2,6 +2,8 @@ package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.config.Platform
 
+import java.util.function.Consumer
+
 class EnclosureCreator {
 
     final Object jenkins
@@ -12,7 +14,7 @@ class EnclosureCreator {
         this.buildNumber = buildNumber
     }
 
-    Closure withNodeAndEnv(Platform platform, Closure mainCls, Closure catchCls, Closure finallyCls) {
+    Closure withNodeAndEnv(Platform platform, Runnable mainCls, Closure catchCls, Runnable finallyCls) {
         def testEnvironment = platform.testEnvironment +
                 ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
         return {
@@ -22,11 +24,11 @@ class EnclosureCreator {
             jenkins.node(nodeLabels) {
                 jenkins.withEnv(testEnvironment) {
                     try {
-                        mainCls()
+                        mainCls.run()
                     } catch (Exception e) {
                         catchCls?.call(e)
                     } finally {
-                        finallyCls?.call()
+                        finallyCls?.run()
                     }
                 }
             }

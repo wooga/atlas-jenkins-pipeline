@@ -15,12 +15,12 @@ class Docker {
         this.dockerArgs = dockerArgs
     }
 
-    void runOnImage(Closure mainClosure) {
+    void runOnImage(Runnable mainClosure) {
         def image = createImage(dockerArgs)
         if(image != null) {
-            image.inside(dockerArgs.dockerImageArgs) { mainClosure.call() }
+            image.inside(dockerArgs.dockerImageArgs) { mainClosure.run() }
         } else {
-            mainClosure.call()
+            mainClosure.run()
         }
     }
 

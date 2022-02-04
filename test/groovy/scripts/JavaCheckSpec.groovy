@@ -165,10 +165,10 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def analysisCount = new AtomicInteger(0)
         Map<String, Closure> steps = inSandbox {
             return check.parallel(configMap,
-                    { _, __ ->
+                    { _ ->
                         testCount.incrementAndGet()
                     },
-                    { platform, _ ->
+                    { platform ->
                         analysisPlatform = platform.name
                         analysisCount.incrementAndGet()
                     }
@@ -203,10 +203,10 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> analysisEnvMap = platforms.collectEntries { [(it): [:]] }
         inSandbox {
             Map<String, Closure> steps = check.parallel(configMap,
-                    { plat, _ ->
+                    { plat ->
                         binding.env.every { entry -> checkEnvMap[plat.name][entry.key] = entry.value }
                     },
-                    { plat, _ ->
+                    { plat ->
                         binding.env.every { entry -> analysisEnvMap[plat.name][entry.key] = entry.value }
                     })
             steps.each { entry -> entry.value.call() }
@@ -288,13 +288,13 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [
             platforms: ["linux", "windows"],
             sonarToken: "token", coverallsToken: "token",
-            testWrapper: { testOp, platform, gradle ->
+            testWrapper: { testOp, platform ->
                 testCount.incrementAndGet()
-                testOp(platform, gradle)
+                testOp(platform)
             },
-            analysisWrapper: { analysisOp, platform, gradle ->
+            analysisWrapper: { analysisOp, platform ->
                 analysisCount.incrementAndGet()
-                analysisOp(platform, gradle)
+                analysisOp(platform)
             }
         ]
 
@@ -354,13 +354,13 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms and wrappers for test result capture"
         def stepsDirs = []
         def configMap = [platforms: ["linux"], checkDir: checkDir,
-            testWrapper: { testOp, platform, gradle ->
+            testWrapper: { testOp, platform ->
                 stepsDirs.add(this.currentDir)
-                testOp(platform, gradle)
+                testOp(platform)
                 },
-            analysisWrapper: { analysisOp, platform, gradle ->
+            analysisWrapper: { analysisOp, platform ->
                 stepsDirs.add(this.currentDir)
-                analysisOp(platform, gradle)
+                analysisOp(platform)
             }]
 
         when: "running check"
