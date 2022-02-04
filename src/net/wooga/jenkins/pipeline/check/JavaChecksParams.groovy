@@ -6,12 +6,31 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class JavaChecksParams {
 
-    PipelineConventions conventions = PipelineConventions.cloneStandard()
-    Closure testWrapper = { testOp, plat, gradle -> testOp(plat, gradle) }
-    Closure analysisWrapper = { analysisOp, plat, gradle -> analysisOp(plat, gradle) }
+    PipelineConventions conventions
+    Closure testWrapper
+    Closure analysisWrapper
 
     private Sonarqube sonarqube = null
     private Closure<Coveralls> coverallsFactory = null
+
+    static JavaChecksParams standard() {
+        def conventions = PipelineConventions.cloneStandard()
+        def testWrapper = { testOp, plat, gradle -> testOp(plat, gradle) }
+        def analysisWrapper = { analysisOp, plat, gradle -> analysisOp(plat, gradle) }
+        return new JavaChecksParams(conventions, testWrapper, analysisWrapper, null, null)
+    }
+
+    JavaChecksParams(PipelineConventions conventions,
+                     Closure testWrapper,
+                     Closure analysisWrapper,
+                     Sonarqube sonarqube, Closure<Coveralls> coverallsFactory) {
+        this.conventions = conventions
+        this.testWrapper = testWrapper
+        this.analysisWrapper = analysisWrapper
+        this.sonarqube = sonarqube
+        this.coverallsFactory = coverallsFactory
+    }
+
 
     void setSonarqube(Closure closure) {
         this.sonarqube = new Sonarqube(conventions.sonarqubeTask) {

@@ -1,10 +1,7 @@
 package net.wooga.jenkins.pipeline.check
 
 
-import net.wooga.jenkins.pipeline.config.DockerArgs
-import net.wooga.jenkins.pipeline.config.GradleArgs
 import net.wooga.jenkins.pipeline.config.PipelineConfig
-import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.model.Docker
 import net.wooga.jenkins.pipeline.model.Gradle
 
@@ -16,24 +13,33 @@ class Checks {
     Enclosures enclosures
     CheckCreator checkCreator
 
-    private Checks(Object jenkinsScript, PipelineConfig config) {
-        this(jenkinsScript, config.gradleArgs, config.dockerArgs, config.metadata.buildNumber)
+    //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
+    //for non-trivial constructors, prefer static factories.
+    private static Checks create(Object jenkinsScript, PipelineConfig config) {
+        def docker = new Docker(jenkinsScript)
+        def gradle = Gradle.fromJenkins(jenkinsScript, config.gradleArgs)
+        def enclosureCreator = new EnclosureCreator(jenkinsScript, config.metadata.buildNumber)
+        def enclosures = new Enclosures(docker, config.dockerArgs, enclosureCreator)
+        def checkCreator = new CheckCreator(jenkinsScript, enclosures)
+
+        return new Checks(docker, gradle, enclosureCreator, enclosures, checkCreator)
     }
 
-    private Checks(Object jenkinsScript, GradleArgs gradleArgs, DockerArgs dockerArgs, int buildNumber) {
-        this.docker = new Docker(jenkinsScript)
-        this.gradle = Gradle.fromJenkins(jenkinsScript, gradleArgs)
-        this.enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
-        this.enclosures = new Enclosures(docker, dockerArgs, enclosureCreator)
-        this.checkCreator = new CheckCreator(jenkinsScript, enclosures)
+    private Checks(Docker docker, Gradle gradle, EnclosureCreator enclosureCreator,
+           Enclosures enclosures, CheckCreator checkCreator) {
+        this.docker = docker
+        this.gradle = gradle
+        this.enclosureCreator = enclosureCreator
+        this.enclosures = enclosures
+        this.checkCreator = checkCreator
     }
 
-    static forJavaPipelines(Object jenkinsScript, PipelineConfig config) {
-        return new Checks(jenkinsScript, config).forJavaPipelines(jenkinsScript)
+    static JavaChecks forJavaPipelines(Object jenkinsScript, PipelineConfig config) {
+        return create(jenkinsScript, config).forJavaPipelines(jenkinsScript)
     }
 
-    static forWDKPipelines(Object jenkinsScript, PipelineConfig config) {
-        return new Checks(jenkinsScript, config).forWDKPipelines(jenkinsScript)
+    static WDKChecks forWDKPipelines(Object jenkinsScript, PipelineConfig config) {
+        return create(jenkinsScript, config).forWDKPipelines(jenkinsScript)
     }
 
     JavaChecks forJavaPipelines(Object jenkinsScript) {

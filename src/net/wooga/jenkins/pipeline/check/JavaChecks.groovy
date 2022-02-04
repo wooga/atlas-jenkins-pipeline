@@ -34,14 +34,14 @@ class JavaChecks {
     }
 
     Map<String, Closure> javaCoverage(JavaConfig config, Closure overrides) {
-        JavaChecksParams defaults = new JavaChecksParams()
+        JavaChecksParams defaults = JavaChecksParams.standard()
         Closure cloned = overrides.clone() as Closure
         cloned.setDelegate(defaults)
         cloned(defaults)
         return javaCoverage(config, defaults)
     }
 
-    Map<String, Closure> javaCoverage(JavaConfig config, JavaChecksParams params = new JavaChecksParams()) {
+    Map<String, Closure> javaCoverage(JavaConfig config, JavaChecksParams params = JavaChecksParams.standard()) {
         def conventions = params.conventions
         def sonarqube = params.sonarqubeOrDefault()
         def coveralls = params.coverallsOrDefault(jenkins)
