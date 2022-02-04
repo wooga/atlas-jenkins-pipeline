@@ -1,56 +1,18 @@
-package net.wooga.jenkins.pipeline.check;
+package net.wooga.jenkins.pipeline.check.steps
 
-import net.wooga.jenkins.pipeline.config.JavaConfig
 import net.wooga.jenkins.pipeline.config.JenkinsMetadata;
-import net.wooga.jenkins.pipeline.config.PipelineConventions;
+import net.wooga.jenkins.pipeline.check.Coveralls
+import net.wooga.jenkins.pipeline.check.Sonarqube
+import net.wooga.jenkins.pipeline.config.JavaConfig
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.config.Platform
-import net.wooga.jenkins.pipeline.config.WDKConfig;
+import net.wooga.jenkins.pipeline.config.WDKConfig
 import net.wooga.jenkins.pipeline.model.Gradle
-
-class Step {
-
-    StepFunction stepFunction
-
-    Step(Closure closure) {
-        this(closure as StepFunction)
-    }
-
-    Step(StepFunction stepFunction) {
-        this.stepFunction = stepFunction
-    }
-
-    Step wrappedBy(StepWrapper wrapper) {
-        Step self = this
-        return new Step({ Platform platform ->
-            wrapper.call(self, platform)
-        })
-    }
-
-    void call(Platform platform) {
-        stepFunction.call(platform)
-    }
-
-    Runnable asRunnable(Platform platform) {
-        return { -> stepFunction.call(platform)}
-    }
-}
-
-interface StepFunction {
-    void call(Platform platform)
-}
-
-interface StepWrapper {
-    void call(Step step, Platform platform)
-}
 
 class GradleSteps {
 
     final Object jenkins
     final Gradle gradle
-
-    static GradleSteps fromJenkins(Object jenkins, Gradle gradle) {
-        return new GradleSteps(jenkins, gradle)
-    }
 
     GradleSteps(Object jenkins, Gradle gradle) {
         this.jenkins = jenkins

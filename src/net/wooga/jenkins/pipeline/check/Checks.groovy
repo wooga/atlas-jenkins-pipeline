@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.check.steps.GradleSteps
 import net.wooga.jenkins.pipeline.model.Docker
 import net.wooga.jenkins.pipeline.model.Gradle
 
@@ -19,7 +20,7 @@ class Checks {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
         def enclosures = new Enclosures(docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
-        def steps = GradleSteps.fromJenkins(jenkinsScript, gradle)
+        def steps = new GradleSteps(jenkinsScript, gradle)
 
         return new Checks(jenkinsScript, docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
     }
