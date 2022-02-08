@@ -1,13 +1,17 @@
 package net.wooga.jenkins.pipeline.config
 
+import net.wooga.jenkins.pipeline.PipelineTools
+
 class JavaConfig implements PipelineConfig {
 
+    final Object jenkins
+
+    final PipelineConventions conventions
     final Platform[] platforms
     final JenkinsMetadata metadata
-    final DockerArgs dockerArgs
-    final SonarQubeArgs sonarArgs
     final GradleArgs gradleArgs
-    final String coverallsToken
+    final DockerArgs dockerArgs
+    final CheckArgs checkArgs
 
     static JavaConfig fromConfigMap(Map config, Object jenkinsScript) {
         config.platforms = config.platforms ?: ['macos','windows']
@@ -18,51 +22,61 @@ class JavaConfig implements PipelineConfig {
             index++
             return platform
         }
-        def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
-        def sonarArgs = SonarQubeArgs.fromConfigMap(config)
-        def gradleArgs = GradleArgs.fromConfigMap(config)
-        def coverallsToken = config.coverallsToken as String
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        return new JavaConfig(metadata, platforms, dockerArgs, sonarArgs, gradleArgs, coverallsToken)
+        def gradleArgs = GradleArgs.fromConfigMap(config)
+        def checkArgs = CheckArgs.fromConfigMap(jenkinsScript, metadata, config)
+        def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
+        def conventions = PipelineConventions.standard.mergeWithConfigMap(config)
+
+        return new JavaConfig(jenkinsScript, metadata, platforms, gradleArgs, dockerArgs, checkArgs, conventions)
     }
 
-    JavaConfig(JenkinsMetadata metadata, List<Platform> platforms,
-               DockerArgs dockerArgs, SonarQubeArgs sonarArgs, GradleArgs gradleArgs,
-               String coverallsToken) {
+    JavaConfig(Object jenkinsScript, JenkinsMetadata metadata, List<Platform> platforms,
+               GradleArgs gradleArgs, DockerArgs dockerArgs, CheckArgs checkArgs, PipelineConventions conventions) {
+        this.jenkins = jenkinsScript
         this.metadata = metadata
         this.platforms = platforms
-        this.sonarArgs = sonarArgs
-        this.dockerArgs = dockerArgs
         this.gradleArgs = gradleArgs
-        this.coverallsToken = coverallsToken
+        this.dockerArgs = dockerArgs
+        this.checkArgs = checkArgs
+        this.conventions = conventions
     }
 
     Platform getMainPlatform() {
         return platforms.find {it.main }
     }
 
+    @Override
+    PipelineTools getPipelineTools() {
+        return PipelineTools.fromConfig(jenkins, this)
+    }
 
     boolean equals(o) {
         if (this.is(o)) return true
         if (getClass() != o.class) return false
 
-        JavaConfig config = (JavaConfig) o
+        JavaConfig that = (JavaConfig) o
 
-        if (coverallsToken != config.coverallsToken) return false
-        if (dockerArgs != config.dockerArgs) return false
-        if (metadata != config.metadata) return false
-        if (!Arrays.equals(platforms, config.platforms)) return false
-        if (sonarArgs != config.sonarArgs) return false
+        if (checkArgs != that.checkArgs) return false
+        if (conventions != that.conventions) return false
+        if (dockerArgs != that.dockerArgs) return false
+        if (gradleArgs != that.gradleArgs) return false
+        if (jenkins != that.jenkins) return false
+        if (metadata != that.metadata) return false
+        if (!Arrays.equals(platforms, that.platforms)) return false
 
         return true
     }
 
     int hashCode() {
         int result
+        result = (jenkins != null ? jenkins.hashCode() : 0)
+        result = 31 * result + (conventions != null ? conventions.hashCode() : 0)
+        result = 31 * result + (platforms != null ? Arrays.hashCode(platforms) : 0)
         result = 31 * result + (metadata != null ? metadata.hashCode() : 0)
+        result = 31 * result + (gradleArgs != null ? gradleArgs.hashCode() : 0)
         result = 31 * result + (dockerArgs != null ? dockerArgs.hashCode() : 0)
-        result = 31 * result + (sonarArgs != null ? sonarArgs.hashCode() : 0)
-        result = 31 * result + (coverallsToken != null ? coverallsToken.hashCode() : 0)
+        result = 31 * result + (checkArgs != null ? checkArgs.hashCode() : 0)
         return result
     }
 }

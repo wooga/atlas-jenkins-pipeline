@@ -18,9 +18,10 @@ class WDKConfigSpec extends Specification {
         when:
         def wdkConf = WDKConfig.fromConfigMap(label, configMap, jenkinsScript)
         then:
+        wdkConf.pipelineTools != null
+        wdkConf.checkArgs == expected.checkArgs
         wdkConf.unityVersions == expected.unityVersions
         wdkConf.buildLabel == expected.buildLabel
-        wdkConf.sonarArgs == expected.sonarArgs
         wdkConf.gradleArgs == expected.gradleArgs
         wdkConf.metadata == expected.metadata
 
@@ -49,10 +50,11 @@ class WDKConfigSpec extends Specification {
     }
 
     def configFor(List<String> plats, String label, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
-        return new WDKConfig(platsFor(plats, label),
-                SonarQubeArgs.fromConfigMap([sonarToken: sonarToken]),
+        def metadata = JenkinsMetadata.fromScript(jenkinsScript)
+        return new WDKConfig(jenkinsScript, platsFor(plats, label),
+                CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]),
                 GradleArgs.fromConfigMap([refreshDependencies: refreshDependencies, showStackTrace: showStackTrace, logLevel: logLevel]),
-                JenkinsMetadata.fromScript(jenkinsScript), label)
+                metadata, label, PipelineConventions.standard.mergeWithConfigMap([:]))
     }
 
 

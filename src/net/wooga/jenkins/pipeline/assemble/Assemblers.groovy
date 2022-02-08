@@ -4,25 +4,21 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Assemblers {
 
-    static Assemblers fromJenkins(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
-        return new Assemblers(jenkinsScript, gradle, releaseType, releaseScope)
+    static Assemblers fromJenkins(Object jenkinsScript, Gradle gradle) {
+        return new Assemblers(jenkinsScript, gradle)
     }
 
     final Object jenkins
     final Gradle gradle
-    final String releaseType
-    final String releaseScope
 
-    Assemblers(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
+    Assemblers(Object jenkinsScript, Gradle gradle) {
         this.jenkins = jenkinsScript
         this.gradle = gradle
-        this.releaseScope = releaseScope.trim()
-        this.releaseType = releaseType.trim()
     }
 
-    def unityWDK(String unityLogCategory) {
+    def unityWDK(String unityLogCategory, String releaseType, String releaseScope) {
         jenkins.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
-            gradle.wrapper("-Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} assemble")
+            gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} assemble")
         }
     }
 

@@ -22,6 +22,21 @@ class PipelineConventions implements Cloneable {
         this.wdkCoberturaFile = other.wdkCoberturaFile
     }
 
+    PipelineConventions mergeWithConfigMap(Map configMap) {
+        return new PipelineConventions(this).with {
+            it.checkTask = configMap.checkTask?: it.checkTask
+            it.sonarqubeTask = configMap.sonarqubeTask?: it.sonarqubeTask
+            it.coverallsTask = configMap.coverallsTask?: it.coverallsTask
+            it.jacocoTask = configMap.jacocoTask?: it.jacocoTask
+            it.setupTask = configMap.setupTask?: it.setupTask
+            it.javaParallelPrefix = configMap.javaParallelPrefix?: it.javaParallelPrefix
+            it.wdkParallelPrefix = configMap.wdkParallelPrefix?: it.wdkParallelPrefix
+            it.wdkCoberturaFile = configMap.wdkCoberturaFile?: it.wdkCoberturaFile
+            it.wdkSetupStashId = configMap.wdkSetupStashId?: it.wdkSetupStashId
+            return it
+        }
+    }
+
     String checkTask = "check"
     String sonarqubeTask = "sonarqube"
     String coverallsTask = "coveralls"
@@ -31,6 +46,7 @@ class PipelineConventions implements Cloneable {
     String javaParallelPrefix = "check "
     String wdkParallelPrefix = "check Unity-"
     String wdkCoberturaFile = '**/codeCoverage/Cobertura.xml'
+    String wdkSetupStashId = 'setup_w'
 }
 
 class ImmutablePipelineConventions extends PipelineConventions {

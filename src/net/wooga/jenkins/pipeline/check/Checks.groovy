@@ -1,12 +1,11 @@
 package net.wooga.jenkins.pipeline.check
 
-
-import net.wooga.jenkins.pipeline.config.PipelineConfig
 import net.wooga.jenkins.pipeline.model.Docker
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
+    Object jenkins
     Docker docker
     Gradle gradle
     EnclosureCreator enclosureCreator
@@ -15,18 +14,17 @@ class Checks {
 
     //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
     //for non-trivial constructors, prefer static factories.
-    private static Checks create(Object jenkinsScript, PipelineConfig config) {
-        def docker = new Docker(jenkinsScript)
-        def gradle = Gradle.fromJenkins(jenkinsScript, config.gradleArgs)
-        def enclosureCreator = new EnclosureCreator(jenkinsScript, config.metadata.buildNumber)
-        def enclosures = new Enclosures(docker, config.dockerArgs, enclosureCreator)
+    static Checks create(Object jenkinsScript, Docker docker, Gradle gradle, int buildNumber) {
+        def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
+        def enclosures = new Enclosures(docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
 
-        return new Checks(docker, gradle, enclosureCreator, enclosures, checkCreator)
+        return new Checks(jenkinsScript, docker, gradle, enclosureCreator, enclosures, checkCreator)
     }
 
-    private Checks(Docker docker, Gradle gradle, EnclosureCreator enclosureCreator,
+    private Checks(Object jenkins, Docker docker, Gradle gradle, EnclosureCreator enclosureCreator,
            Enclosures enclosures, CheckCreator checkCreator) {
+        this.jenkins = jenkins
         this.docker = docker
         this.gradle = gradle
         this.enclosureCreator = enclosureCreator
@@ -34,19 +32,11 @@ class Checks {
         this.checkCreator = checkCreator
     }
 
-    static JavaChecks forJavaPipelines(Object jenkinsScript, PipelineConfig config) {
-        return create(jenkinsScript, config).forJavaPipelines(jenkinsScript)
+    JavaChecks forJavaPipelines() {
+        return new JavaChecks(jenkins, checkCreator, gradle)
     }
 
-    static WDKChecks forWDKPipelines(Object jenkinsScript, PipelineConfig config) {
-        return create(jenkinsScript, config).forWDKPipelines(jenkinsScript)
-    }
-
-    JavaChecks forJavaPipelines(Object jenkinsScript) {
-        return new JavaChecks(jenkinsScript, checkCreator, gradle)
-    }
-
-    WDKChecks forWDKPipelines(Object jenkinsScript) {
-        return new WDKChecks(jenkinsScript, checkCreator, gradle)
+    WDKChecks forWDKPipelines() {
+        return new WDKChecks(jenkins, checkCreator, gradle)
     }
 }

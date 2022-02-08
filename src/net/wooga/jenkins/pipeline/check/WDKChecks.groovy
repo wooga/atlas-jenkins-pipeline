@@ -32,42 +32,32 @@ class WDKChecks {
         }
     }
 
-    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, Closure overrides = {}) {
-        WDKChecksParams params = new WDKChecksParams()
-        Closure cloned = overrides.clone() as Closure
-        cloned.setDelegate(params)
-        cloned(params)
-        return wdkCoverage(config, releaseType, releaseScope, params)
+    Map<String, Closure> wdkCoverage(UnityVersionPlatform[] unityPlatforms, String releaseType, String releaseScope,
+                                     CheckArgs checkArgs, PipelineConventions conventions) {
+        def baseTestStep = getWDKTestStep(releaseType, releaseScope, conventions.wdkSetupStashId, conventions.checkTask)
+        def baseAnalysisStep = getWDKAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube)
+
+        return parallel(unityPlatforms,
+                {versionPlat, gradle -> checkArgs.testWrapper(baseTestStep, versionPlat, gradle) },
+                {versionPlat, gradle -> checkArgs.analysisWrapper(baseAnalysisStep, versionPlat, gradle) }, conventions)
     }
 
-    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, WDKChecksParams params) {
-        def conventions = params.conventions
-        def baseTestStep = getWDKTestStep(releaseType, releaseScope, params.setupStashId, conventions.checkTask)
-        def baseAnalysisStep = getWDKAnalysisStep(config, conventions.wdkCoberturaFile, params.sonarqubeOrDefault())
-
-        return parallel(config.unityVersions,
-                {versionPlat, gradle -> params.testWrapper(baseTestStep, versionPlat, gradle) },
-                {versionPlat, gradle -> params.analysisWrapper(baseAnalysisStep, versionPlat, gradle) }, conventions)
-    }
-
-    Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId = "setup_w",
-                           String checkTask = PipelineConventions.standard.checkTask) {
+    Closure getWDKTestStep(String releaseType, String releaseScope, String setupStashId, String checkTask) {
         return { Platform platform, Gradle gradle ->
             jenkins.unstash setupStashId
             gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} ${checkTask}")
         }
     }
 
-    Closure getWDKAnalysisStep(WDKConfig config,
-                               String wdkCoberturaFile = PipelineConventions.standard.wdkCoberturaFile,
-                               Sonarqube sonarqube = new Sonarqube(PipelineConventions.standard.sonarqubeTask)) {
+    Closure getWDKAnalysisStep(PipelineConventions conventions,
+                               JenkinsMetadata metadata,
+                               Sonarqube sonarqube) {
         return { Platform platform, Gradle gradle ->
-            def branchName = config.metadata.isPR() ? null : config.metadata.branchName
-            sonarqube.runGradle(gradle, config.sonarArgs, branchName)
-            def coberturaAdapter = jenkins.istanbulCoberturaAdapter(wdkCoberturaFile)
+            def branchName = metadata.isPR() ? null : metadata.branchName
+            sonarqube.maybeRun(gradle, conventions.sonarqubeTask, branchName)
+            def coberturaAdapter = jenkins.istanbulCoberturaAdapter(conventions.wdkCoberturaFile)
             jenkins.publishCoverage adapters: [coberturaAdapter],
                     sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
         }
     }
-
 }

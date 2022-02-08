@@ -14,7 +14,7 @@ class Setups {
         this.gradle = gradle
     }
 
-    static Setups forJenkins(Object jenkinsScript, Gradle gradle) {
+    static Setups create(Object jenkinsScript, Gradle gradle) {
         return new Setups(jenkinsScript, gradle)
     }
 

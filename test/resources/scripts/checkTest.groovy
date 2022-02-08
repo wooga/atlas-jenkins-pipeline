@@ -1,48 +1,29 @@
 package scripts
 
-import net.wooga.jenkins.pipeline.check.WDKChecksParams
 import net.wooga.jenkins.pipeline.config.JavaConfig
-import net.wooga.jenkins.pipeline.check.Checks
-import net.wooga.jenkins.pipeline.config.PipelineConfig
 import net.wooga.jenkins.pipeline.config.WDKConfig
-import net.wooga.jenkins.pipeline.config.PipelineConventions
 
-def javaCoverage(Map configMap, Map jenkinsVars, Closure overrides = {}) {
-    def config = JavaConfig.fromConfigMap(configMap, jenkinsVars)
-    return Checks.forJavaPipelines(this, config).javaCoverage(config, overrides)
+def javaCoverage(Map configMap) {
+    def config = JavaConfig.fromConfigMap(configMap, this)
+    def checks = config.pipelineTools.checks.forJavaPipelines()
+    return checks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
 }
 
-def wdkCoverage(String buildLabel, Map configMap, Map jenkinsVars, String releaseType, String releaseScope, Closure overrides={}) {
-    def config = WDKConfig.fromConfigMap(buildLabel, configMap, jenkinsVars)
-    def check = Checks.forWDKPipelines(this, config)
-    return check.wdkCoverage(config, releaseType, releaseScope, overrides)
-}
-
-def parallel(Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisCls) {
-    def config = JavaConfig.fromConfigMap(configMap, jenkinsVars)
-    def checks = Checks.forJavaPipelines(this, config)
+def parallel(Map configMap, Closure checkCls, Closure analysisCls) {
+    def config = JavaConfig.fromConfigMap(configMap, this)
+    def checks = config.pipelineTools.checks.forJavaPipelines()
     return checks.parallel(config.platforms, checkCls, analysisCls)
 }
 
-def simpleWDK(String label, Map configMap, Map jenkinsVars, Closure checkCls, Closure analysisCls) {
-    def config = WDKConfig.fromConfigMap(label, configMap, jenkinsVars)
-    def check = Checks.forWDKPipelines(this, config)
-    return check.parallel(config.unityVersions, checkCls, analysisCls)
+
+def wdkCoverage(String buildLabel, Map configMap, String releaseType, String releaseScope) {
+    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
+    def checks = config.pipelineTools.checks.forWDKPipelines()
+    return checks.wdkCoverage(config.unityVersions, releaseType, releaseScope, config.checkArgs, config.conventions)
 }
 
-def getConfig(Map configMap, Map jenkinsVars, String label=null) {
-    if(configMap.containsKey("unityVersions") && label != null) {
-        return WDKConfig.fromConfigMap(label, configMap, jenkinsVars)
-    } else {
-        return JavaConfig.fromConfigMap(configMap, jenkinsVars)
-    }
-
-}
-
-def call(PipelineConfig config) {
-    if(config instanceof  WDKConfig) {
-        return Checks.forWDKPipelines(this, config)
-    } else if(config instanceof JavaConfig) {
-        return Checks.forJavaPipelines(this, config)
-    }
+def simpleWDK(String buildLabel, Map configMap, Closure checkCls, Closure analysisCls) {
+    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
+    def checks = config.pipelineTools.checks.forWDKPipelines()
+    return checks.parallel(config.unityVersions, checkCls, analysisCls)
 }

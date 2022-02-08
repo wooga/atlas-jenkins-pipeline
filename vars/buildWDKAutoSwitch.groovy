@@ -52,8 +52,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           sendSlackNotification "STARTED", true
           script {
-            def gradle = Gradle.fromJenkins(this, config.gradleArgs)
-            def setup = Setups.forJenkins(this, gradle)
+            def setup = config.pipelineTools.setups
             setup.wdk(params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
           }
         }
@@ -84,9 +83,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
             steps {
               unstash 'setup_w'
               script {
-                def gradle = Gradle.fromJenkins(this, config.gradleArgs)
-                def assembler = Assemblers.fromJenkins(this, gradle, params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                assembler.unityWDK("build")
+                def assembler = config.pipelineTools.assemblers
+                assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
               }
             }
 
@@ -113,9 +111,10 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
             steps {
               script {
-                def checks = Checks.forWDKPipelines(this, config)
-                  def stepsForParallel = checks.wdkCoverage(config as WDKConfig,
-                          params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                def checks = config.pipelineTools.checks.forWDKPipelines()
+                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
+                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
+                        config.checkArgs, config.conventions)
                   parallel stepsForParallel
               }
             }

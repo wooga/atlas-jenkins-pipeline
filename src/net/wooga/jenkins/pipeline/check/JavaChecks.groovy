@@ -33,41 +33,30 @@ class JavaChecks {
         }
     }
 
-    Map<String, Closure> javaCoverage(JavaConfig config, Closure overrides) {
-        JavaChecksParams defaults = JavaChecksParams.standard()
-        Closure cloned = overrides.clone() as Closure
-        cloned.setDelegate(defaults)
-        cloned(defaults)
-        return javaCoverage(config, defaults)
-    }
-
-    Map<String, Closure> javaCoverage(JavaConfig config, JavaChecksParams params = JavaChecksParams.standard()) {
-        def conventions = params.conventions
-        def sonarqube = params.sonarqubeOrDefault()
-        def coveralls = params.coverallsOrDefault(jenkins)
+    Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {
         def baseTestStep = defaultJavaTestStep(conventions.checkTask)
-        def baseAnalysisStep = defaultJavaAnalysisStep(config, conventions.jacocoTask, sonarqube, coveralls)
+        def baseAnalysisStep = defaultJavaAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
 
-        return parallel(config.platforms,
-                { plat, gradle -> params.testWrapper(baseTestStep, plat, gradle) },
-                { plat, gradle -> params.analysisWrapper(baseAnalysisStep, plat, gradle) }, conventions)
+        return parallel(platforms,
+                { plat, gradle -> checkArgs.testWrapper(baseTestStep, plat, gradle) },
+                { plat, gradle -> checkArgs.analysisWrapper(baseAnalysisStep, plat, gradle) }, conventions)
     }
 
-    Closure defaultJavaTestStep(String checkTask = PipelineConventions.standard.checkTask) {
+    static Closure defaultJavaTestStep(String checkTask) {
         return { Platform plat, Gradle gradle ->
             gradle.wrapper(checkTask)
         }
     }
 
-    Closure defaultJavaAnalysisStep(JavaConfig config,
-                                    String jacocoTask = PipelineConventions.standard.jacocoTask,
-                                    Sonarqube sonarqube = new Sonarqube(PipelineConventions.standard.sonarqubeTask),
-                                    Coveralls coveralls = new Coveralls(jenkins, PipelineConventions.standard.coverallsTask)) {
+    static Closure defaultJavaAnalysisStep(PipelineConventions conventions,
+                                           JenkinsMetadata metadata,
+                                           Sonarqube sonarqube,
+                                           Coveralls coveralls) {
         return { Platform plat, Gradle gradle ->
-            def branchName = config.metadata.isPR() ? null : config.metadata.branchName
-            gradle.wrapper(jacocoTask)
-            sonarqube.runGradle(gradle, config.sonarArgs, branchName)
-            coveralls.runGradle(gradle, config.coverallsToken)
+            def branchName = metadata.isPR() ? null : metadata.branchName
+            gradle.wrapper(conventions.jacocoTask)
+            sonarqube.maybeRun(gradle, conventions.sonarqubeTask,  branchName)
+            coveralls.maybeRun(gradle, conventions.coverallsTask)
         }
     }
 }

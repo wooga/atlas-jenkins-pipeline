@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline.config
 
 import net.wooga.jenkins.pipeline.BuildVersion
+import net.wooga.jenkins.pipeline.PipelineTools
 
 class WDKConfig implements PipelineConfig {
 
@@ -16,31 +17,41 @@ class WDKConfig implements PipelineConfig {
         }
         if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
 
-        def sonarArgs = SonarQubeArgs.fromConfigMap(configMap)
         def gradleArgs = GradleArgs.fromConfigMap(configMap)
         def jenkinsMetadata = JenkinsMetadata.fromScript(jenkinsScript)
+        def checkArgs = CheckArgs.fromConfigMap(jenkinsScript, jenkinsMetadata, configMap)
+        def conventions = PipelineConventions.standard.mergeWithConfigMap(configMap)
 
-        return new WDKConfig(unityVersions, sonarArgs, gradleArgs, jenkinsMetadata, buildLabel)
+        return new WDKConfig(jenkinsScript, unityVersions, checkArgs, gradleArgs, jenkinsMetadata, buildLabel, conventions)
     }
 
+    final Object jenkins
     final UnityVersionPlatform[] unityVersions
-    final SonarQubeArgs sonarArgs
+    final CheckArgs checkArgs
     final GradleArgs gradleArgs
     final JenkinsMetadata metadata
     final String buildLabel
+    final PipelineConventions conventions
 
-    WDKConfig(List<UnityVersionPlatform> unityVersions, SonarQubeArgs sonarArgs, GradleArgs gradleArgs,
-              JenkinsMetadata metadata, String buildLabel) {
+    WDKConfig(Object jenkins, List<UnityVersionPlatform> unityVersions, CheckArgs checkArgs, GradleArgs gradleArgs,
+              JenkinsMetadata metadata, String buildLabel, PipelineConventions conventions) {
+        this.jenkins = jenkins
         this.unityVersions = unityVersions
-        this.sonarArgs = sonarArgs
+        this.checkArgs = checkArgs
         this.gradleArgs = gradleArgs
         this.metadata = metadata
         this.buildLabel = buildLabel
+        this.conventions = conventions
     }
 
     @Override
     DockerArgs getDockerArgs() {
         return null
+    }
+
+    @Override
+    PipelineTools getPipelineTools() {
+        return PipelineTools.fromConfig(jenkins, this)
     }
 }
 

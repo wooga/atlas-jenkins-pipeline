@@ -1,6 +1,7 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -13,21 +14,23 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     private static final String TEST_SCRIPT_PATH = "test/resources/scripts/checkTest.groovy"
 
     def setupSpec() {
+        binding.variables["BUILD_NUMBER"] = 1
     }
 
     @Unroll("execute #name if their token(s) are present")
     def "execute coverage when its token is present"() {
-        given: "loaded check in a running build"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
-        and: "configuration in the master branch and with tokens"
+        given: "configuration in the master branch and with tokens"
         def configMap = [sonarToken: sonarToken, coverallsToken: coverallsToken]
-        def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: "master"]
+        def jenkinsMeta = [BRANCH_NAME: "master"]
+
+        and: "loaded check in a running build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) { it -> it.putAll(jenkinsMeta) }
 
         when: "running gradle pipeline with coverage token"
         inSandbox {
             //class loaders are ~~hell~~ FUN
-            check.javaCoverage(configMap, jenkinsMeta).each { it.value() }
+            check.javaCoverage(configMap).each { it.value() }
         }
 
         then: "gradle coverage task is called"
@@ -49,21 +52,23 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll("should execute sonarqube on branch #branchName")
     def "should execute sonarqube in PR and non-PR branches with correct arguments"() {
-        given: "loaded build script in a running build in branch"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
 
-        and: "jenkins script object with needed properties"
-        def jenkinsMeta = [BUILD_NUMBER: 1, BRANCH_NAME: branchName, env: [:]]
+        given: "jenkins script object with needed properties"
+        def jenkinsMeta = [BRANCH_NAME: branchName, env: [:]]
         if (isPR) {
             jenkinsMeta.CHANGE_ID = "notnull"
             jenkinsMeta.env["CHANGE_ID"] = "notnull"
         }
+
+        and: "loaded build script in a running build in branch"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) { it -> it.putAll(jenkinsMeta) }
+
         and:
         "configuration in the ${branchName} branch with token"
         def configMap = [sonarToken: "sonarToken"]
 
         when: "running gradle pipeline with sonar token"
-        inSandbox { check.javaCoverage(configMap, jenkinsMeta).each { it.value() } }
+        inSandbox { check.javaCoverage(configMap).each { it.value() } }
 
         then: "should run sonar analysis"
         calls.has["sh"] { MethodCall call ->
@@ -90,9 +95,8 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [platforms: platforms]
 
         when: "running check"
-
         Map<String, ?> checkSteps = inSandbox {
-            def checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1])
+            def checkSteps = check.javaCoverage(configMap)
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -131,7 +135,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         ]
         when: "running linux platform step"
         inSandbox {
-            def checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1])
+            def checkSteps = check.javaCoverage(configMap)
             checkSteps["check linux"].call()
         }
 
@@ -160,7 +164,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
         Map<String, Closure> steps = inSandbox {
-            return check.parallel(configMap, [BUILD_NUMBER: 1],
+            return check.parallel(configMap,
                     { _, __ ->
                         testCount.incrementAndGet()
                     },
@@ -187,19 +191,18 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
 
     @Unroll
     def "loads test environment on check"() {
-        given: "loaded check in a running jenkins build"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {
-            BUILD_NUMBER = 1
-        }
+        given: "valid jenkins metadata"
+        def jenkinsMeta = [BUILD_NUMBER: 1]
+        and: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) { it.putAll(jenkinsMeta) }
         and: "configuration object with more than one platform"
         def configMap = [platforms: platforms, testEnvironment: testEnvironment]
-        def jenkinsMeta = [BUILD_NUMBER: 1]
 
         when: "running check steps"
         Map<String, Map> checkEnvMap = platforms.collectEntries { [(it): [:]] }
         Map<String, Map> analysisEnvMap = platforms.collectEntries { [(it): [:]] }
         inSandbox {
-            Map<String, Closure> steps = check.parallel(configMap, jenkinsMeta,
+            Map<String, Closure> steps = check.parallel(configMap,
                     { plat, _ ->
                         binding.env.every { entry -> checkEnvMap[plat.name][entry.key] = entry.value }
                     },
@@ -234,20 +237,16 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux"], sonarToken: "token", coverallsToken: "token"]
+        def configMap = [platforms: ["linux"],
+                        sonarToken: "token", coverallsToken: "token",
+                        checkTask: convCheck, sonarqubeTask: convSonarqubeTask,
+                        jacocoTask: convJacocoTask, javaParallelPrefix: convJavaParallelPrefix,
+                        coverallsTask: convCoverallsTask]
 
         when: "running check"
         Map<String, ?> checkSteps = inSandbox {
-            def config = check.getConfig(configMap, [BUILD_NUMBER: 1])
-            def checks = check(config)
             //Closure delegate object -> JavaCheckParams
-            Map<String, Closure> checkSteps = checks.javaCoverage(config) {
-                conventions.checkTask = convCheck
-                conventions.sonarqubeTask = convSonarqubeTask
-                conventions.jacocoTask = convJacocoTask
-                conventions.javaParallelPrefix = convJavaParallelPrefix
-                conventions.coverallsTask = convCoverallsTask
-            }
+            Map<String, Closure> checkSteps = check.javaCoverage(configMap)
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -281,26 +280,28 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
     def "wraps test and analysis step on closure wrapper"() {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-        and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux", "windows"], sonarToken: "token", coverallsToken: "token"]
-
-        when: "running check"
+        and: "wrapper validation counters"
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
-        inSandbox {
-            def config = check.getConfig(configMap, [BUILD_NUMBER: 1])
-            def checks = check(config)
-            //Closure delegate object -> JavaCheckParams
-            Map<String, Closure> checkSteps = checks.javaCoverage(config) {
-                testWrapper = { testOp, platform, gradle ->
-                    testCount.incrementAndGet()
-                    testOp(platform, gradle)
-                }
-                analysisWrapper = { analysisOp, platform, gradle ->
-                    analysisCount.incrementAndGet()
-                    analysisOp(platform, gradle)
-                }
+        and: "configuration object with any platforms and desired wrappers"
+
+        def configMap = [
+            platforms: ["linux", "windows"],
+            sonarToken: "token", coverallsToken: "token",
+            testWrapper: { testOp, platform, gradle ->
+                testCount.incrementAndGet()
+                testOp(platform, gradle)
+            },
+            analysisWrapper: { analysisOp, platform, gradle ->
+                analysisCount.incrementAndGet()
+                analysisOp(platform, gradle)
             }
+        ]
+
+        when: "running check"
+
+        inSandbox {
+            Map<String, Closure> checkSteps = check.javaCoverage(configMap)
             checkSteps.each { it.value.call() }
         }
 
@@ -310,37 +311,61 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and: "inner test step ran for all platforms"
         calls["sh"].count {
             def argsString = it.argsToString()
-            argsString.contains("gradlew") && argsString.contains("check")
+            argsString.contains("gradlew") && argsString.contains(PipelineConventions.standard.checkTask)
         } == platformCount
         and: "wrapper analysis step ran only once"
         analysisCount.get() == 1
         and: "inner analysis step ran only once"
         calls["sh"].count {
             def argsString = it.argsToString()
-            argsString.contains("gradlew") && argsString.contains("sonarqube")
+            argsString.contains("gradlew") && argsString.contains(PipelineConventions.standard.sonarqubeTask)
         } == 1
+    }
+
+    @Unroll("checks out step in #checkoutDir")
+    def "checks out step on given checkoutDir"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with any platforms"
+        def configMap = [platforms: ["linux"], checkoutDir: checkoutDir]
+        and: "wired checkout operation"
+        def actualCheckoutDir = ""
+        helper.registerAllowedMethod("checkout", [String]) {
+            actualCheckoutDir = this.currentDir
+        }
+
+        when: "running check"
+        inSandbox {
+            Map<String, Closure> checkSteps = check.javaCoverage(configMap)
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "checkout ran in given directory"
+        checkoutDir == actualCheckoutDir
+
+        where:
+        checkoutDir << [".", "dir", "dir/subdir"]
     }
 
     @Unroll("runs test and analysis step on #checkDir")
     def "runs test and analysis step on given checkDir"() {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-        and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux"], checkDir: checkDir]
+        and: "configuration object with any platforms and wrappers for test result capture"
+        def stepsDirs = []
+        def configMap = [platforms: ["linux"], checkDir: checkDir,
+            testWrapper: { testOp, platform, gradle ->
+                stepsDirs.add(this.currentDir)
+                testOp(platform, gradle)
+                },
+            analysisWrapper: { analysisOp, platform, gradle ->
+                stepsDirs.add(this.currentDir)
+                analysisOp(platform, gradle)
+            }]
 
         when: "running check"
-        def stepsDirs = []
         inSandbox {
-            Map<String, Closure> checkSteps = check.javaCoverage(configMap, [BUILD_NUMBER: 1]) {
-                testWrapper = { testOp, platform, gradle ->
-                    stepsDirs.add(this.currentDir)
-                    testOp(platform, gradle)
-                }
-                analysisWrapper = { analysisOp, platform, gradle ->
-                    stepsDirs.add(this.currentDir)
-                    analysisOp(platform, gradle)
-                }
-            }
+            Map<String, Closure> checkSteps = check.javaCoverage(configMap)
             checkSteps.each { it.value.call() }
         }
 
@@ -349,10 +374,8 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         stepsDirs.size() == configMap.platforms.size() + 1
         stepsDirs.every {it == checkDir}
 
-
         where:
         checkDir << [".", "dir", "dir/subdir"]
-
     }
 
     def createTmpFile(String dir = ".", String file) {

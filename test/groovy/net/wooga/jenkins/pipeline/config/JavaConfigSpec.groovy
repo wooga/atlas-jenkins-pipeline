@@ -18,9 +18,8 @@ class JavaConfigSpec extends Specification {
         then: "generated config object is valid and matches map values"
         config.metadata == expected.metadata
         config.platforms == expected.platforms
+        config.checkArgs == expected.checkArgs
         config.dockerArgs == expected.dockerArgs
-        config.sonarArgs == expected.sonarArgs
-        config.coverallsToken == expected.coverallsToken
         config.mainPlatform == expected.platforms[0]
 
         where:
@@ -37,14 +36,16 @@ class JavaConfigSpec extends Specification {
 
     JavaConfig configWith(List<String> platforms, Map dockerArgs = [:], Map gradleArgs = [:], Map extraFields = [:], String coverallsToken = null) {
         def cfgMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: coverallsToken] + extraFields
-        return new JavaConfig(JenkinsMetadata.fromScript(jenkinsScript),
+        def metadata = JenkinsMetadata.fromScript(jenkinsScript)
+        return new JavaConfig(jenkinsScript, metadata,
                 platforms.withIndex().collect { String platName, int index ->
                     Platform.forJava(platName, cfgMap, index == 0)
                 },
-                DockerArgs.fromConfigMap(dockerArgs),
-                SonarQubeArgs.fromConfigMap(cfgMap),
                 GradleArgs.fromConfigMap(gradleArgs),
-                coverallsToken)
+                DockerArgs.fromConfigMap(dockerArgs),
+                CheckArgs.fromConfigMap(jenkinsScript, metadata, cfgMap),
+                PipelineConventions.standard.mergeWithConfigMap(cfgMap)
+                )
     }
 
 }

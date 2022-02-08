@@ -52,8 +52,8 @@ def call(Map configMap = [:]) {
         post {
           success {
             script {
-              if (config.coverallsToken) {
-                httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+              if (config.checkArgs.coveralls.token) {
+                httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.checkArgs.coveralls.token}"
               }
             }
           }

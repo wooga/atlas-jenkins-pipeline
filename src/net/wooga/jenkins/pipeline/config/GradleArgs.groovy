@@ -1,5 +1,7 @@
 package net.wooga.jenkins.pipeline.config
 
+import net.wooga.jenkins.pipeline.model.Gradle
+
 class GradleArgs {
 
     final String logLevel
@@ -17,6 +19,10 @@ class GradleArgs {
         this.logLevel = logLevel
         this.stackTrace = stackTrace
         this.refreshDependencies = refreshDependencies
+    }
+
+    Gradle createGradle(Object jenkins) {
+        return Gradle.fromJenkins(jenkins, this)
     }
 
     boolean equals(o) {
