@@ -142,9 +142,9 @@ def call(Map configMap = [ unityVersions:[] ]) {
             def applicationsHome = env.APPLICATIONS_HOME?: ""
             def unityExecPackagePath = env.UNITY_EXEC_PACKAGE_PATH?: ""
             def unityPath = "${applicationsHome}/${config.unityVersions[0].stepLabel}/${unityExecPackagePath}"
-            publish(params.RELEASE_TYPE, params.RELEASE_SCOPE) {
-              unityArtifactoryPaket(unityPath, 'artifactory_publish')
-            }
+
+            def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
+            publisher.unityArtifactoryPaket(unityPath, 'artifactory_publish')
           }
         }
 

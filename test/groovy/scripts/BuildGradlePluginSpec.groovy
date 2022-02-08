@@ -12,7 +12,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         binding.setVariable("BRANCH_NAME", "any")
     }
 
-    def "posts coveralls results to coveralls server" () {
+    def "posts coveralls results to coveralls server"() {
         given: "loaded buildGradlePlugin in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
@@ -50,16 +50,14 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         inSandbox { buildGradlePlugin() }
 
         then: "runs gradle with parameters"
-        skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
-            String args = call.args[0]["script"]
-            args.contains("gradlew") &&
-            args.contains(releaseType) &&
-            args.contains("-Pgradle.publish.key=key") &&
-            args.contains("-Pgradle.publish.secret=secret") &&
-            args.contains("-Prelease.stage=${releaseType}") &&
-            args.contains("-Prelease.scope=${releaseScope}") &&
-            args.contains("-x check")
-        }
+        def gradleCall = getShGradleCalls().first()
+        skipsRelease || (gradleCall != null)
+        skipsRelease ^ gradleCall.contains(releaseType)
+        skipsRelease ^ gradleCall.contains("-Pgradle.publish.key=key")
+        skipsRelease ^ gradleCall.contains("-Pgradle.publish.secret=secret")
+        skipsRelease ^ gradleCall.contains("-Prelease.stage=${releaseType}")
+        skipsRelease ^ gradleCall.contains("-Prelease.scope=${releaseScope}")
+        skipsRelease ^ gradleCall.contains("-x check")
 
         where:
         releaseType | releaseScope | skipsRelease
@@ -90,5 +88,11 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         and: "sets up github environment"
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
+    }
+
+    String[] getShGradleCalls() {
+        return calls["sh"].collect { it.args[0]["script"].toString() }.findAll {
+            it.contains("gradlew")
+        }
     }
 }

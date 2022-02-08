@@ -51,16 +51,15 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         inSandbox { buildJavaLibrary() }
 
         then: "runs gradle with parameters"
-        skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
-            String it = call.args[0]["script"]
-            it.contains("gradlew") &&
-                    it.contains(releaseType) &&
-                    it.contains("-Partifactory.user=user") &&
-                    it.contains("-Partifactory.password=key") &&
-                    it.contains("-Prelease.stage=${releaseType}") &&
-                    it.contains("-Prelease.scope=${releaseScope}") &&
-                    it.contains("-x check")
-        }
+        def gradleCalls = getShGradleCalls()
+        def publishCall = gradleCalls.find { it.contains(releaseType) }
+        skipsRelease || (publishCall != null)
+        skipsRelease ^ publishCall.contains(releaseType)
+        skipsRelease ^ publishCall.contains("-Partifactory.user=user")
+        skipsRelease ^ publishCall.contains("-Partifactory.password=key")
+        skipsRelease ^ publishCall.contains("-Prelease.stage=${releaseType}")
+        skipsRelease ^ publishCall.contains("-Prelease.scope=${releaseScope}")
+        skipsRelease ^ publishCall.contains("-x check")
 
         where:
         releaseType | releaseScope | skipsRelease

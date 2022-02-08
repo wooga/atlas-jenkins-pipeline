@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.stages.Stages
 import net.wooga.jenkins.pipeline.config.JavaConfig
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -8,12 +9,13 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map configMap = [:], Closure checkStep, Closure publishStep) {
+def call(Map configMap = [:], Closure stepsConfigCls) {
   //organize configs inside neat object. Defaults are defined there as well
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   def config = JavaConfig.fromConfigMap(configMap, this)
+  def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
   def mainPlatform = config.mainPlatform.name
 
   pipeline {
@@ -44,12 +46,18 @@ def call(Map configMap = [:], Closure checkStep, Closure publishStep) {
         agent any
         when {
           beforeAgent true
-          expression { return params.RELEASE_TYPE == "snapshot" }
+          expression { return actions.check.runWhenOrElse { params.RELEASE_TYPE == "snapshot" } }
         }
 
         steps {
           script {
-            checkStep(params, config)
+            actions.check.runActionOrElse {
+              withEnv(["COVERALLS_PARALLEL=true"]) {
+                def javaChecks = config.pipelineTools.checks.forJavaPipelines()
+                def checksForParallel = javaChecks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
+                parallel checksForParallel
+              }
+            }
           }
         }
         post {
@@ -70,7 +78,7 @@ def call(Map configMap = [:], Closure checkStep, Closure publishStep) {
         when {
           beforeAgent true
           //TODO this should be variable, as private libs publishes on snapshot
-          expression { return params.RELEASE_TYPE != "snapshot" }
+          expression { return actions.publish.runWhenOrElse { params.RELEASE_TYPE != "snapshot" }  }
         }
         agent {
           label "$mainPlatform && atlas"
@@ -87,7 +95,10 @@ def call(Map configMap = [:], Closure checkStep, Closure publishStep) {
 
         steps {
           script {
-            publishStep(params, config)
+            actions.publish.runActionOrElse {
+              error "This pipeline has no publish action whatsoever, " +
+                      "if you don't want to ever run publish, set 'when' to always return false"
+            }
           }
         }
 

@@ -89,6 +89,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("publishCoverage", [Map]) {}
             registerAllowedMethod("unstash", [String]) {}
             registerAllowedMethod("unstable", [Map]) {}
+            registerAllowedMethod("error", [String]) { String msg -> throw new Exception(msg) }
             registerAllowedMethod("withEnv", [List, Closure]) { List<?> envStrs, Closure cls ->
                 def env = envStrs.collect{it.toString()}.
                             collectEntries{String envStr -> [(envStr.split("=")[0]): envStr.split("=")[1]]}
@@ -147,9 +148,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         varBindingOps.setDelegate(binding.variables)
         varBindingOps(binding.variables)
         if(reloadSideScripts) {
-            registerSideScript("vars/javaLibCheck.groovy", binding)
             registerSideScript("vars/javaLibs.groovy", binding)
-            registerSideScript("vars/publish.groovy", binding)
         }
         return helper.loadSandboxedScript(path, binding)
     }
@@ -216,6 +215,12 @@ abstract class DeclarativeJenkinsSpec extends Specification {
      */
     protected <T> T inSandbox(Closure<T> cls) {
         return helper.inSandbox(cls)
+    }
+
+    String[] getShGradleCalls() {
+        return calls["sh"].collect { it.args[0]["script"].toString() }.findAll {
+            it.contains("gradlew")
+        }
     }
 
 
