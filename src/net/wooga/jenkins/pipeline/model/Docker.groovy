@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.model
 
+import net.wooga.jenkins.pipeline.check.steps.PackedStep
 import net.wooga.jenkins.pipeline.config.DockerArgs
 
 class Docker {
@@ -15,12 +16,12 @@ class Docker {
         this.dockerArgs = dockerArgs
     }
 
-    void runOnImage(Closure mainClosure) {
+    void runOnImage(PackedStep main) {
         def image = createImage(dockerArgs)
         if(image != null) {
-            image.inside(dockerArgs.dockerImageArgs) { mainClosure.call() }
+            image.inside(dockerArgs.dockerImageArgs) { main.call() }
         } else {
-            mainClosure.call()
+            main.call()
         }
     }
 

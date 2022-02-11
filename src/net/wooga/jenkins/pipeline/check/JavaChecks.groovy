@@ -1,62 +1,74 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.check.steps.GradleSteps
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.*
-import net.wooga.jenkins.pipeline.model.Gradle
-
 
 class JavaChecks {
 
     final Object jenkins
     final CheckCreator checkCreator
-    final Gradle gradle
+    final GradleSteps steps
 
-    JavaChecks(Object jenkinsScript, CheckCreator checkCreator, Gradle gradle) {
+    JavaChecks(Object jenkinsScript, CheckCreator checkCreator, GradleSteps steps) {
         this.jenkins = jenkinsScript
         this.checkCreator = checkCreator
-        this.gradle = gradle
+        this.steps = steps
+    }
+
+    Closure check(Platform platform, Step testStep, Step analysisStep) {
+        return checkCreator.javaChecks(platform, testStep, analysisStep)
     }
 
     Map<String, Closure> parallel(Platform[] platforms, Closure checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
+        return parallel(platforms, new Step(checkStep), conventions)
+    }
+
+    Map<String, Closure> parallel(Platform[] platforms, Step checkStep,
+                                  PipelineConventions conventions = PipelineConventions.standard) {
         return platforms.collectEntries { platform ->
-            [("${conventions.javaParallelPrefix}${platform.name}".toString()): { checkStep(platform, gradle) }]
+            [("${conventions.javaParallelPrefix}${platform.name}".toString()): checkStep.pack(platform)]
         }
     }
 
     Map<String, Closure> parallel(Platform[] platforms, Closure testStep, Closure analysisStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
-        def curriedTestStep = { plat -> testStep.call(plat, gradle) }
-        def curriedAnalysisStep = { plat -> analysisStep(plat, gradle) }
+        parallel(platforms, new Step(testStep), new Step(analysisStep), conventions)
+    }
+
+    Map<String, Closure> parallel(Platform[] platforms, Step testStep, Step analysisStep,
+                                  PipelineConventions conventions = PipelineConventions.standard) {
         return platforms.collectEntries { platform ->
-            def checkStep = checkCreator.javaChecks(platform, curriedTestStep, curriedAnalysisStep)
-            return [("${conventions.javaParallelPrefix}${platform.name}".toString()): checkStep]
+            String parallelStepName = "${conventions.javaParallelPrefix}${platform.name}"
+            return [(parallelStepName): check(platform, testStep, analysisStep)]
         }
     }
 
     Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {
-        def baseTestStep = defaultJavaTestStep(conventions.checkTask)
-        def baseAnalysisStep = defaultJavaAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
+        def baseTestStep = steps.defaultJavaTestStep(conventions.checkTask)
+        def baseAnalysisStep = steps.defaultJavaAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
 
         return parallel(platforms,
-                { plat, gradle -> checkArgs.testWrapper(baseTestStep, plat, gradle) },
-                { plat, gradle -> checkArgs.analysisWrapper(baseAnalysisStep, plat, gradle) }, conventions)
+                baseTestStep.wrappedBy(checkArgs.testWrapper),
+                baseAnalysisStep.wrappedBy(checkArgs.analysisWrapper), conventions)
     }
 
-    static Closure defaultJavaTestStep(String checkTask) {
-        return { Platform plat, Gradle gradle ->
-            gradle.wrapper(checkTask)
-        }
-    }
-
-    static Closure defaultJavaAnalysisStep(PipelineConventions conventions,
-                                           JenkinsMetadata metadata,
-                                           Sonarqube sonarqube,
-                                           Coveralls coveralls) {
-        return { Platform plat, Gradle gradle ->
-            def branchName = metadata.isPR() ? null : metadata.branchName
-            gradle.wrapper(conventions.jacocoTask)
-            sonarqube.maybeRun(gradle, conventions.sonarqubeTask,  branchName)
-            coveralls.maybeRun(gradle, conventions.coverallsTask)
-        }
-    }
+//    static Closure defaultJavaTestStep(String checkTask) {
+//        return { Platform plat, Gradle gradle ->
+//            gradle.wrapper(checkTask)
+//        }
+//    }
+//
+//    static Closure defaultJavaAnalysisStep(PipelineConventions conventions,
+//                                           JenkinsMetadata metadata,
+//                                           Sonarqube sonarqube,
+//                                           Coveralls coveralls) {
+//        return { Platform plat, Gradle gradle ->
+//            def branchName = metadata.isPR() ? null : metadata.branchName
+//            gradle.wrapper(conventions.jacocoTask)
+//            sonarqube.maybeRun(gradle, conventions.sonarqubeTask,  branchName)
+//            coveralls.maybeRun(gradle, conventions.coverallsTask)
+//        }
+//    }
 }

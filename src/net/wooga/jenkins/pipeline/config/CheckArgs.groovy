@@ -16,8 +16,8 @@ class CheckArgs {
     static CheckArgs fromConfigMap(Object jenkins, JenkinsMetadata metadata, Map configMap) {
         def sonarqubeToken = configMap.sonarToken as String
         def coverallsToken = configMap.coverallsToken as String
-        def testWrapper = (configMap.testWrapper ?:{ testOp, plat, gradle -> testOp(plat, gradle) }) as Closure
-        def analysisWrapper = (configMap.analysisWrapper ?: { analysisOp, plat, gradle -> analysisOp(plat, gradle) }) as Closure
+        def testWrapper = (configMap.testWrapper ?:{ testOp, plat -> testOp(plat) }) as Closure
+        def analysisWrapper = (configMap.analysisWrapper ?: { analysisOp, plat -> analysisOp(plat) }) as Closure
 
         def sonarqube = new Sonarqube(sonarqubeToken)
         def coveralls = new Coveralls(jenkins, coverallsToken)
