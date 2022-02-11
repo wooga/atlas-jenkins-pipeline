@@ -10,7 +10,7 @@ class FakeMethodCalls {
         Closure getAt(String propertyName) {
             return this.&hasMethodCallWith.curry(propertyName)
         }
-        protected boolean hasMethodCallWith(String methodName, Closure assertion) {
+        protected boolean hasMethodCallWith(String methodName, Closure<Boolean> assertion) {
             return getMethodCalls(methodName).any(assertion)
         }
     }

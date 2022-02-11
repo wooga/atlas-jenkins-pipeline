@@ -1,18 +1,23 @@
 package net.wooga.jenkins.pipeline.model
 
+import net.wooga.jenkins.pipeline.config.GradleArgs
+
 class Gradle {
 
+    private Object jenkins
     private String logLevel
-    private Boolean stackTrace
+    private boolean stackTrace
     private boolean refreshDependencies
 
-    static Gradle fromJenkins(Object jenkinsScript, String logLevel, Boolean stackTrace = false, Boolean refreshDependencies = false) {
+    static Gradle fromJenkins(Object jenkinsScript, GradleArgs gradleArgs) {
+        return fromJenkins(jenkinsScript, gradleArgs.logLevel, gradleArgs.stackTrace, gradleArgs.refreshDependencies)
+    }
+
+    static Gradle fromJenkins(Object jenkinsScript, String logLevel, boolean stackTrace = false, boolean refreshDependencies = false) {
         return new Gradle(jenkinsScript, logLevel, stackTrace, refreshDependencies)
     }
 
-    Object jenkins
-
-    Gradle(Object jenkins, String logLevel, Boolean stackTrace = false, Boolean refreshDependencies = false) {
+    Gradle(Object jenkins, String logLevel, boolean stackTrace, boolean refreshDependencies) {
         this.stackTrace = stackTrace
         this.logLevel = logLevel
         this.jenkins = jenkins
@@ -24,7 +29,6 @@ class Gradle {
      */
     def wrapper(String command, Boolean returnStatus = false,
                                 Boolean returnStdout = false) {
-
         if (jenkins.isUnix()) {
             return jenkins.sh(script: "./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
         } else {

@@ -1,15 +1,10 @@
-import net.wooga.jenkins.pipeline.check.Checks
-import net.wooga.jenkins.pipeline.config.Config
-import net.wooga.jenkins.pipeline.model.Gradle
-
+import net.wooga.jenkins.pipeline.config.JavaConfig
 
 def call(Map configMap) {
-    def config = configMap.config as Config
-
+    def config = configMap.config as JavaConfig
     withEnv(["COVERALLS_PARALLEL=true"]) {
-        def gradle = Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String, params.STACK_TRACE as boolean)
-        def checks = Checks.create(this, gradle, config.dockerArgs, config.metadata.buildNumber)
-        def checksForParallel = checks.javaCoverage(config)
+        def javaChecks = config.pipelineTools.checks.forJavaPipelines()
+        def checksForParallel = javaChecks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
         parallel checksForParallel
     }
 }

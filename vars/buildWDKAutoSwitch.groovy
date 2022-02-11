@@ -13,12 +13,11 @@ import net.wooga.jenkins.pipeline.setup.Setups
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [ unityVersions:[] ]) {
+  configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
+  configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
+  configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   def config = WDKConfig.fromConfigMap("macos", configMap, this)
-  Closure<Gradle> newGradle = {
-      return Gradle.fromJenkins(this, params.LOG_LEVEL?: env.LOG_LEVEL as String,
-                                      params.STACK_TRACE as Boolean,
-                                      params.REFRESH_DEPENDENCIES as Boolean)
-  }
+
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
   pipeline {
@@ -31,7 +30,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
     environment {
       UVM_AUTO_SWITCH_UNITY_EDITOR  = "YES"
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
-      LOG_LEVEL = "${config.logLevel}"
+      LOG_LEVEL = "${config.gradleArgs.logLevel}"
       ATLAS_READ = credentials('artifactory_read') //needed for gradle sto read private packages
     }
 
@@ -53,7 +52,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           sendSlackNotification "STARTED", true
           script {
-            def setup = Setups.forJenkins(this, newGradle())
+            def setup = config.pipelineTools.setups
             setup.wdk(params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
           }
         }
@@ -84,8 +83,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
             steps {
               unstash 'setup_w'
               script {
-                def assembler = Assemblers.fromJenkins(this, newGradle(), params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                assembler.unityWDK("build")
+                def assembler = config.pipelineTools.assemblers
+                assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
               }
             }
 
@@ -112,9 +111,10 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
             steps {
               script {
-                def checks = Checks.create(this, newGradle(), null, config.metadata.buildNumber as int)
-                  def stepsForParallel = checks.wdkCoverage(config,
-                          params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                def checks = config.pipelineTools.checks.forWDKPipelines()
+                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
+                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
+                        config.checkArgs, config.conventions)
                   parallel stepsForParallel
               }
             }

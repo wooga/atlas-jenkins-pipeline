@@ -32,6 +32,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     @Shared FakeMethodCalls calls
     @Shared FakeEnvironment environment
     @Shared Map<String, Map> jenkinsStash
+    @Shared String currentDir
 
     def setupSpec() {
         jenkinsStash = new HashMap<>()
@@ -47,6 +48,8 @@ abstract class DeclarativeJenkinsSpec extends Specification {
 
         helper = jenkinsTest.helper as SandboxPipelineTestHelper
         binding = jenkinsTest.binding
+        currentDir = null
+
         addLackingDSLTerms()
         populateJenkinsDefaultEnvironment(binding)
     }
@@ -115,6 +118,12 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("unstash", [String]) { String key ->
                 Optional.ofNullable(jenkinsStash[key]).
                         orElseThrow{new IllegalStateException("${key} does not exists on stash")}
+            }
+            registerAllowedMethod("dir", [String, Closure]) { String targetDir, cls ->
+                def previousDir = this.currentDir
+                this.currentDir = targetDir
+                cls()
+                this.currentDir = previousDir
             }
         }
     }

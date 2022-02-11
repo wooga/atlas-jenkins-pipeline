@@ -8,18 +8,16 @@ import net.wooga.jenkins.pipeline.model.Docker
 class Enclosures {
 
     private Docker docker
-    private DockerArgs dockerArgs
     private EnclosureCreator enclosureCreator
 
-    Enclosures(Docker docker, DockerArgs dockerArgs, EnclosureCreator enclosureCreator) {
+    Enclosures(Docker docker, EnclosureCreator enclosureCreator) {
         this.docker = docker
-        this.dockerArgs = dockerArgs
         this.enclosureCreator = enclosureCreator
     }
 
     def withDocker(Platform platform, Closure mainCls, Closure catchCls = {throw it}, Closure finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform, {
-            docker.runOnImage(dockerArgs, mainCls)
+            docker.runOnImage(mainCls)
         }, catchCls, finallyCls)
     }
 

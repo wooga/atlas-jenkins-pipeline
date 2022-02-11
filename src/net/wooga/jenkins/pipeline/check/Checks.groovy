@@ -1,76 +1,42 @@
 package net.wooga.jenkins.pipeline.check
 
-import net.wooga.jenkins.pipeline.config.Config
-import net.wooga.jenkins.pipeline.config.DockerArgs
-import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
-import net.wooga.jenkins.pipeline.config.WDKConfig
 import net.wooga.jenkins.pipeline.model.Docker
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
-    static Checks create(Object jenkinsScript, Gradle gradle, DockerArgs dockerArgs, int buildNumber) {
-        def docker = new Docker(jenkinsScript)
-        def commands = Commands.fromJenkins(jenkinsScript)
+    Object jenkins
+    Docker docker
+    Gradle gradle
+    EnclosureCreator enclosureCreator
+    Enclosures enclosures
+    CheckCreator checkCreator
+
+    //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
+    //for non-trivial constructors, prefer static factories.
+    static Checks create(Object jenkinsScript, Docker docker, Gradle gradle, int buildNumber) {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
-        def enclosures = new Enclosures(docker, dockerArgs, enclosureCreator)
+        def enclosures = new Enclosures(docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
-        return new Checks(jenkinsScript, checkCreator, gradle, commands)
+
+        return new Checks(jenkinsScript, docker, gradle, enclosureCreator, enclosures, checkCreator)
     }
 
-    final Object jenkins
-    final CheckCreator checkCreator
-
-    final Gradle gradle
-    final Sonarqube sonarqube
-    final Coveralls coveralls
-
-    Checks(Object jenkinsScript, CheckCreator checkCreator, Gradle gradle, Commands commands) {
-        this.jenkins = jenkinsScript
-        this.checkCreator = checkCreator
+    private Checks(Object jenkins, Docker docker, Gradle gradle, EnclosureCreator enclosureCreator,
+           Enclosures enclosures, CheckCreator checkCreator) {
+        this.jenkins = jenkins
+        this.docker = docker
         this.gradle = gradle
-        this.sonarqube = commands.sonarqube
-        this.coveralls = commands.coveralls
+        this.enclosureCreator = enclosureCreator
+        this.enclosures = enclosures
+        this.checkCreator = checkCreator
     }
 
-    Map<String, Closure> javaCoverage(Config config) {
-        return checkCreator.javaChecks(config.platforms, {
-                jenkins.checkout(jenkins.scm)
-                gradle.wrapper("check")
-            }, {
-                def branchName = config.metadata.isPR()? null : config.metadata.branchName
-                gradle.wrapper("jacocoTestReport")
-                sonarqube.runGradle(gradle, config.sonarArgs, branchName)
-                coveralls.runGradle(gradle, config.coverallsToken)
-            })
+    JavaChecks forJavaPipelines() {
+        return new JavaChecks(jenkins, checkCreator, gradle)
     }
 
-    Map<String, Closure> simple(Config config, Closure testStep, Closure analysisStep) {
-        return checkCreator.javaChecks(config.platforms, testStep, analysisStep)
+    WDKChecks forWDKPipelines() {
+        return new WDKChecks(jenkins, checkCreator, gradle)
     }
-
-    Map<String, Closure> simple(WDKConfig config, Closure testStep, Closure analysisStep) {
-        return checkCreator.csWDKChecks(config.unityVersions, testStep, analysisStep)
-    }
-
-    Map<String, Closure> wdkCoverage(WDKConfig config, String releaseType, String releaseScope, String setupStashId="setup_w") {
-        return checkCreator.csWDKChecks(config.unityVersions, { UnityVersionPlatform versionPlat ->
-            jenkins.dir(versionPlat.directoryName) {
-                jenkins.checkout(jenkins.scm)
-                jenkins.unstash setupStashId
-                gradle.wrapper("-Prelease.stage=${releaseType.trim()} " +
-                        "-Prelease.scope=${releaseScope.trim()} " +
-                        "check")
-            }
-        },{ UnityVersionPlatform versionPlat ->
-            jenkins.dir(versionPlat.directoryName) {
-                def branchName = config.metadata.isPR() ? null : config.metadata.branchName
-                sonarqube.runGradle(gradle, config.sonarArgs, branchName)
-            }
-            def coberturaAdapter = jenkins.istanbulCoberturaAdapter('**/codeCoverage/Cobertura.xml')
-            jenkins.publishCoverage adapters: [coberturaAdapter],
-                    sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
-        })
-    }
-
 }

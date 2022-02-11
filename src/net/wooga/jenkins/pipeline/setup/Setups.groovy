@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.setup
 
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Setups {
@@ -13,13 +14,13 @@ class Setups {
         this.gradle = gradle
     }
 
-    static Setups forJenkins(Object jenkinsScript, Gradle gradle) {
+    static Setups create(Object jenkinsScript, Gradle gradle) {
         return new Setups(jenkinsScript, gradle)
     }
 
-    def wdk(String releaseType, String releaseScope) {
+    def wdk(String releaseType, String releaseScope, String setupTask = PipelineConventions.standard.setupTask) {
         gradle.wrapper("-Prelease.stage=${releaseType.trim()} " +
-                        "-Prelease.scope=${releaseScope.trim()} setup")
+                        "-Prelease.scope=${releaseScope.trim()} ${setupTask}")
     }
 
 }

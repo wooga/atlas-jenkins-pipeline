@@ -1,6 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import com.cloudbees.groovy.cps.NonCPS
 import net.wooga.jenkins.pipeline.BuildVersion
 
 class UnityVersionPlatform {
@@ -18,10 +17,6 @@ class UnityVersionPlatform {
 
     String getStepLabel() {
         return "Unity-${buildVersion.toLabel()}"
-    }
-
-    String getDirectoryName() {
-        return buildVersion.toDirectoryName()
     }
 
     boolean getOptional() {

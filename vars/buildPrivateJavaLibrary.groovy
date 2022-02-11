@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.config.JavaConfig
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -10,8 +10,11 @@ import net.wooga.jenkins.pipeline.config.Config
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [:]) {
-  Config config = Config.fromConfigMap(configMap, this)
-  def mainPlatform = config.platforms[0].name
+  configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
+  configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
+  configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
+  def config = JavaConfig.fromConfigMap(configMap, this)
+  def mainPlatform = config.mainPlatform.name
 
   pipeline {
     agent none
@@ -49,8 +52,8 @@ def call(Map configMap = [:]) {
         post {
           success {
             script {
-              if (config.coverallsToken) {
-                httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.coverallsToken}"
+              if (config.checkArgs.coveralls.token) {
+                httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.checkArgs.coveralls.token}"
               }
             }
           }

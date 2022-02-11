@@ -4,12 +4,18 @@ import net.wooga.jenkins.pipeline.config.DockerArgs
 
 class Docker {
     private final Object jenkins
+    private final DockerArgs dockerArgs
 
-    Docker(Object jenkins) {
-        this.jenkins = jenkins
+    static Docker fromJenkins(Object jenkins, DockerArgs dockerArgs) {
+        return new Docker(jenkins, dockerArgs)
     }
 
-    void runOnImage(DockerArgs dockerArgs, Closure mainClosure) {
+    Docker(Object jenkins, DockerArgs dockerArgs) {
+        this.jenkins = jenkins
+        this.dockerArgs = dockerArgs
+    }
+
+    void runOnImage(Closure mainClosure) {
         def image = createImage(dockerArgs)
         if(image != null) {
             image.inside(dockerArgs.dockerImageArgs) { mainClosure.call() }

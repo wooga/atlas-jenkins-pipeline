@@ -4,6 +4,8 @@ import net.wooga.jenkins.pipeline.BuildVersion
 
 class Platform {
 
+    final String checkoutDirectory
+    final String checkDirectory
     final String name
     final String os
     final String labels
@@ -15,6 +17,8 @@ class Platform {
 
     static Platform forJava(String platformName, Map config, boolean isMain) {
         return new Platform(
+                (config.checkoutDir?: ".") as String,
+                (config.checkDir?: ".") as String,
                 platformName,
                 platformName,
                 platformName == "linux",
@@ -32,6 +36,8 @@ class Platform {
             unityEnv.add("UNITY_API_COMPATIBILITY_LEVEL=${buildVersion.apiCompatibilityLevel}")
         }
         return new Platform(
+                (config.checkoutDir?: buildVersion.toDirectoryName()) as String,
+                (config.checkDir?: ".") as String,
                 buildVersion.version,
                 buildOS,
                 false,
@@ -42,8 +48,10 @@ class Platform {
         )
     }
 
-    Platform(String name, String os, boolean runsOnDocker,
+    Platform(String checkoutDirectory, String checkDirectory, String name, String os, boolean runsOnDocker,
              String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main) {
+        this.checkoutDirectory = checkoutDirectory
+        this.checkDirectory = checkDirectory
         this.name = name
         this.os = os
         this.labels = labels
@@ -81,6 +89,7 @@ class Platform {
 
         Platform platform = (Platform) o
 
+        if (checkDirectory != platform.checkDirectory) return false
         if (main != platform.main) return false
         if (runsOnDocker != platform.runsOnDocker) return false
         if (labels != platform.labels) return false
@@ -95,6 +104,7 @@ class Platform {
     int hashCode() {
         int result
         result = (name != null ? name.hashCode() : 0)
+        result = 31 * result + (checkDirectory != null ? checkDirectory.hashCode() : 0)
         result = 31 * result + (os != null ? os.hashCode() : 0)
         result = 31 * result + (labels != null ? labels.hashCode() : 0)
         result = 31 * result + (testLabels != null ? testLabels.hashCode() : 0)

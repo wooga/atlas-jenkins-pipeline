@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.publish
 
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Publishers {
@@ -20,41 +21,44 @@ class Publishers {
         this.releaseType = releaseType.trim()
     }
 
-    def gradlePlugin(String publishKeySecret, String publishSecretSecret) {
+    def gradlePlugin(String publishKeySecret, String publishSecretSecret,
+                     String checkTask = PipelineConventions.standard.checkTask) {
         jenkins.withCredentials([jenkins.string(credentialsId: publishKeySecret, variable: "GRADLE_PUBLISH_KEY"),
                                  jenkins.string(credentialsId: publishSecretSecret, variable: "GRADLE_PUBLISH_SECRET")]) {
             gradle.wrapper("${releaseType} " +
                     "-Pgradle.publish.key=${jenkins.GRADLE_PUBLISH_KEY} " +
                     "-Pgradle.publish.secret=${jenkins.GRADLE_PUBLISH_SECRET} " +
                     "-Prelease.stage=${releaseType} " +
-                    "-Prelease.scope=${releaseScope} -x check")
+                    "-Prelease.scope=${releaseScope} -x ${checkTask}")
         }
     }
 
-    def bintray(String bintraySecret) {
+    def bintray(String bintraySecret, String checkTask = PipelineConventions.standard.checkTask) {
         jenkins.withCredentials([jenkins.usernamePassword(credentialsId: bintraySecret, usernameVariable: "BINTRAY_USER",
                 passwordVariable: "BINTRAY_API_KEY")]) {
             gradle.wrapper("${releaseType} " +
                         "-Pbintray.user=${jenkins.BINTRAY_USER} " +
                         "-Pbintray.key=${jenkins.BINTRAY_API_KEY} " +
                         "-Prelease.stage=${releaseType} " +
-                        "-Prelease.scope=${releaseScope} -x check")
+                        "-Prelease.scope=${releaseScope} -x ${checkTask}")
         }
     }
 
-    def ossrh(String publishSecret, String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret) {
+    def ossrh(String publishSecret, String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret,
+              String checkTask = PipelineConventions.standard.checkTask) {
         def credentials = [jenkins.usernamePassword(credentialsId: publishSecret,
                 usernameVariable:"OSSRH_USERNAME", passwordVariable: "OSSRH_PASSWORD")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         jenkins.withCredentials(credentials) {
             gradle.wrapper("${releaseType} " +
                     "-Prelease.stage=${releaseType} " +
-                    "-Prelease.scope=${releaseScope} -x check")
+                    "-Prelease.scope=${releaseScope} -x ${checkTask}")
         }
     }
 
     def artifactoryOSSRH(String artifactorySecret,
-                         String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret) {
+                         String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret,
+                         String checkTask = PipelineConventions.standard.checkTask) {
         def credentials = [jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
                 ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         jenkins.withCredentials(credentials) {
@@ -62,7 +66,7 @@ class Publishers {
                     "-Partifactory.user=${jenkins.ARTIFACTORY_USER} " +
                     "-Partifactory.password=${jenkins.ARTIFACTORY_PASS} " +
                     "-Prelease.stage=${releaseType} " +
-                    "-Prelease.scope=${releaseScope} -x check")
+                    "-Prelease.scope=${releaseScope} -x ${checkTask}")
         }
     }
 
@@ -74,14 +78,15 @@ class Publishers {
         ]
     }
 
-    def unityArtifactoryPaket(String unityPath, String artifactorySecret) {
+    def unityArtifactoryPaket(String unityPath, String artifactorySecret,
+                              String checkTask = PipelineConventions.standard.checkTask) {
         jenkins.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
             jenkins.withCredentials([jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
                                      jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
                 gradle.wrapper("${releaseType} " +
                                     "-Prelease.stage=${releaseType} " +
                                     "-Ppaket.publish.repository='${releaseType}' " +
-                                    "-Prelease.scope=${releaseScope} -x check")
+                                    "-Prelease.scope=${releaseScope} -x ${checkTask}")
             }
         }
     }
