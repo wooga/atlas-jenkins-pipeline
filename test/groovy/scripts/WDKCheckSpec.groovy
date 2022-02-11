@@ -299,10 +299,10 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         inSandbox { _ ->
             Map<String, Closure> steps = check.simpleWDK("label", configMap,
-                    { platform ->
+                    { platform, __ ->
                         binding.env.every { checkEnvMap[platform.name][it.key] = it.value }
                     },
-                    { platform ->
+                    { platform, __ ->
                         binding.env.every { analysisEnvMap[platform.name][it.key] = it.value }
                     }
             )
@@ -382,13 +382,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def analysisCount = new AtomicInteger(0)
         and: "configuration object with given platforms with wrapper code"
         def configMap = [unityVersions: ["any", "other"],
-             testWrapper: { testOp, unityPlatform ->
+             testWrapper: { testOp, unityPlatform, gradle ->
                  testCount.incrementAndGet()
-                 testOp(unityPlatform)
+                 testOp(unityPlatform, gradle)
              },
-             analysisWrapper: { analysisOp, unityPlatform ->
+             analysisWrapper: { analysisOp, unityPlatform, gradle ->
                  analysisCount.incrementAndGet()
-                 analysisOp(unityPlatform)
+                 analysisOp(unityPlatform, gradle)
              }]
         and: "stashed setup data"
         jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
@@ -415,6 +415,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "stashed setup"
         jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
+
         when: "running check"
         def actualCheckoutDir = ""
         helper.registerAllowedMethod("checkout", [String]) {
@@ -440,13 +441,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
         def configMap = [unityVersions: ["2019"], checkDir: checkDir,
-            testWrapper: { testOp, platform ->
+            testWrapper: { testOp, platform, gradle ->
                 stepsDirs.add(this.currentDir)
-                testOp(platform)
+                testOp(platform, gradle)
         },
-            analysisWrapper: { analysisOp, platform ->
+            analysisWrapper: { analysisOp, platform, gradle ->
                 stepsDirs.add(this.currentDir)
-                analysisOp(platform)
+                analysisOp(platform, gradle)
         }]
         and: "stashed setup"
         jenkinsStash["setup_w"] = [:]

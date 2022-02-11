@@ -52,12 +52,14 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         inSandbox { buildJavaLibrary() }
 
         then: "runs gradle with parameters"
-        def gradleCall = getShGradleCalls().first()
-        skipsRelease || (gradleCall != null)
-        skipsRelease ^ gradleCall.contains(releaseType)
-        skipsRelease ^ gradleCall.contains("-Prelease.stage=${releaseType}")
-        skipsRelease ^ gradleCall.contains("-Prelease.scope=${releaseScope}")
-        skipsRelease ^ gradleCall.contains("-x check")
+        skipsRelease ^/*XOR*/ calls.has["sh"] { MethodCall call ->
+            String it = call.args[0]["script"]
+            it.contains("gradlew") &&
+            it.contains(releaseType) &&
+            it.contains("-Prelease.stage=${releaseType}") &&
+            it.contains("-Prelease.scope=${releaseScope}") &&
+            it.contains("-x check")
+        }
 
         where:
         releaseType | releaseScope | skipsRelease
