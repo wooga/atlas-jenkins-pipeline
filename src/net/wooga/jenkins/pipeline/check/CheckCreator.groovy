@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.check
 
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
 
@@ -12,11 +13,9 @@ class CheckCreator {
         this.enclosures = enclosures
     }
 
-    Closure javaChecks(Platform platform, Closure testStep, Closure analysisStep) {
-        def mainClosure = createCheck(platform,
-                { testStep.call(platform) },
-                { analysisStep(platform) })
-        def catchClosure = { throw it }
+    Closure javaChecks(Platform platform, Step testStep, Step analysisStep) {
+        def mainClosure = createCheck(testStep, analysisStep).pack(platform)
+        def catchClosure = {throw it}
         def finallyClosure = {
             jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
             jenkins.cleanWs()
@@ -28,9 +27,8 @@ class CheckCreator {
         return checkStep
     }
 
-    Closure csWDKChecks(UnityVersionPlatform versionBuild, Closure testStep, Closure analysisStep) {
-        def mainClosure = createCheck(versionBuild.platform,
-                { testStep(versionBuild.platform) }, { analysisStep(versionBuild.platform) })
+    Closure csWDKChecks(UnityVersionPlatform versionBuild, Step testStep, Step analysisStep) {
+        def mainClosure = createCheck(testStep, analysisStep).pack(versionBuild.platform)
         def catchClosure = { Throwable e ->
             if (versionBuild.optional) {
                 jenkins.unstable(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
@@ -48,20 +46,19 @@ class CheckCreator {
         return checkStep
     }
 
-    protected Closure createCheck(Platform platform, Closure testStep, Closure analysisStep) {
-        return {
+    protected Step createCheck(Step testStep, Step analysisStep) {
+        return new Step({ Platform platform ->
             jenkins.dir(platform.checkoutDirectory) {
                 jenkins.checkout(jenkins.scm)
                 jenkins.dir(platform.checkDirectory) {
-                    testStep()
+                    testStep(platform)
                     if (platform.isMain()) {
-                        analysisStep()
+                        analysisStep(platform)
                     }
                 }
             }
-        }
+        })
     }
-
 }
 
 
