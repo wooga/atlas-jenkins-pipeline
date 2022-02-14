@@ -53,7 +53,7 @@ class PlatformSpec extends Specification {
         def platform = Platform.forWDK(buildVersion, buildOS, config, isMain)
 
         then: "generated platform is valid, matches map values and contains unity environment"
-        def unityEnv = ["UVM_UNITY_VERSION=${buildVersion.version}", "UNITY_LOG_CATEGORY=check-${buildVersion.version}"].with {
+        def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}", "UVM_UNITY_VERSION=${buildVersion.version}"].with {
             it.addAll(buildVersion.apiCompatibilityLevel ? ["UNITY_API_COMPATIBILITY_LEVEL=${buildVersion.apiCompatibilityLevel}"] : [])
             return it
         }
@@ -107,6 +107,21 @@ class PlatformSpec extends Specification {
         ["testlabel"] | null             | "osname"
         ["testlabel"] | "label"          | "osname"
         ["testlabel"] | "label"          | "osname"
+    }
+
+    def "creates platform without version environment if build version is set to be found automatically"() {
+        given: "build version with 'project_version' version label"
+        def autoBuildVer = buildVersion("project_version")
+
+        and: "config with other test environments"
+        def config = [testEnvironment: ["env=a", "env2=b"]]
+
+        when: "creating new WDK platform"
+        def platform = Platform.forWDK(autoBuildVer, "macos", config, true)
+
+        then: "created platform doesn't have the UVM_UNITY_VERSION environment"
+        platform.testEnvironment.find{it.trim().startsWith("UVM_UNITY_VERSION=")} == null
+        platform.testEnvironment == config.testEnvironment + ["UNITY_LOG_CATEGORY=check-project_version"]
     }
 
 

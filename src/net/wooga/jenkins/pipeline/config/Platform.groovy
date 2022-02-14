@@ -30,8 +30,10 @@ class Platform {
     }
 
     static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
-        def unityEnv = ["UVM_UNITY_VERSION=${buildVersion.version}",
-                        "UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
+        def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
+        if(buildVersion.hasVersion()) {
+            unityEnv.add("UVM_UNITY_VERSION=${buildVersion.version}")
+        }
         if (buildVersion.apiCompatibilityLevel != null){
             unityEnv.add("UNITY_API_COMPATIBILITY_LEVEL=${buildVersion.apiCompatibilityLevel}")
         }

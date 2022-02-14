@@ -20,11 +20,11 @@ class BuildVersionSpec extends Specification {
         where:
         obj                                                                 | expected
         new BuildVersion("2021", true, "a")                                 | new BuildVersion("2021", true, "a")
-        { -> new BuildVersion("2021", true, "a") }                          | new BuildVersion("2021", true, "a")
+                { -> new BuildVersion("2021", true, "a") } | new BuildVersion("2021", true, "a")
         "2020"                                                              | new BuildVersion("2020", false, null)
-        { -> "2020" }                                                       | new BuildVersion("2020", false, null)
+                { -> "2020" } | new BuildVersion("2020", false, null)
         [version: "2019"]                                                   | new BuildVersion("2019", false, null)
-        { -> [version: "2019"] }                                            | new BuildVersion("2019", false, null)
+                { -> [version: "2019"] } | new BuildVersion("2019", false, null)
         [version: "2019", optional: true]                                   | new BuildVersion("2019", true, null)
         [version: "2019", apiCompatibilityLevel: "net_4_6"]                 | new BuildVersion("2019", false, "net_4_6")
         [version: "2019", optional: true, apiCompatibilityLevel: "net_4_6"] | new BuildVersion("2019", true, "net_4_6")
@@ -39,9 +39,9 @@ class BuildVersionSpec extends Specification {
         def e = thrown(IllegalArgumentException)
         e.message == message
         where:
-        obj             | message
-        [optional:true] | "Entry ${obj} does not contain version"
-        null            | "Entry cannot be null"
+        obj              | message
+        [optional: true] | "Entry ${obj} does not contain version"
+        null             | "Entry cannot be null"
     }
 
     @Unroll

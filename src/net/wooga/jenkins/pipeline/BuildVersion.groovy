@@ -3,6 +3,9 @@ package net.wooga.jenkins.pipeline
 import com.cloudbees.groovy.cps.NonCPS
 
 class BuildVersion {
+
+    static final String AUTO_UNITY_VERSION = "project_version"
+
     /**
      * For each entry in a versions map, if they are not in the standard format
      * we process them into the newer format that supports optional arguments per version
@@ -15,24 +18,26 @@ class BuildVersion {
         if(unityVerObj == null){
             throw new IllegalArgumentException("Entry cannot be null")
         }
-
         if (unityVerObj instanceof Closure) {
-            unityVerObj = unityVerObj.call()
+            return parse(unityVerObj())
         }
         if (unityVerObj instanceof BuildVersion) {
-            return unityVerObj
+            return new BuildVersion(unityVerObj.version, unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
         }
         else if (unityVerObj instanceof Map) {
-            def unityVerMap = unityVerObj as Map
-            if(unityVerMap["version"] == null) {
-                throw new IllegalArgumentException("Entry ${unityVerObj} does not contain version")
-            }
-            String version = unityVerMap["version"]
-            boolean optional = unityVerMap["optional"]?: false
-            String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
-            return new BuildVersion(version, optional, apiCompatibilityLevel)
+            return fromBuildVersionMap(unityVerObj as Map)
         }
         return new BuildVersion(unityVerObj.toString(), false, null)
+    }
+
+    static BuildVersion fromBuildVersionMap(Map unityVerMap) {
+        if(unityVerMap["version"] == null) {
+            throw new IllegalArgumentException("Entry ${unityVerMap} does not contain version")
+        }
+        String version = unityVerMap["version"]
+        boolean optional = unityVerMap["optional"]?: false
+        String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
+        return new BuildVersion(version, optional, apiCompatibilityLevel)
     }
 
     final String version
@@ -65,7 +70,7 @@ class BuildVersion {
     }
 
     @NonCPS
-    String toDirectoryName(){
+    String toDirectoryName() {
         def result = version
         if (optional){
             result += "_optional"
@@ -74,6 +79,10 @@ class BuildVersion {
             result += "_${apiCompatibilityLevel}"
         }
         return result
+    }
+
+    boolean hasVersion() {
+        return version != AUTO_UNITY_VERSION
     }
 
     boolean equals(o) {
