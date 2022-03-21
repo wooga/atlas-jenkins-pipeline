@@ -51,6 +51,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         where:
         releaseType | releaseScope | skipsRelease
         "snapshot"  | "patch"      | false
+        "preflight" | "minor"      | false
         "rc"        | "minor"      | false
         "final"     | "major"      | false
     }
@@ -86,6 +87,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         where:
         releaseType | releaseScope
         "snapshot"  | "patch"
+        "preflight" | "minor"
         "rc"        | "minor"
         "final"     | "major"
     }
@@ -127,9 +129,11 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         where:
         releaseType | releaseScope | forceRefreshDependencies
         "snapshot"  | "patch"      | false
+        "preflight" | "patch"      | false
         "rc"        | "minor"      | false
         "final"     | "major"      | false
         "snapshot"  | "patch"      | true
+        "preflight" | "patch"      | true
         "rc"        | "minor"      | true
         "final"     | "major"      | true
     }
