@@ -127,8 +127,16 @@ def testEnvironment = [ 'osx':
 buildGradlePlugin plaforms: ['osx','windows','linux'], testEnvironment: testEnvironment
 ```
 
+# Development
+
+Whenever work is done to update these pipelines, the changes are propagated like so:
+
+1. The changes are added as a feature PR based on `master`. They must be merged into `master`.
+2. A release must be made on the Jenkins CI for the job corresponding to this repository. As consequence, a new branch is made named after the newer version. 
+3. Any jobs that use the pipeline must do a run before the newer changes are loaded. The simplest is to trigger a build with default parameters. Any builds after that should reflect the changes that the newer pipeline introduces.
+
 # License
-Copyright (C) Wooga GmbH 2018-2021 - All Rights Reserved
+Copyright (C) Wooga GmbH 2018-2022 - All Rights Reserved
 Unauthorized copying of this work, via any medium is strictly prohibited
 Proprietary and confidential
 
