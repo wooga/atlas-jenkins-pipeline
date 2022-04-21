@@ -322,31 +322,6 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         } == 1
     }
 
-    @Unroll("checks out step in #checkoutDir")
-    def "checks out step on given checkoutDir"() {
-        given: "loaded check in a running jenkins build"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-        and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux"], checkoutDir: checkoutDir]
-        and: "wired checkout operation"
-        def actualCheckoutDir = ""
-        helper.registerAllowedMethod("checkout", [String]) {
-            actualCheckoutDir = this.currentDir
-        }
-
-        when: "running check"
-        inSandbox {
-            Map<String, Closure> checkSteps = check.javaCoverage(configMap)
-            checkSteps.each { it.value.call() }
-        }
-
-        then: "checkout ran in given directory"
-        checkoutDir == actualCheckoutDir
-
-        where:
-        checkoutDir << [".", "dir", "dir/subdir"]
-    }
-
     @Unroll("runs test and analysis step on #checkDir")
     def "runs test and analysis step on given checkDir"() {
         given: "loaded check in a running jenkins build"

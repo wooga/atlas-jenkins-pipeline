@@ -88,6 +88,29 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
     }
 
+    @Unroll("checks out step in #checkoutDir")
+    def "checks out step on given checkoutDir"() {
+        given: "loaded check in a running jenkins build"
+        def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {}
+
+        and: "wired checkout operation"
+        def actualCheckoutDir = ""
+        helper.registerAllowedMethod("checkout", [String]) {
+            actualCheckoutDir = it
+        }
+
+        when: "running check"
+        inSandbox {
+            buildGradlePlugin(platforms: ["linux"], checkoutDir: checkoutDir)
+        }
+
+        then: "checkout ran in given directory"
+        checkoutDir == actualCheckoutDir
+
+        where:
+        checkoutDir << [".", "dir", "dir/subdir"]
+    }
+
     String[] getShGradleCalls() {
         return calls["sh"].collect { it.args[0]["script"].toString() }.findAll {
             it.contains("gradlew")

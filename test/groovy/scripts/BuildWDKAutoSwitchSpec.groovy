@@ -1,6 +1,7 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -133,6 +134,34 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         "preflight" | "patch"      | true
         "rc"        | "minor"      | true
         "final"     | "major"      | true
+    }
+
+    @Unroll("checks out code on step in #checkoutDir")
+    def "checks out code on step in given checkoutDir"() {
+        given:
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_TYPE = "snapshot"
+            params.RELEASE_SCOPE = "any"
+        }
+        and: "stashed setup"
+        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        and: "tweaked checkout step"
+        def actualCheckoutDir = ""
+        helper.registerAllowedMethod("checkout", [String]) {
+            actualCheckoutDir = it
+        }
+
+        when: "running check"
+        inSandbox {
+            Map<String, Closure> checkSteps = buildWDK(unityVersions: ["2019"], checkoutDir: checkoutDir)
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "steps ran on given directory"
+        checkoutDir == actualCheckoutDir
+
+        where:
+        checkoutDir << [".", "dir", "dir/subdir"]
     }
 
     def hasBaseEnvironment(Map env, String logLevel) {

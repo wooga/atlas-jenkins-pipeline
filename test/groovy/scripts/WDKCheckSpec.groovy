@@ -409,33 +409,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         analysisCount.get() == 1
     }
 
-    @Unroll("checks out code on step in #checkoutDir")
-    def "checks out code on step in given checkoutDir"() {
-        given: "loaded check in a running jenkins build"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-        and: "configuration object with any platforms"
-        def configMap = [unityVersions: ["2019"], checkoutDir: checkoutDir]
-        and: "stashed setup"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
-
-        when: "running check"
-        def actualCheckoutDir = ""
-        helper.registerAllowedMethod("checkout", [String]) {
-            actualCheckoutDir = this.currentDir
-        }
-        inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
-            checkSteps.each { it.value.call() }
-        }
-
-        then: "steps ran on given directory"
-        //checks steps + 1 analysis step
-        checkoutDir == actualCheckoutDir
-
-        where:
-        checkoutDir << [".", "dir", "dir/subdir"]
-    }
-
     @Unroll("runs test and analysis step on #checkDir")
     def "runs test and analysis step on given checkDir"() {
         given: "loaded check in a running jenkins build"
