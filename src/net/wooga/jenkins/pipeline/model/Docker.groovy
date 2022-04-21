@@ -19,7 +19,10 @@ class Docker {
     void runOnImage(PackedStep main) {
         def image = createImage(dockerArgs)
         if(image != null) {
-            image.inside(dockerArgs.dockerImageArgs) { main.call() }
+            image.inside(dockerArgs.dockerImageArgs) {
+                jenkins.echo("Running inside Dockerfile")
+                main.call()
+            }
         } else {
             main.call()
         }

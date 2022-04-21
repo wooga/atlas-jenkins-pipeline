@@ -80,6 +80,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
 
     private void registerPipelineFakeMethods(PipelineTestHelper helper) {
         helper.with {
+            registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
             registerAllowedMethod("isUnix") { true }
             registerAllowedMethod("sendSlackNotification", [String, boolean]) {}
             registerAllowedMethod("junit", [LinkedHashMap]) {}

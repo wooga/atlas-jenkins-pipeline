@@ -7,14 +7,12 @@ import tools.DeclarativeJenkinsSpec
 class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildGradlePlugin.groovy"
 
-    def setupSpec() {
+    def setup() {
         binding.setVariable("params", [RELEASE_TYPE: "snapshot"])
-        binding.setVariable("BRANCH_NAME", "any")
     }
 
     def "posts coveralls results to coveralls server"() {
         given: "loaded buildGradlePlugin in a successful build"
-        helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = "SUCCESS"
         }

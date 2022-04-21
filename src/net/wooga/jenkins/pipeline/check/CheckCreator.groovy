@@ -49,7 +49,6 @@ class CheckCreator {
     protected Step createCheck(Step testStep, Step analysisStep) {
         return new Step({ Platform platform ->
             jenkins.dir(platform.checkoutDirectory) {
-                jenkins.checkout(jenkins.scm)
                 jenkins.dir(platform.checkDirectory) {
                     testStep(platform)
                     if (platform.isMain()) {
