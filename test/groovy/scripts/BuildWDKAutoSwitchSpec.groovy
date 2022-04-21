@@ -1,7 +1,6 @@
 package scripts
 
 import com.lesfurets.jenkins.unit.MethodCall
-import net.wooga.jenkins.pipeline.config.PipelineConventions
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
@@ -136,32 +135,25 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         "final"     | "major"      | true
     }
 
-    @Unroll("checks out code on step in #checkoutDir")
-    def "checks out code on step in given checkoutDir"() {
-        given:
+    @Unroll("#description workspace steps when clearWs is #clearWs")
+    def "clears steps if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
         def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
-            params.RELEASE_TYPE = "snapshot"
+            params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
         }
-        and: "stashed setup"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
-        and: "tweaked checkout step"
-        def actualCheckoutDir = ""
-        helper.registerAllowedMethod("checkout", [String]) {
-            actualCheckoutDir = it
-        }
 
-        when: "running check"
+        when: "running pipeline"
         inSandbox {
-            Map<String, Closure> checkSteps = buildWDK(unityVersions: ["2019"], checkoutDir: checkoutDir)
-            checkSteps.each { it.value.call() }
+            buildWDK(unityVersions: ["2019"], clearWs: clearWs)
         }
 
-        then: "steps ran on given directory"
-        checkoutDir == actualCheckoutDir
+        then: "all workspaces are clean"
+        calls["cleanWs"].length == (clearWs? 3 : 0) //setup, build, and publish steps
 
         where:
-        checkoutDir << [".", "dir", "dir/subdir"]
+        clearWs << [true, false]
+        description = clearWs? "clears" : "doesn't clear"
     }
 
     def hasBaseEnvironment(Map env, String logLevel) {

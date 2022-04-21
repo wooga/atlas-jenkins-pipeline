@@ -190,7 +190,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
-        calls["cleanWs"].length == versions.size()
 
         where:
         versions                    | releaseType | releaseScope | setupStash
@@ -228,7 +227,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
-        calls["cleanWs"].length == versions.size()
 
         where:
         versions                                    | throwsException
@@ -409,6 +407,33 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         analysisCount.get() == 1
     }
 
+    @Unroll("checks out code on step in #checkoutDir")
+    def "checks out code on step in given checkoutDir"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
+        and: "configuration object with any platforms"
+        def configMap = [unityVersions: ["2019"], checkoutDir: checkoutDir]
+        and: "stashed setup"
+        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+
+        when: "running check"
+        def actualCheckoutDir = ""
+        helper.registerAllowedMethod("checkout", [String]) {
+            actualCheckoutDir = this.currentDir
+        }
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "steps ran on given directory"
+        //checks steps + 1 analysis step
+        checkoutDir == actualCheckoutDir
+
+        where:
+        checkoutDir << [".", "dir", "dir/subdir"]
+    }
+
     @Unroll("runs test and analysis step on #checkDir")
     def "runs test and analysis step on given checkDir"() {
         given: "loaded check in a running jenkins build"
@@ -441,5 +466,36 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         where:
         checkDir << [".", "dir", "dir/subdir"]
+    }
+
+    @Unroll("#description all check workspaces when clearWs is #clearWs")
+    def "clears all check workspaces if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {}
+        and: "a configuration with a mandatory platform and clearWs"
+        def configMap = [unityVersions: versions, clearWs: clearWs]
+        and: "stashed setup"
+        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+
+        when: "running check"
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            checkSteps.each {
+                try {
+                    it.value.call()
+                } catch (InputMismatchException _) {
+                } //ignores exception, it is tested in another test
+            }
+        }
+        then: "all platforms workspaces are clean"
+        calls["cleanWs"].length == (clearWs? versions.size() : 0)
+
+        where:
+        versions | clearWs
+        ["2019"] | true
+        ["2019"] | false
+        ["2019", "2022"] | true
+        ["2019", "2022"] | false
+        description = clearWs? "clears" : "doesn't clear"
     }
 }

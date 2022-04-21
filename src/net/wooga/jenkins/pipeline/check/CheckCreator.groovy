@@ -18,7 +18,6 @@ class CheckCreator {
         def catchClosure = {throw it}
         def finallyClosure = {
             jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
-            jenkins.cleanWs()
         }
 
         def checkStep = platform.runsOnDocker ?
@@ -40,7 +39,6 @@ class CheckCreator {
             jenkins.nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/test*/*.xml'
             jenkins.archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
             jenkins.archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml', allowEmptyArchive: true
-            jenkins.cleanWs()
         }
         def checkStep = enclosures.simple(versionBuild.platform, mainClosure, catchClosure, finallyClosure)
         return checkStep

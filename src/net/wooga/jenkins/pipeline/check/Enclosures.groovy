@@ -1,5 +1,3 @@
-
-
 package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.check.steps.PackedStep
@@ -18,19 +16,19 @@ class Enclosures {
         this.enclosureCreator = enclosureCreator
     }
 
-    def withDocker(Platform platform, PackedStep mainCls, Closure catchCls = { throw it }, PackedStep finallyCls = {}) {
+    def withDocker(Platform platform, PackedStep mainCls, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform,
                 withCheckout(platform.checkoutDirectory, { docker.runOnImage(mainCls) }),
                 catchCls,
-                finallyCls
+                withCleanup(platform.clearWs, finallyCls)
         )
     }
 
-    def simple(Platform platform, PackedStep mainClosure, Closure catchCls = { throw it }, PackedStep finallyCls = {}) {
+    def simple(Platform platform, PackedStep mainClosure, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
         enclosureCreator.withNodeAndEnv(platform,
                 withCheckout(platform.checkoutDirectory, mainClosure),
                 catchCls,
-                finallyCls
+                withCleanup(platform.clearWs, finallyCls)
         )
     }
 
@@ -40,6 +38,15 @@ class Enclosures {
                 jenkins.checkout(jenkins.scm)
             }
             step()
+        }
+    }
+
+    private PackedStep withCleanup(boolean hasCleanup, PackedStep step) {
+        return {
+            step()
+            if(hasCleanup) {
+                jenkins.cleanWs()
+            }
         }
     }
 }
