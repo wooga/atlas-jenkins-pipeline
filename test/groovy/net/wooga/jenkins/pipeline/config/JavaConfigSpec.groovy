@@ -37,15 +37,15 @@ class JavaConfigSpec extends Specification {
     JavaConfig configWith(List<String> platforms, Map dockerArgs = [:], Map gradleArgs = [:], Map extraFields = [:], String coverallsToken = null) {
         def cfgMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: coverallsToken] + extraFields
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        return new JavaConfig(jenkinsScript, metadata,
-                platforms.withIndex().collect { String platName, int index ->
-                    Platform.forJava(platName, cfgMap, index == 0)
-                },
+        def baseConfig = new BaseConfig(jenkinsScript,
+                PipelineConventions.standard.mergeWithConfigMap(cfgMap),
+                metadata,
                 GradleArgs.fromConfigMap(gradleArgs),
                 DockerArgs.fromConfigMap(dockerArgs),
-                CheckArgs.fromConfigMap(jenkinsScript, metadata, cfgMap),
-                PipelineConventions.standard.mergeWithConfigMap(cfgMap)
-                )
+                CheckArgs.fromConfigMap(jenkinsScript, metadata, cfgMap))
+        def platformObjs = platforms.withIndex().collect { String platName, int index ->
+            Platform.forJava(platName, cfgMap, index == 0)
+        } as Platform[]
+        return new JavaConfig(baseConfig, platformObjs)
     }
-
 }

@@ -52,10 +52,14 @@ class WDKConfigSpec extends Specification {
 
     def configFor(List<String> plats, String label, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        return new WDKConfig(jenkinsScript, platsFor(plats, label),
-                CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]),
+        def unityVersions = platsFor(plats, label)
+        def baseConfig = new BaseConfig(jenkinsScript,
+                PipelineConventions.standard.mergeWithConfigMap([:]),
+                metadata,
                 GradleArgs.fromConfigMap([refreshDependencies: refreshDependencies, showStackTrace: showStackTrace, logLevel: logLevel]),
-                metadata, label, PipelineConventions.standard.mergeWithConfigMap([:]))
+                DockerArgs.fromConfigMap([:]),
+                CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]))
+        return new WDKConfig(unityVersions, baseConfig, label)
     }
 
 

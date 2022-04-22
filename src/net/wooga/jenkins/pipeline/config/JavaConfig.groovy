@@ -4,42 +4,29 @@ import net.wooga.jenkins.pipeline.PipelineTools
 
 class JavaConfig implements PipelineConfig {
 
-    final Object jenkins
-
-    final PipelineConventions conventions
+    final BaseConfig baseConfig
     final Platform[] platforms
-    final JenkinsMetadata metadata
-    final GradleArgs gradleArgs
-    final DockerArgs dockerArgs
-    final CheckArgs checkArgs
 
-    static JavaConfig fromConfigMap(Map config, Object jenkinsScript) {
-        config.platforms = config.platforms ?: ['macos','windows']
-        def platNames = config.platforms as List<String>
+    static Platform[] collectPlatform(Map configMap, List<String> platformNames) {
         def index = 0
-        def platforms = platNames.collect { String platformName ->
-            def platform = Platform.forJava(platformName, config, index == 0)
+        return platformNames.collect { String platformName ->
+            def platform = Platform.forJava(platformName, configMap, index == 0)
             index++
             return platform
         }
-        def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        def gradleArgs = GradleArgs.fromConfigMap(config)
-        def checkArgs = CheckArgs.fromConfigMap(jenkinsScript, metadata, config)
-        def dockerArgs = DockerArgs.fromConfigMap((config.dockerArgs?: [:]) as Map)
-        def conventions = PipelineConventions.standard.mergeWithConfigMap(config)
-
-        return new JavaConfig(jenkinsScript, metadata, platforms, gradleArgs, dockerArgs, checkArgs, conventions)
     }
 
-    JavaConfig(Object jenkinsScript, JenkinsMetadata metadata, List<Platform> platforms,
-               GradleArgs gradleArgs, DockerArgs dockerArgs, CheckArgs checkArgs, PipelineConventions conventions) {
-        this.jenkins = jenkinsScript
-        this.metadata = metadata
+    static JavaConfig fromConfigMap(Map config, Object jenkinsScript) {
+        config.platforms = config.platforms ?: ['macos','windows']
+        def platforms = collectPlatform(config, config.platforms as List<String>)
+        def baseConfig = BaseConfig.fromConfigMap(config, jenkinsScript)
+
+        return new JavaConfig(baseConfig, platforms)
+    }
+
+    JavaConfig(BaseConfig baseConfig, Platform[] platforms) {
+        this.baseConfig = baseConfig
         this.platforms = platforms
-        this.gradleArgs = gradleArgs
-        this.dockerArgs = dockerArgs
-        this.checkArgs = checkArgs
-        this.conventions = conventions
     }
 
     Platform getMainPlatform() {
@@ -47,8 +34,33 @@ class JavaConfig implements PipelineConfig {
     }
 
     @Override
+    PipelineConventions getConventions() {
+        return baseConfig.conventions
+    }
+
+    @Override
+    CheckArgs getCheckArgs() {
+        return baseConfig.checkArgs
+    }
+
+    @Override
+    GradleArgs getGradleArgs() {
+        return baseConfig.gradleArgs
+    }
+
+    @Override
+    DockerArgs getDockerArgs() {
+        return baseConfig.dockerArgs
+    }
+
+    @Override
+    JenkinsMetadata getMetadata() {
+        return baseConfig.metadata
+    }
+
+    @Override
     PipelineTools getPipelineTools() {
-        return PipelineTools.fromConfig(jenkins, this)
+        return PipelineTools.fromConfig(baseConfig.jenkins, this)
     }
 
     boolean equals(o) {
@@ -79,4 +91,5 @@ class JavaConfig implements PipelineConfig {
         result = 31 * result + (checkArgs != null ? checkArgs.hashCode() : 0)
         return result
     }
+
 }

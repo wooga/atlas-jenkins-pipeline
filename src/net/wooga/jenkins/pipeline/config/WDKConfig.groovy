@@ -5,43 +5,49 @@ import net.wooga.jenkins.pipeline.PipelineTools
 
 class WDKConfig implements PipelineConfig {
 
-    static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
-        configMap.unityVersions = configMap.unityVersions ?: []
-        def unityVerObjs = configMap.unityVersions as List
+    static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, String buildLabel, Map configMap) {
         def index = 0
-        def unityVersions = unityVerObjs.collect { Object unityVersionObj ->
+        return unityVerObjs.collect { Object unityVersionObj ->
             def buildVersion = BuildVersion.parse(unityVersionObj)
             def platform = Platform.forWDK(buildVersion, buildLabel, configMap, index == 0)
             index++
             return new UnityVersionPlatform(platform, buildVersion)
         }
-        if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
-
-        def gradleArgs = GradleArgs.fromConfigMap(configMap)
-        def jenkinsMetadata = JenkinsMetadata.fromScript(jenkinsScript)
-        def checkArgs = CheckArgs.fromConfigMap(jenkinsScript, jenkinsMetadata, configMap)
-        def conventions = PipelineConventions.standard.mergeWithConfigMap(configMap)
-
-        return new WDKConfig(jenkinsScript, unityVersions, checkArgs, gradleArgs, jenkinsMetadata, buildLabel, conventions)
     }
 
-    final Object jenkins
-    final UnityVersionPlatform[] unityVersions
-    final CheckArgs checkArgs
-    final GradleArgs gradleArgs
-    final JenkinsMetadata metadata
-    final String buildLabel
-    final PipelineConventions conventions
+    static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
+        configMap.unityVersions = configMap.unityVersions ?: []
+        def unityVersions = collectUnityVersions(configMap.unityVersions as List, buildLabel, configMap)
+        if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
 
-    WDKConfig(Object jenkins, List<UnityVersionPlatform> unityVersions, CheckArgs checkArgs, GradleArgs gradleArgs,
-              JenkinsMetadata metadata, String buildLabel, PipelineConventions conventions) {
-        this.jenkins = jenkins
+        def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)
+
+        return new WDKConfig(unityVersions, baseConfig, buildLabel)
+    }
+
+    final UnityVersionPlatform[] unityVersions
+    final BaseConfig baseConfig
+    final String buildLabel
+
+    WDKConfig(List<UnityVersionPlatform> unityVersions, BaseConfig baseConfig, String buildLabel) {
         this.unityVersions = unityVersions
-        this.checkArgs = checkArgs
-        this.gradleArgs = gradleArgs
-        this.metadata = metadata
+        this.baseConfig = baseConfig
         this.buildLabel = buildLabel
-        this.conventions = conventions
+    }
+
+    @Override
+    PipelineConventions getConventions() {
+        return baseConfig.conventions
+    }
+
+    @Override
+    CheckArgs getCheckArgs() {
+        return baseConfig.checkArgs
+    }
+
+    @Override
+    GradleArgs getGradleArgs() {
+        return baseConfig.gradleArgs
     }
 
     @Override
@@ -50,8 +56,13 @@ class WDKConfig implements PipelineConfig {
     }
 
     @Override
+    JenkinsMetadata getMetadata() {
+        return baseConfig.metadata
+    }
+
+    @Override
     PipelineTools getPipelineTools() {
-        return PipelineTools.fromConfig(jenkins, this)
+        return PipelineTools.fromConfig(baseConfig.jenkins, this)
     }
 }
 
