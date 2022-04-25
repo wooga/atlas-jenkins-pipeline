@@ -31,6 +31,21 @@ class Platform {
         )
     }
 
+    static Platform forJS(String platformName, Map config, boolean isMain) {
+        return new Platform(
+                (config.checkoutDir?: ".") as String,
+                (config.checkDir?: ".") as String,
+                platformName,
+                platformName,
+                platformName == "linux",
+                (config.labels ?: '') as String,
+                mapOrCollection(platformName, config.testEnvironment),
+                mapOrCollection(platformName, config.testLabels),
+                isMain,
+                (config.clearWs?: false) as boolean
+        )
+    }
+
     static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
         def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
         if(buildVersion.hasVersion()) {

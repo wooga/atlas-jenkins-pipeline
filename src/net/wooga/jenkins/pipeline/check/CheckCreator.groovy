@@ -13,7 +13,7 @@ class CheckCreator {
         this.enclosures = enclosures
     }
 
-    Closure javaChecks(Platform platform, Step testStep, Step analysisStep) {
+    Closure junitCheck(Platform platform, Step testStep, Step analysisStep) {
         def mainClosure = createCheck(testStep, analysisStep).pack(platform)
         def catchClosure = {throw it}
         def finallyClosure = {

@@ -17,7 +17,7 @@ class Enclosures {
     }
 
     def withDocker(Platform platform, PackedStep mainCls, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        enclosureCreator.withNodeAndEnv(platform,
+        return enclosureCreator.withNodeAndEnv(platform,
                 withCheckout(platform.checkoutDirectory, { docker.runOnImage(mainCls) }),
                 catchCls,
                 withCleanup(platform.clearWs, finallyCls)
@@ -25,7 +25,7 @@ class Enclosures {
     }
 
     def simple(Platform platform, PackedStep mainClosure, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        enclosureCreator.withNodeAndEnv(platform,
+        return enclosureCreator.withNodeAndEnv(platform,
                 withCheckout(platform.checkoutDirectory, mainClosure),
                 catchCls,
                 withCleanup(platform.clearWs, finallyCls)

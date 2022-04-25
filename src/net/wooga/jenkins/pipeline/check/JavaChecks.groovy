@@ -6,12 +6,10 @@ import net.wooga.jenkins.pipeline.config.*
 
 class JavaChecks {
 
-    final Object jenkins
     final CheckCreator checkCreator
     final GradleSteps steps
 
-    JavaChecks(Object jenkinsScript, CheckCreator checkCreator, GradleSteps steps) {
-        this.jenkins = jenkinsScript
+    JavaChecks(CheckCreator checkCreator, GradleSteps steps) {
         this.checkCreator = checkCreator
         this.steps = steps
     }
@@ -23,9 +21,7 @@ class JavaChecks {
 
     Map<String, Closure> parallel(Platform[] platforms, Step checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
-        return platforms.collectEntries { platform ->
-            [("${conventions.javaParallelPrefix}${platform.name}".toString()): checkStep.pack(platform)]
-        }
+        return parallel(platforms, checkStep, new Step({}), conventions)
     }
 
     Map<String, Closure> parallel(Platform[] platforms, Closure testStep, Closure analysisStep,
@@ -42,12 +38,12 @@ class JavaChecks {
     }
 
     Closure check(Platform platform, Step testStep, Step analysisStep) {
-        return checkCreator.javaChecks(platform, testStep, analysisStep)
+        return checkCreator.junitCheck(platform, testStep, analysisStep)
     }
 
     Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {
-        def baseTestStep = steps.defaultJavaTestStep(conventions.checkTask)
-        def baseAnalysisStep = steps.defaultJavaAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
+        def baseTestStep = steps.defaultGradleTestStep(conventions.checkTask)
+        def baseAnalysisStep = steps.jacocoAnalysis(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
 
         return parallel(platforms,
                 baseTestStep.wrappedBy(checkArgs.testWrapper),

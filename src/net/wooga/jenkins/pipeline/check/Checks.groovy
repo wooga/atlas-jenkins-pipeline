@@ -6,7 +6,6 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
-    Object jenkins
     Docker docker
     Gradle gradle
     GradleSteps steps
@@ -22,12 +21,11 @@ class Checks {
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
         def steps = new GradleSteps(jenkinsScript, gradle)
 
-        return new Checks(jenkinsScript, docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
+        return new Checks(docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
     }
 
-    private Checks(Object jenkins, Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
+    private Checks(Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
            Enclosures enclosures, CheckCreator checkCreator) {
-        this.jenkins = jenkins
         this.docker = docker
         this.gradle = gradle
         this.steps = steps
@@ -37,10 +35,14 @@ class Checks {
     }
 
     JavaChecks forJavaPipelines() {
-        return new JavaChecks(jenkins, checkCreator, steps)
+        return new JavaChecks(checkCreator, steps)
     }
 
     WDKChecks forWDKPipelines() {
-        return new WDKChecks(jenkins, checkCreator, steps)
+        return new WDKChecks(checkCreator, steps)
+    }
+
+    JSChecks forJSPipelines() {
+        return new JSChecks(checkCreator, steps)
     }
 }
