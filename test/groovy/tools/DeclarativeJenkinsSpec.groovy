@@ -42,8 +42,8 @@ abstract class DeclarativeJenkinsSpec extends Specification {
                 new PackageWhitelist("net.wooga.jenkins.pipeline")
         ))
         jenkinsTest.setUp()
+        credentials = new FakeCredentialStorage()
         environment = new FakeEnvironment(jenkinsTest.binding)
-        credentials = new FakeCredentialStorage(environment)
         calls = new FakeMethodCalls(jenkinsTest.helper)
 
         helper = jenkinsTest.helper as SandboxPipelineTestHelper
@@ -101,16 +101,17 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             registerAllowedMethod("fileExists", [String]) { String path -> new File(path).exists() }
             registerAllowedMethod("readFile", [String]) { String path -> new File(path).text }
             registerAllowedMethod("findFiles", [Map]) { Map args -> new FakeJenkinsObject().findFiles(args) }
-            registerAllowedMethod("usernamePassword", [Map], credentials.&usernamePassword)
-            registerAllowedMethod("usernameColonPassword", [Map], credentials.&usernameColonPassword)
+            registerAllowedMethod("usernamePassword", [Map], WithCredentials.&usernamePassword)
+            registerAllowedMethod("usernameColonPassword", [Map], WithCredentials.&usernameColonPassword)
             //TODO: make this generate KEY_USR and KEY_PWD environment
             registerAllowedMethod("credentials", [String], credentials.&getAt)
             registerAllowedMethod("string", [Map]) { Map params ->
                 return params.containsKey("name")?
                         jenkinsTest.paramInterceptor : //string() from parameters clause
-                        credentials.string(params) //string() from withCredentials() context
+                        WithCredentials.string(params) //string() from withCredentials() context
             }
-            registerAllowedMethod("withCredentials", [List.class, Closure.class], credentials.&bindCredentials)
+            registerAllowedMethod("withCredentials", [List.class, Closure.class],
+                                            WithCredentials.&bindCredentials.curry(credentials, environment))
             //needed as utils scripts are dependent on jenkins sandbox
             registerAllowedMethod("utils", []) {[stringToSHA1 : { content -> "fakesha" }]}
             registerAllowedMethod("lock", [Closure]) { cls ->

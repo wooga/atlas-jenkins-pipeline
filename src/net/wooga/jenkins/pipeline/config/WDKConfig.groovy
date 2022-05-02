@@ -5,6 +5,10 @@ import net.wooga.jenkins.pipeline.PipelineTools
 
 class WDKConfig implements PipelineConfig {
 
+    final UnityVersionPlatform[] unityVersions
+    final BaseConfig baseConfig
+    final String buildLabel
+
     static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, String buildLabel, Map configMap) {
         def index = 0
         return unityVerObjs.collect { Object unityVersionObj ->
@@ -24,10 +28,6 @@ class WDKConfig implements PipelineConfig {
 
         return new WDKConfig(unityVersions, baseConfig, buildLabel)
     }
-
-    final UnityVersionPlatform[] unityVersions
-    final BaseConfig baseConfig
-    final String buildLabel
 
     WDKConfig(List<UnityVersionPlatform> unityVersions, BaseConfig baseConfig, String buildLabel) {
         this.unityVersions = unityVersions

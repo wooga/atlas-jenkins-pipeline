@@ -101,7 +101,7 @@ class Publishers {
                                     passwordVariable: "NODE_RELEASE_NPM_PASS")
         ]
         jenkins.withCredentials(credentials) {
-            gradleWrapper "${releaseType} -Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} -x check"
+            gradle.wrapper("${releaseType} -Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} -x check")
         }
     }
 
