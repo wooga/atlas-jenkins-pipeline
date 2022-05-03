@@ -1,0 +1,14 @@
+Custom step to build,test and deploy private atlas gradle plugins.
+
+usage:
+
+```
+def coveralls_token = "coveralls token" //can be null
+
+def testEnvironment = [
+                        "test_var_1=value1",
+                        "test_var_2=value2"
+                       ]
+
+buildPrivateGradlePlugin plaforms: ['macos'], coverallsToken: coveralls_token, testEnvironment: testEnvironment
+```
