@@ -32,7 +32,12 @@ class DockerArgs {
     }
 
     String getDockerBuildString() {
-        return "-f ${fileName} ${buildArgs} ${fileDirectory}".toString()
+        def args = ["-f ${fileName}".toString()]
+        if(buildArgs.size() > 0) {
+            args.add(buildArgs.join(" "))
+        }
+        args.add(fileDirectory)
+        return args.join(" ").toString()
     }
 
     String getDockerImageArgs() {
@@ -60,6 +65,18 @@ class DockerArgs {
         result = 31 * result + (fileName != null ? fileName.hashCode() : 0)
         result = 31 * result + (fileDirectory != null ? fileDirectory.hashCode() : 0)
         return result
+    }
+
+
+    @Override
+    String toString() {
+        return "DockerArgs{" +
+                "image='" + image + '\'' +
+                ", fileName='" + fileName + '\'' +
+                ", fileDirectory='" + fileDirectory + '\'' +
+                ", buildArgs=" + Arrays.toString(buildArgs) +
+                ", imageArgs=" + Arrays.toString(imageArgs) +
+                '}';
     }
 }
 

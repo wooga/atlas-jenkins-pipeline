@@ -29,8 +29,10 @@ class Docker {
     }
 
     protected Object createImage(DockerArgs args) {
+
         def docker = jenkins.docker
         if (args.image) {
+            jenkins.echo("Using given image $args.image")
             return docker.image(args.image)
         } else {
             if (jenkins.fileExists(args.fullFilePath)) {
@@ -38,6 +40,7 @@ class Docker {
                 def hash = jenkins.utils().stringToSHA1(dockerfileContent + "/n" + args.dockerBuildString)
                 return docker.build(hash, args.dockerBuildString)
             }
+            jenkins.echo("Dockerfile $args.fullFilePath not found")
         }
         return null;
     }
