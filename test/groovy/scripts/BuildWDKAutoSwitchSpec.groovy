@@ -7,9 +7,6 @@ import tools.DeclarativeJenkinsSpec
 class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildWDKAutoSwitch.groovy"
 
-    def setupSpec() {
-    }
-
     @Unroll("publishes #releaseType-#releaseScope release ")
     def "publishes WDK with #release release type"() {
         given: "credentials holder with publish keys"

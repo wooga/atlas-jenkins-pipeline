@@ -18,7 +18,7 @@ class Checks {
     //for non-trivial constructors, prefer static factories.
     static Checks create(Object jenkinsScript, Docker docker, Gradle gradle, int buildNumber) {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
-        def enclosures = new Enclosures(docker, enclosureCreator)
+        def enclosures = new Enclosures(jenkinsScript, docker, enclosureCreator)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
         def steps = new GradleSteps(jenkinsScript, gradle)
 

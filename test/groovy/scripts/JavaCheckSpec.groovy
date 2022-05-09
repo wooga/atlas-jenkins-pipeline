@@ -123,7 +123,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and: "a fake dockerfile"
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
-        def dockerMock = createDockerMock(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
+        def dockerMock = createDockerFake(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
         def check = loadSandboxedScript(TEST_SCRIPT_PATH) {
             docker = dockerMock
         }
@@ -388,7 +388,8 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         }
     }
 
-    def createDockerMock(String dockerfile, String image, String dockerDir,
+    //TODO: create a proper mock for this
+    def createDockerFake(String dockerfile, String image, String dockerDir,
                          List<String> dockerBuildArgs, List<String> dockerArgs) {
         AtomicBoolean ran = new AtomicBoolean(false)
         def imgMock = [inside: { args, cls ->
@@ -397,9 +398,14 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
                 cls()
             }
         }]
-        def buildArgs = "-f ${dockerfile} ${dockerBuildArgs} ${dockerDir}"
+
+        def buildArgs = ["-f ${dockerfile}".toString()]
+        if(dockerBuildArgs?.size() > 0) {
+            buildArgs.add(dockerBuildArgs.join(" "))
+        }
+        buildArgs.add(dockerDir)
         return [image: { name -> name == image ? imgMock : null },
-                build: { hash, args -> args == buildArgs ? imgMock : null },
+                build: { hash, args -> args == buildArgs.join(" ") ? imgMock : null },
                 ran  : ran]
     }
 }
