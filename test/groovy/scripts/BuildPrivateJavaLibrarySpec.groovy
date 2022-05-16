@@ -71,6 +71,10 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
     def "registers environment on publish"() {
         given: "needed credentials"
         credentials.addUsernamePassword('github_access', "usr", "pwd")
+        credentials.addUsernamePassword('artifactory_publish', "user", "key")
+        credentials.addString('ossrh.signing.key', "signing_key")
+        credentials.addString('ossrh.signing.key_id', "signing_key_id")
+        credentials.addString('ossrh.signing.passphrase', "signing_passwd")
         and: "build plugin with publish parameters"
         def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
             currentBuild["result"] = null
@@ -89,5 +93,12 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         and: "sets up github environment"
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
+        and: "sets up ossrh keys"
+        def publishEnv = usedEnvironments.last()
+        publishEnv["ARTIFACTORY_USER"] == "user"
+        publishEnv["ARTIFACTORY_PASS"] == "key"
+        publishEnv["OSSRH_SIGNING_KEY"] == "signing_key"
+        publishEnv["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
+        publishEnv["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
     }
 }

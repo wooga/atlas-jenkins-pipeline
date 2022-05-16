@@ -6,7 +6,6 @@ import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 
@@ -123,7 +122,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and: "a fake dockerfile"
         createTmpFile(dockerDir, dockerfile)
         and: "a mocked jenkins docker object"
-        def dockerMock = createDockerFake(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
+        def dockerMock = Fixtures.createDockerFake(dockerfile, image, dockerDir, dockerBuildArgs, dockerArgs)
         def check = loadSandboxedScript(TEST_SCRIPT_PATH) {
             docker = dockerMock
         }
@@ -401,7 +400,7 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         description = clearWs? "clears" : "doesn't clear"
     }
 
-    def createTmpFile(String dir = ".", String file) {
+    static def createTmpFile(String dir = ".", String file) {
         if (file != null) {
             new File(dir).mkdirs()
             new File(dir, file).with {
@@ -409,26 +408,5 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
                 deleteOnExit()
             }
         }
-    }
-
-    //TODO: create a proper mock for this
-    def createDockerFake(String dockerfile, String image, String dockerDir,
-                         List<String> dockerBuildArgs, List<String> dockerArgs) {
-        AtomicBoolean ran = new AtomicBoolean(false)
-        def imgMock = [inside: { args, cls ->
-            if (args == dockerArgs.join(" ")) {
-                ran.set(true)
-                cls()
-            }
-        }]
-
-        def buildArgs = ["-f ${dockerfile}".toString()]
-        if(dockerBuildArgs?.size() > 0) {
-            buildArgs.add(dockerBuildArgs.join(" "))
-        }
-        buildArgs.add(dockerDir)
-        return [image: { name -> name == image ? imgMock : null },
-                build: { hash, args -> args == buildArgs.join(" ") ? imgMock : null },
-                ran  : ran]
     }
 }

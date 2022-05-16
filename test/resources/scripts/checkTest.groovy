@@ -12,7 +12,7 @@ def javaCoverage(Map configMap) {
 def parallel(Map configMap, Closure checkCls, Closure analysisCls) {
     def config = JavaConfig.fromConfigMap(configMap, this)
     def checks = config.pipelineTools.checks.forJavaPipelines()
-    return checks.parallel(config.platforms, checkCls, analysisCls)
+    return checks.parallel(config.platforms, checkCls, analysisCls, config.conventions)
 }
 
 

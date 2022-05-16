@@ -4,7 +4,7 @@ import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
 
-class JavaConfigSpec extends Specification {
+class JSConfigSpec extends Specification {
 
     @Shared
     def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
@@ -14,17 +14,16 @@ class JavaConfigSpec extends Specification {
         given: "a configuration map"
         def configMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: cvallsToken] + extraFields
         when: "generating config object from map"
-        def config = JavaConfig.fromConfigMap(configMap, jenkinsScript)
+        def config = JSConfig.fromConfigMap(configMap, jenkinsScript)
         then: "generated config object is valid and matches map values"
         config.metadata == expected.metadata
         config.platforms == expected.platforms
         config.checkArgs == expected.checkArgs
         config.dockerArgs == expected.dockerArgs
-        config.mainPlatform == expected.platforms[0]
 
         where:
         platforms             | dockerArgs                             | gradleArgs                                                      | cvallsToken | extraFields             | expected
-        null                  | null                                   | null                                                            | null        | [:]                     | configWith(["macos", "windows"])
+        null                  | null                                   | null                                                            | null        | [:]                     | configWith(["macos"])
         ["linux"]             | null                                   | null                                                            | null        | [:]                     | configWith(["linux"])
         ["plat", "otherplat"] | null                                   | null                                                            | null        | [:]                     | configWith(["plat", "otherplat"])
         ["plat", "otherplat"] | [image: "img", dockerFileName: "name"] | null                                                            | null        | [:]                     | configWith(["plat", "otherplat"], [image: "img", dockerFileName: "name"])

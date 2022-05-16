@@ -3,25 +3,22 @@ package net.wooga.jenkins.pipeline.check
 import net.wooga.jenkins.pipeline.check.steps.GradleSteps
 import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.*
-import net.wooga.jenkins.pipeline.model.Gradle
 
 
 class WDKChecks {
 
-    final Object jenkins
     final CheckCreator checkCreator
     final GradleSteps steps
 
-    WDKChecks(Object jenkinsScript, CheckCreator checkCreator, GradleSteps steps) {
-        this.jenkins = jenkinsScript
+    WDKChecks(CheckCreator checkCreator, GradleSteps steps) {
         this.checkCreator = checkCreator
         this.steps = steps
     }
 
     Map<String, Closure> wdkCoverage(UnityVersionPlatform[] unityVersions, String releaseType, String releaseScope,
                                      CheckArgs checkArgs, PipelineConventions conventions) {
-        def baseTestStep = steps.defaultWDKTestStep(releaseType, releaseScope, conventions.wdkSetupStashId, conventions.checkTask)
-        def baseAnalysisStep = steps.defaultWDKAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube)
+        def baseTestStep = steps.wdkTestStep(releaseType, releaseScope, conventions.wdkSetupStashId, conventions.checkTask)
+        def baseAnalysisStep = steps.wdkAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube)
 
         return parallel(unityVersions,
                         baseTestStep.wrappedBy(checkArgs.testWrapper),

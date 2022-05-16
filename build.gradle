@@ -28,15 +28,15 @@ repositories {
 dependencies {
     implementation 'com.cloudbees:groovy-cps:1.12'
     implementation group: 'org.jenkinsci.plugins', name: 'pipeline-model-definition', version: '1.2', ext: 'jar'
-    implementation 'org.codehaus.groovy:groovy-all:2.4.12'
+    implementation 'org.codehaus.groovy:groovy-all:2.4.21'
 
     testImplementation "com.lesfurets:jenkins-pipeline-unit:1.9"
     testImplementation "org.spockframework:spock-core:1.3-groovy-2.4"
-    testImplementation  group: "org.jenkins-ci.plugins", name: "script-security", version:"1.78", ext: "jar"
+    testImplementation  group: "org.jenkins-ci.plugins", name: "script-security", version:"1158.v7c1b_73a_69a_08", ext: "jar"
     testImplementation  group: "org.kohsuke", name: "groovy-sandbox", version:"1.27", ext: "jar"
 
     //needed jenkins stuff used implicitly
-    testImplementation("org.jenkins-ci.main:jenkins-core:2.303.1") {
+    testImplementation("org.jenkins-ci.main:jenkins-core:2.332.2") {
         exclude module: "groovy-all"
     }
     testImplementation "org.jenkins-ci.main:jenkins-test-harness:2.71"

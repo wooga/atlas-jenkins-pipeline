@@ -59,8 +59,11 @@ class Publishers {
     def artifactoryOSSRH(String artifactorySecret,
                          String signingKeySecret, String signingKeyIdSecret, String signingPassphraseSecret,
                          String checkTask = PipelineConventions.standard.checkTask) {
-        def credentials = [jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"ARTIFACTORY_USER", passwordVariable: "ARTIFACTORY_PASS")] +
-                ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
+        def credentials = [
+            jenkins.usernamePassword(credentialsId: artifactorySecret,
+                                    usernameVariable:"ARTIFACTORY_USER",
+                                    passwordVariable: "ARTIFACTORY_PASS")
+        ] + ossrhSigningCredentials(signingKeySecret, signingKeyIdSecret, signingPassphraseSecret)
         jenkins.withCredentials(credentials) {
             gradle.wrapper("${releaseType} " +
                     "-Partifactory.user=${jenkins.ARTIFACTORY_USER} " +
@@ -88,6 +91,17 @@ class Publishers {
                                     "-Ppaket.publish.repository='${releaseType}' " +
                                     "-Prelease.scope=${releaseScope} -x ${checkTask}")
             }
+        }
+    }
+
+    def npm(String npmCredsSecret) {
+        def credentials = [
+            jenkins.usernamePassword(credentialsId: npmCredsSecret,
+                                    usernameVariable:"NODE_RELEASE_NPM_USER",
+                                    passwordVariable: "NODE_RELEASE_NPM_PASS")
+        ]
+        jenkins.withCredentials(credentials) {
+            gradle.wrapper("${releaseType} -Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} -x check")
         }
     }
 
