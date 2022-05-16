@@ -13,6 +13,7 @@ class Platform {
     final Collection<?> testEnv
     final boolean runsOnDocker
     final boolean main
+    final boolean clearWs
 
 
     static Platform forJava(String platformName, Map config, boolean isMain) {
@@ -25,7 +26,8 @@ class Platform {
                 (config.labels ?: '') as String,
                 mapOrCollection(platformName, config.testEnvironment),
                 mapOrCollection(platformName, config.testLabels),
-                isMain
+                isMain,
+                (config.clearWs?: false) as boolean
         )
     }
 
@@ -46,12 +48,13 @@ class Platform {
                 (config.labels ?: '') as String,
                 mapOrCollection(buildVersion.version, config.testEnvironment) + unityEnv,
                 mapOrCollection(buildVersion.version, config.testLabels),
-                isMain
+                isMain,
+                (config.clearWs?: false) as boolean
         )
     }
 
     Platform(String checkoutDirectory, String checkDirectory, String name, String os, boolean runsOnDocker,
-             String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main) {
+             String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main, boolean clearWs) {
         this.checkoutDirectory = checkoutDirectory
         this.checkDirectory = checkDirectory
         this.name = name
@@ -61,6 +64,7 @@ class Platform {
         this.testLabels = testLabels?.join(" && ")
         this.runsOnDocker = runsOnDocker
         this.main = main
+        this.clearWs = clearWs
     }
 
     String generateTestLabelsString() {

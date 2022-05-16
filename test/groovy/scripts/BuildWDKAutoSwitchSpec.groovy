@@ -135,6 +135,27 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         "final"     | "major"      | true
     }
 
+    @Unroll("#description workspace steps when clearWs is #clearWs")
+    def "clears steps if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_TYPE = "not-snapshot"
+            params.RELEASE_SCOPE = "any"
+        }
+
+        when: "running pipeline"
+        inSandbox {
+            buildWDK(unityVersions: ["2019"], clearWs: clearWs)
+        }
+
+        then: "all workspaces are clean"
+        calls["cleanWs"].length == (clearWs? 3 : 0) //setup, build, and publish steps
+
+        where:
+        clearWs << [true, false]
+        description = clearWs? "clears" : "doesn't clear"
+    }
+
     def hasBaseEnvironment(Map env, String logLevel) {
         env.with {
             UVM_AUTO_SWITCH_UNITY_EDITOR  == "YES" &&

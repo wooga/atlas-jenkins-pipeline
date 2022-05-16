@@ -96,7 +96,6 @@ abstract class DeclarativeJenkinsSpec extends Specification {
                             collectEntries{String envStr -> [(envStr.split("=")[0]): envStr.split("=")[1]]}
                 environment.runWithEnv(env, cls)
             }
-            registerAllowedMethod("cleanWs") {}
             registerAllowedMethod("checkout", [String]) {}
             registerAllowedMethod("publishHTML", [HashMap]) {}
             registerAllowedMethod("fileExists", [String]) { String path -> new File(path).exists() }
@@ -134,8 +133,9 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     private static void addLackingDSLTerms() {
         GenericPipelineDeclaration.metaClass.any = "any"
         WhenDeclaration.metaClass.beforeAgent = { bool -> null }
-        PostDeclaration.metaClass.cleanup = { clj -> clj() }
-        PostDeclaration.metaClass.cleanWs = {}
+//        PostDeclaration.metaClass.cleanup = { cls -> cls() }
+//        PostDeclaration.metaClass.script = { cls -> cls() }
+//        PostDeclaration.metaClass.cleanWs = {}
     }
 
     /**

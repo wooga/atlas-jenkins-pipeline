@@ -14,6 +14,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
+  configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
   def config = JavaConfig.fromConfigMap(configMap, this)
   def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
   def mainPlatform = config.mainPlatform.name
@@ -31,19 +32,29 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+      booleanParam(defaultValue: false, description: 'Whether to clear workspaces after build', name: 'CLEAR_WS')
     }
 
     stages {
       stage('Preparation') {
         agent any
-
         steps {
           sendSlackNotification "STARTED", true
+        }
+
+        post {
+          cleanup {
+            script {
+              if(config.mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
+          }
         }
       }
 
       stage("check") {
-        agent any
+        agent none
         when {
           beforeAgent true
           expression { return actions.check.runWhenOrElse { params.RELEASE_TYPE == "snapshot" } }
@@ -61,9 +72,6 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           }
         }
         post {
-          cleanup {
-            cleanWs()
-          }
           success {
             script {
               if(config.checkArgs.coveralls.token) {
@@ -104,7 +112,11 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
 
         post {
           cleanup {
-            cleanWs()
+            script {
+              if(config.mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
           }
         }
       }

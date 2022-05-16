@@ -88,6 +88,29 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
     }
 
+
+
+    @Unroll("#description publish workspace when clearWs is #clearWs")
+    def "clears publish and preparation workspaces if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_TYPE = "not-snapshot"
+            params.RELEASE_SCOPE = "any"
+        }
+
+        when: "running pipeline"
+        inSandbox {
+            buildGradlePlugin(platforms: ["linux"], clearWs: clearWs)
+        }
+
+        then: "all workspaces are clean"
+        calls["cleanWs"].length == (clearWs? 2 : 0) //publish (1) + preparation (1)
+
+        where:
+        clearWs << [true, false]
+        description = clearWs? "clears" : "doesn't clear"
+    }
+
     String[] getShGradleCalls() {
         return calls["sh"].collect { it.args[0]["script"].toString() }.findAll {
             it.contains("gradlew")

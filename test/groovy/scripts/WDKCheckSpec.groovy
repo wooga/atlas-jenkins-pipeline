@@ -190,7 +190,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
-        calls["cleanWs"].length == versions.size()
 
         where:
         versions                    | releaseType | releaseScope | setupStash
@@ -228,7 +227,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
         } == versions.size()
-        calls["cleanWs"].length == versions.size()
 
         where:
         versions                                    | throwsException
@@ -468,5 +466,36 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         where:
         checkDir << [".", "dir", "dir/subdir"]
+    }
+
+    @Unroll("#description all check workspaces when clearWs is #clearWs")
+    def "clears all check workspaces if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {}
+        and: "a configuration with a mandatory platform and clearWs"
+        def configMap = [unityVersions: versions, clearWs: clearWs]
+        and: "stashed setup"
+        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+
+        when: "running check"
+        inSandbox {
+            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            checkSteps.each {
+                try {
+                    it.value.call()
+                } catch (InputMismatchException _) {
+                } //ignores exception, it is tested in another test
+            }
+        }
+        then: "all platforms workspaces are clean"
+        calls["cleanWs"].length == (clearWs? versions.size() : 0)
+
+        where:
+        versions | clearWs
+        ["2019"] | true
+        ["2019"] | false
+        ["2019", "2022"] | true
+        ["2019", "2022"] | false
+        description = clearWs? "clears" : "doesn't clear"
     }
 }

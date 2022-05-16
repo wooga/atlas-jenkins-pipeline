@@ -16,10 +16,6 @@ class JavaChecks {
         this.steps = steps
     }
 
-    Closure check(Platform platform, Step testStep, Step analysisStep) {
-        return checkCreator.javaChecks(platform, testStep, analysisStep)
-    }
-
     Map<String, Closure> parallel(Platform[] platforms, Closure checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return parallel(platforms, new Step(checkStep), conventions)
@@ -45,6 +41,10 @@ class JavaChecks {
         }
     }
 
+    Closure check(Platform platform, Step testStep, Step analysisStep) {
+        return checkCreator.javaChecks(platform, testStep, analysisStep)
+    }
+
     Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {
         def baseTestStep = steps.defaultJavaTestStep(conventions.checkTask)
         def baseAnalysisStep = steps.defaultJavaAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
@@ -53,22 +53,4 @@ class JavaChecks {
                 baseTestStep.wrappedBy(checkArgs.testWrapper),
                 baseAnalysisStep.wrappedBy(checkArgs.analysisWrapper), conventions)
     }
-
-//    static Closure defaultJavaTestStep(String checkTask) {
-//        return { Platform plat, Gradle gradle ->
-//            gradle.wrapper(checkTask)
-//        }
-//    }
-//
-//    static Closure defaultJavaAnalysisStep(PipelineConventions conventions,
-//                                           JenkinsMetadata metadata,
-//                                           Sonarqube sonarqube,
-//                                           Coveralls coveralls) {
-//        return { Platform plat, Gradle gradle ->
-//            def branchName = metadata.isPR() ? null : metadata.branchName
-//            gradle.wrapper(conventions.jacocoTask)
-//            sonarqube.maybeRun(gradle, conventions.sonarqubeTask,  branchName)
-//            coveralls.maybeRun(gradle, conventions.coverallsTask)
-//        }
-//    }
 }

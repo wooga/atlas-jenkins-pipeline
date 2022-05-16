@@ -16,7 +16,9 @@ def call(Map configMap = [ unityVersions:[] ]) {
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
+  configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
   def config = WDKConfig.fromConfigMap("macos", configMap, this)
+  def mainPlatform = config.unityVersions[0].platform
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -41,6 +43,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+      booleanParam(defaultValue: false, description: 'Whether to clear workspaces after build', name: 'CLEAR_WS')
+
     }
 
     stages {
@@ -68,7 +72,11 @@ def call(Map configMap = [ unityVersions:[] ]) {
           }
 
           cleanup {
-            cleanWs()
+            script {
+              if(mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
           }
         }
       }
@@ -97,7 +105,11 @@ def call(Map configMap = [ unityVersions:[] ]) {
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
-                cleanWs()
+                script {
+                  if(mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
@@ -154,7 +166,11 @@ def call(Map configMap = [ unityVersions:[] ]) {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
           cleanup {
-            cleanWs()
+            script {
+              if(mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
           }
         }
       }

@@ -378,6 +378,29 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         checkDir << [".", "dir", "dir/subdir"]
     }
 
+    @Unroll("#description all check workspaces when clearWs is #clearWs")
+    def "clears all check workspaces if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def check = loadSandboxedScript(TEST_SCRIPT_PATH) {}
+
+        when: "running check"
+        inSandbox {
+            Map<String, Closure> checkSteps = check.javaCoverage([platforms: platforms, clearWs: clearWs])
+            checkSteps.each { it.value.call() }
+        }
+
+        then: "all platforms workspaces are clean"
+        calls["cleanWs"].length == (clearWs? platforms.size() : 0)
+
+        where:
+        platforms | clearWs
+        ["linux"] | true
+        ["linux"] | false
+        ["linux", "windows"] | true
+        ["linux", "windows"] | false
+        description = clearWs? "clears" : "doesn't clear"
+    }
+
     def createTmpFile(String dir = ".", String file) {
         if (file != null) {
             new File(dir).mkdirs()
