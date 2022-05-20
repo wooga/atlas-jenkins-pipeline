@@ -2,6 +2,7 @@ package tools
 
 
 import com.lesfurets.jenkins.unit.PipelineTestHelper
+import com.lesfurets.jenkins.unit.declarative.DeclarativePipeline
 import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import com.lesfurets.jenkins.unit.declarative.GenericPipelineDeclaration
 import com.lesfurets.jenkins.unit.declarative.PostDeclaration
@@ -33,6 +34,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     @Shared FakeEnvironment environment
     @Shared Map<String, Map> jenkinsStash
     @Shared String currentDir
+    @Shared GenericPipelineDeclaration pipeline
 
     def setupSpec() {
         jenkinsStash = new HashMap<>()
@@ -41,6 +43,11 @@ abstract class DeclarativeJenkinsSpec extends Specification {
                 new PackageWhitelist("com.lesfurets.jenkins"),
                 new PackageWhitelist("net.wooga.jenkins.pipeline")
         ))
+        jenkinsTest.pipelineInterceptor = { Closure cls ->
+            GenericPipelineDeclaration.binding = binding
+            this.pipeline = GenericPipelineDeclaration.createComponent(DeclarativePipeline, cls)
+            this.pipeline.execute(delegate)
+        }
         jenkinsTest.setUp()
         credentials = new FakeCredentialStorage()
         environment = new FakeEnvironment(jenkinsTest.binding)

@@ -353,4 +353,23 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         env["GITHUB_PASSWORD"] == "gitpwd" //"${GRGIT_PSW}"
     }
 
+    @Unroll
+    def "publish step is executed on #mainPlatform label"() {
+        given: "pipeline loaded with publish parameters"
+        def buildWDKJS = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_TYPE = "not-snapshot"
+            params.RELEASE_SCOPE = "any"
+        }
+
+        when: "running pipeline"
+        inSandbox { buildWDKJS(platforms: platforms) }
+
+        then: "publish step is executed with expected label"
+        pipeline.stages["publish"].agent.label == "$mainPlatform && atlas"
+
+        where:
+        platforms << [["macos", "windows"], ["linux"]]
+        mainPlatform = platforms?.get(0)
+    }
+
 }
