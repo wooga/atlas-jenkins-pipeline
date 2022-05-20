@@ -16,7 +16,7 @@ def call(Map configMap = [:]) {
     configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
     def config  = JSConfig.fromConfigMap(configMap, this)
     def platforms = config.platforms
-    def mainPlatform = platforms[0]
+    String mainPlatform = platforms[0].name
 
     pipeline {
         agent none

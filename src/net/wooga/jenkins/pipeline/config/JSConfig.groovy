@@ -29,6 +29,10 @@ class JSConfig implements PipelineConfig {
         this.platforms = platforms
     }
 
+    Platform getMainPlatform() {
+        return platforms.find {it.main }
+    }
+
     @Override
     PipelineConventions getConventions() {
         return baseConfig.conventions
