@@ -27,7 +27,7 @@ repositories {
 
 dependencies {
     implementation 'com.cloudbees:groovy-cps:1.12'
-    implementation group: 'org.jenkinsci.plugins', name: 'pipeline-model-definition', version: '1.2', ext: 'jar'
+    implementation group: 'org.jenkinsci.plugins', name: 'pipeline-model-definition', version: '2.2084.v1d2999534103', ext: 'jar'
     implementation 'org.codehaus.groovy:groovy-all:2.4.21'
 
     testImplementation "com.lesfurets:jenkins-pipeline-unit:1.9"
