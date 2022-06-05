@@ -1,4 +1,4 @@
-package tools.sandbox
+package net.wooga.jenkins.pipeline.test.sandbox
 
 import com.lesfurets.jenkins.unit.PipelineTestHelper
 import org.codehaus.groovy.control.CompilerConfiguration
@@ -54,7 +54,8 @@ class SandboxPipelineTestHelper extends PipelineTestHelper {
         return sandboxGse
     }
 
-    Script loadSandboxedScript(String scriptName, Binding binding) {
+    @Override
+    Script loadScript(String scriptName, Binding binding) {
         Script script = inSandbox {
             super.loadScript(scriptName, binding)
         }

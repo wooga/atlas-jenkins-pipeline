@@ -1,4 +1,4 @@
-package tools
+package net.wooga.jenkins.pipeline.test.specifications.fakes
 
 class WithCredentials {
 

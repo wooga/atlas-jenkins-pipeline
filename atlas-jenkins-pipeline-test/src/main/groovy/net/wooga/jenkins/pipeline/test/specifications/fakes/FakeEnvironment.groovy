@@ -1,11 +1,11 @@
-package tools
+package net.wooga.jenkins.pipeline.test.specifications.fakes
 
 class FakeEnvironment {
-    final List<Map> usedEnvironments
+    final List<Map> used
     final Binding binding
 
     FakeEnvironment(Binding binding) {
-        this.usedEnvironments = new ArrayList<>()
+        this.used = new ArrayList<>()
         this.binding = binding
     }
 
@@ -18,13 +18,19 @@ class FakeEnvironment {
         binding.variables[key] = value
     }
 
-    def runWithEnv(Map env, Closure cls) {
+    void runWithEnv(List<String> envStrs, Closure cls) {
+        def envMap = envStrs.
+                collect{it.toString()}.
+                collectEntries{String envStr -> [(envStr.split("=")[0]): envStr.split("=")[1]]}
+        runWithEnv(envMap, cls)
+    }
+    void runWithEnv(Map env, Closure cls) {
         binding.env.putAll(env)
         binding.variables.putAll(env)
         try {
             cls()
         } finally {
-            usedEnvironments.add(deepCopy(binding.env as Map))
+            used.add(deepCopy(binding.env as Map))
             env.each {
                 binding.env.remove(it.key)
                 binding.variables.remove(it.key)
@@ -42,6 +48,6 @@ class FakeEnvironment {
     }
 
     void wipe() {
-        usedEnvironments.clear()
+        used.clear()
     }
 }

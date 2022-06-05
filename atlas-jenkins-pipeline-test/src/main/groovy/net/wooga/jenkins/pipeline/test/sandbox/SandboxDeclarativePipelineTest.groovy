@@ -1,4 +1,4 @@
-package tools.sandbox
+package net.wooga.jenkins.pipeline.test.sandbox
 
 import com.lesfurets.jenkins.unit.declarative.DeclarativePipelineTest
 import org.jenkinsci.plugins.scriptsecurity.sandbox.Whitelist
