@@ -1,129 +1,22 @@
 #!groovy
-@Library('github.com/wooga/atlas-jenkins-pipeline@1.x') _
+@Library('github.com/wooga/atlas-jenkins-pipeline@detach/test-lib') _
 
-import net.wooga.jenkins.pipeline.TestHelper
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                                                                                                    //
-// Step buildLocalGradlePlugin                                                                                        //
-//                                                                                                                    //
-//                                                                                                                    //
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-def call(Map config = [:]) {
-  //set config defaults
-  config.platforms = config.platforms ?: config.plaforms ?: ['macos','windows']
-  config.testEnvironment = config.testEnvironment ?: []
-  config.testLabels = config.testLabels ?: []
-  config.labels = config.labels ?: ''
-  config.sonarQubeBranchPattern = config.sonarQubeBranchPattern ?: "^(master|main)\$"
-  config.dockerArgs = config.dockerArgs ?: [:]
-  config.dockerArgs.dockerFileName = config.dockerArgs.dockerFileName ?: "Dockerfile"
-  config.dockerArgs.dockerFileDirectory = config.dockerArgs.dockerFileDirectory ?: "."
-  config.dockerArgs.dockerBuildArgs = config.dockerArgs.dockerBuildArgs ?: []
-  config.dockerArgs.dockerArgs = config.dockerArgs.dockerArgs ?: []
-
-  def platforms = config.platforms
-  def mainPlatform = platforms[0]
-  def helper = new TestHelper()
-
-  pipeline {
-    agent none
-
-    options {
-      buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
-    }
-
-    parameters {
-      choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
-      booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
-      booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
-      booleanParam(defaultValue: false, description: 'Whether to force sonarqube execution', name: 'RUN_SONAR')
-    }
-
-    stages {
-
-      stage("check") {
-        agent any
-
-        when {
-          anyOf {
-            changeset comparator: 'GLOB', pattern: 'atlas-jenkins-pipeline-gradle/**'
-            isRestartedRun()
-            triggeredBy 'UserIdCause'
-          }
-        }
-
-        steps {
-          script {
-            def stepsForParallel = platforms.collectEntries { platform ->
-              def environment = []
-              def labels = config.labels
-
-              if(config.testEnvironment) {
-                if(config.testEnvironment instanceof List) {
-                  environment = config.testEnvironment
+def call(Map configMap = [:]) {
+    javaLibs(configMap) { stages ->
+        stages.check = { check, params, config ->
+            check.when = {
+                anyOf {
+                    changeset comparator: 'GLOB', pattern: 'atlas-jenkins-pipeline-gradle/**'
+                    isRestartedRun()
+                    triggeredBy 'UserIdCause'
                 }
-                else {
-                  environment = (config.testEnvironment[platform]) ?: []
-                }
-              }
-
-              environment << "COVERALLS_PARALLEL=true"
-
-              if(config.testLabels) {
-                if(config.testLabels instanceof List) {
-                  labels = config.testLabels
-                }
-                else {
-                  labels = (config.testLabels[platform]) ?: config.labels
-                }
-              }
-
-              def testConfig = config.clone()
-              testConfig.labels = labels
-
-              def checkStep = {
-                dir("atlas-jenkins-pipeline-gradle") {
-                    withCredentials([usernamePassword(credentialsId: 'github_integration', passwordVariable: 'ATLAS_GITHUB_INTEGRATION_PASSWORD', usernameVariable: 'ATLAS_GITHUB_INTEGRATION_USER')]) {
-                        gradleWrapper "check"
-                    }
-                }
-              }
-              def finalizeStep = {
-                dir("atlas-jenkins-pipeline-gradle") {
-                  if(!currentBuild.result) {
-                    def tasks  = "jacocoTestReport"
-                    if(config.sonarToken && (BRANCH_NAME =~ config.sonarQubeBranchPattern || params.RUN_SONAR)) {
-                      tasks += " sonarqube -Dsonar.login=${config.sonarToken}"
-                    }
-                    withEnv(["COVERALLS_REPO_TOKEN=${config.coverallsToken}"]) {
-                      gradleWrapper tasks
-                      publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'build/reports/jacoco/test/html',
-                                reportFiles: 'index.html',
-                                reportName: "Coverage ${it}",
-                                reportTitles: ''
-                                ])
-                    }
-                  }
-                }
-                junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
-                //cleanWs()
-              }
-
-              ["check ${platform}" : helper.transformIntoCheckStep(platform, environment, config.coverallsToken, testConfig, checkStep, finalizeStep)]
             }
-
-            parallel stepsForParallel
-          }
         }
-     }
+
+        stages.publish = { publish, params, config ->
+            publish.when = { false }
+        }
     }
-  }
 }
 
-call(plaforms: ['unix'])
+call(plaforms: ['unix'], checkDir: "atlas-jenkins-pipeline-gradle")

@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.stages.Stages
 import net.wooga.jenkins.pipeline.config.JavaConfig
 
@@ -9,15 +10,36 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+JavaConfig initialize(Map configMap) {
+    configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
+    configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
+    configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
+    configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
+   return JavaConfig.fromConfigMap(configMap, this)
+}
+
+def declareParameters(Object paramsDelegate) {
+  paramsDelegate.with {
+    choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+    choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+    choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
+    booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
+    booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
+    booleanParam(defaultValue: false, description: 'Whether to clear workspaces after build', name: 'CLEAR_WS')
+  }
+}
+
+def cleanWorkspace(Platform platform){
+    if(platform.clearWs) {
+      cleanWs()
+    }
+}
+
 def call(Map configMap = [:], Closure stepsConfigCls) {
   //organize configs inside neat object. Defaults are defined there as well
-  configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
-  configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
-  configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
-  configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  def config = JavaConfig.fromConfigMap(configMap, this)
+  def config = initialize(configMap)
   def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
-  def mainPlatform = config.mainPlatform.name
+  def mainPlatform = config.mainPlatform
 
   pipeline {
     agent none
@@ -44,11 +66,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
 
         post {
           cleanup {
-            script {
-              if(config.mainPlatform.clearWs) {
-                cleanWs()
-              }
-            }
+            cleanWorkspace mainPlatform
           }
         }
       }
@@ -85,11 +103,10 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
       stage('publish') {
         when {
           beforeAgent true
-          //TODO this should be variable, as private libs publishes on snapshot
           expression { return actions.publish.runWhenOrElse { params.RELEASE_TYPE != "snapshot" }  }
         }
         agent {
-          label "$mainPlatform && atlas"
+          label "${mainPlatform.name} && atlas"
         }
 
         environment {
@@ -112,11 +129,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
 
         post {
           cleanup {
-            script {
-              if(config.mainPlatform.clearWs) {
-                cleanWs()
-              }
-            }
+            cleanWorkspace mainPlatform
           }
         }
       }
