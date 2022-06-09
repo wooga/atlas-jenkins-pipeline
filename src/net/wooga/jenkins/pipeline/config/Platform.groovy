@@ -14,12 +14,12 @@ class Platform {
     final boolean runsOnDocker
     final boolean main
     final boolean clearWs
-
+    final boolean optional
 
     static Platform forJava(String platformName, Map config, boolean isMain) {
         return new Platform(
-                (config.checkoutDir?: ".") as String,
-                (config.checkDir?: ".") as String,
+                (config.checkoutDir ?: ".") as String,
+                (config.checkDir ?: ".") as String,
                 platformName,
                 platformName,
                 platformName == "linux",
@@ -27,36 +27,26 @@ class Platform {
                 mapOrCollection(platformName, config.testEnvironment),
                 mapOrCollection(platformName, config.testLabels),
                 isMain,
-                (config.clearWs?: false) as boolean
+                (config.clearWs ?: false) as boolean,
+                false
         )
     }
 
     static Platform forJS(String platformName, Map config, boolean isMain) {
-        return new Platform(
-                (config.checkoutDir?: ".") as String,
-                (config.checkDir?: ".") as String,
-                platformName,
-                platformName,
-                platformName == "linux",
-                (config.labels ?: '') as String,
-                mapOrCollection(platformName, config.testEnvironment),
-                mapOrCollection(platformName, config.testLabels),
-                isMain,
-                (config.clearWs?: false) as boolean
-        )
+        return forJava(platformName, config, isMain)
     }
 
     static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
         def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
-        if(buildVersion.hasVersion()) {
+        if (buildVersion.hasVersion()) {
             unityEnv.add("UVM_UNITY_VERSION=${buildVersion.version}")
         }
-        if (buildVersion.apiCompatibilityLevel != null){
+        if (buildVersion.apiCompatibilityLevel != null) {
             unityEnv.add("UNITY_API_COMPATIBILITY_LEVEL=${buildVersion.apiCompatibilityLevel}")
         }
         return new Platform(
-                (config.checkoutDir?: buildVersion.toDirectoryName()) as String,
-                (config.checkDir?: ".") as String,
+                (config.checkoutDir ?: buildVersion.toDirectoryName()) as String,
+                (config.checkDir ?: ".") as String,
                 buildVersion.version,
                 buildOS,
                 false,
@@ -64,12 +54,32 @@ class Platform {
                 mapOrCollection(buildVersion.version, config.testEnvironment) + unityEnv,
                 mapOrCollection(buildVersion.version, config.testLabels),
                 isMain,
-                (config.clearWs?: false) as boolean
+                (config.clearWs ?: false) as boolean,
+                buildVersion.optional
         )
     }
 
+    protected static Collection<?> mapOrCollection(String mapKey, Object obj) {
+        if (obj == null) {
+            return []
+        }
+        if (obj instanceof Map) {
+            def value = obj[mapKey]
+            if (value instanceof String || value instanceof GString) {
+                return [value?.toString()] ?: []
+            } else {
+                return obj[mapKey] as Collection ?: []
+            }
+        }
+        if (obj instanceof Collection) {
+            return obj as Collection
+        }
+        throw new IllegalArgumentException("${obj} should be a Collection or a Map of [key:collection] or [key:string]")
+    }
+
     Platform(String checkoutDirectory, String checkDirectory, String name, String os, boolean runsOnDocker,
-             String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main, boolean clearWs) {
+             String labels, Collection<?> testEnvironment, Collection<?> testLabels,
+             boolean main, boolean clearWs, boolean optional) {
         this.checkoutDirectory = checkoutDirectory
         this.checkDirectory = checkDirectory
         this.name = name
@@ -80,6 +90,7 @@ class Platform {
         this.runsOnDocker = runsOnDocker
         this.main = main
         this.clearWs = clearWs
+        this.optional = optional
     }
 
     String generateTestLabelsString() {
@@ -87,10 +98,10 @@ class Platform {
         if (runsOnDocker) {
             generatedLabels.add("docker")
         }
-        def configLabelsStr = testLabels?: labels
+        def configLabelsStr = testLabels ?: labels
         def generatedLabelsStr = generatedLabels.join(" && ")
 
-        return configLabelsStr != null && !configLabelsStr.empty?
+        return configLabelsStr != null && !configLabelsStr.empty ?
                 "${configLabelsStr} && ${generatedLabelsStr}".toString() :
                 generatedLabelsStr
     }
@@ -133,23 +144,5 @@ class Platform {
         result = 31 * result + (runsOnDocker ? 1 : 0)
         result = 31 * result + (main ? 1 : 0)
         return result
-    }
-
-    protected static Collection<?> mapOrCollection(String mapKey, Object obj) {
-        if(obj == null) {
-            return []
-        }
-        if(obj instanceof Map) {
-            def value = obj[mapKey]
-            if(value instanceof String || value instanceof GString) {
-                return [value?.toString()]?: []
-            } else {
-                return obj[mapKey] as Collection ?: []
-            }
-        }
-        if(obj instanceof Collection) {
-            return obj as Collection
-        }
-        throw new IllegalArgumentException("${obj} should be a Collection or a Map of [key:collection] or [key:string]")
     }
 }

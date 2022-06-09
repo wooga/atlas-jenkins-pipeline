@@ -1,12 +1,13 @@
 package net.wooga.jenkins.pipeline.config
 
-import net.wooga.jenkins.pipeline.PipelineTools
+/**
+ * Opinionated configurations are now under vars/configs.groovy.
+ * * WDKConfig.fromConfigMap is replaced by configs().jsWDK(...)
+ */
+@Deprecated
+class JSConfig extends Config {
 
-class JSConfig implements PipelineConfig {
-
-    BaseConfig baseConfig
-    Platform[] platforms
-
+    @Deprecated
     static List<Platform> collectPlatforms(Map configMap, List<String> platformNames) {
         def index = 0
         return platformNames.collect { String platformName ->
@@ -16,6 +17,7 @@ class JSConfig implements PipelineConfig {
         }
     }
 
+    @Deprecated
     static JSConfig fromConfigMap(Map configMap, Object jenkinsScript) {
         configMap.platforms = configMap.platforms ?: ['macos']
         def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)
@@ -25,37 +27,6 @@ class JSConfig implements PipelineConfig {
     }
 
     JSConfig(BaseConfig baseConfig, List<Platform> platforms) {
-        this.baseConfig = baseConfig
-        this.platforms = platforms
-    }
-
-    @Override
-    PipelineConventions getConventions() {
-        return baseConfig.conventions
-    }
-
-    @Override
-    CheckArgs getCheckArgs() {
-        return baseConfig.checkArgs
-    }
-
-    @Override
-    GradleArgs getGradleArgs() {
-        return baseConfig.gradleArgs
-    }
-
-    @Override
-    DockerArgs getDockerArgs() {
-        return baseConfig.dockerArgs
-    }
-
-    @Override
-    JenkinsMetadata getMetadata() {
-        return baseConfig.metadata
-    }
-
-    @Override
-    PipelineTools getPipelineTools() {
-        return PipelineTools.fromConfig(baseConfig.jenkins, this)
+        super(baseConfig, platforms)
     }
 }

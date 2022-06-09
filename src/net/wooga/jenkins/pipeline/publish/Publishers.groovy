@@ -104,5 +104,4 @@ class Publishers {
             gradle.wrapper("${releaseType} -Prelease.stage=${releaseType} -Prelease.scope=${releaseScope} -x check")
         }
     }
-
 }

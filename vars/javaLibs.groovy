@@ -1,6 +1,7 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.stages.Stages
-import net.wooga.jenkins.pipeline.config.JavaConfig
+import net.wooga.jenkins.pipeline.config.Config
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -15,7 +16,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  def config = JavaConfig.fromConfigMap(configMap, this)
+  def config = configs().java(configMap, this) as Config
   def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
   def mainPlatform = config.mainPlatform.name
 
@@ -63,11 +64,9 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         steps {
           script {
             actions.check.runActionOrElse {
-              withEnv(["COVERALLS_PARALLEL=true"]) {
-                def javaChecks = config.pipelineTools.checks.forJavaPipelines()
-                def checksForParallel = javaChecks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
-                parallel checksForParallel
-              }
+              Step checkTemplate = javaCheckTemplate(config.pipelineTools.checks, config.checkArgs, config.conventions)
+              def checksForParallel = parallelize(checkTemplate, config.platforms, config.conventions.javaParallelPrefix)
+              parallel checksForParallel
             }
           }
         }

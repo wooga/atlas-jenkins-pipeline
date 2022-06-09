@@ -246,7 +246,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with given platforms"
         def configMap = [unityVersions: [version]]
         and: "some failing script step"
-        helper.registerAllowedMethod("dir", [String, Closure]) { throw new Exception() }
+        helper.registerAllowedMethod("dir", [String, Closure]) { throw new Exception("this shouldn't break") }
 
         when: "running check"
         inSandbox {
@@ -258,7 +258,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         noExceptionThrown()
         calls.has["unstable"] { MethodCall it ->
             String message = it.args[0]["message"]
-            message.startsWith("Unity build for optional version ${version.version} is found to be unstable")
+            return message.length() > 0
         }
         where:
         version << [[version: "2019", optional: true]]
@@ -338,7 +338,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def configMap = [unityVersions: ["any"],
+        def configMap = [unityVersions    : ["any"],
                          checkTask        : convCheck,
                          sonarqubeTask    : convSonarqube,
                          wdkCoberturaFile : convWDKCoberturaFile,
@@ -382,15 +382,15 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
         and: "configuration object with given platforms with wrapper code"
-        def configMap = [unityVersions: ["any", "other"],
-             testWrapper: { testOp, unityPlatform ->
-                 testCount.incrementAndGet()
-                 testOp(unityPlatform)
-             },
-             analysisWrapper: { analysisOp, unityPlatform ->
-                 analysisCount.incrementAndGet()
-                 analysisOp(unityPlatform)
-             }]
+        def configMap = [unityVersions  : ["any", "other"],
+                         testWrapper    : { testOp, unityPlatform ->
+                             testCount.incrementAndGet()
+                             testOp(unityPlatform)
+                         },
+                         analysisWrapper: { analysisOp, unityPlatform ->
+                             analysisCount.incrementAndGet()
+                             analysisOp(unityPlatform)
+                         }]
         and: "stashed setup data"
         jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
@@ -434,21 +434,23 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         checkoutDir << [".", "dir", "dir/subdir"]
     }
 
-    @Unroll("runs test and analysis step on #checkDir")
+    @Unroll("runs test and analysis step on #checkoutDir/#checkDir")
     def "runs test and analysis step on given checkDir"() {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
-        def configMap = [unityVersions: ["2019"], checkDir: checkDir,
-            testWrapper: { testOp, platform ->
-                stepsDirs.add(this.currentDir)
-                testOp(platform)
-        },
-            analysisWrapper: { analysisOp, platform ->
-                stepsDirs.add(this.currentDir)
-                analysisOp(platform)
-        }]
+        def configMap = [
+                unityVersions  : [platform],
+                checkDir       : checkDir, checkoutDir: checkoutDir,
+                testWrapper    : { testOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    testOp(platform)
+                },
+                analysisWrapper: { analysisOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    analysisOp(platform)
+                }]
         and: "stashed setup"
         jenkinsStash["setup_w"] = [:]
 
@@ -462,10 +464,18 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.unityVersions.size() + 1
-        stepsDirs.every { it == checkDir }
+        stepsDirs.every {
+            it == expectedDir
+        }
 
         where:
-        checkDir << [".", "dir", "dir/subdir"]
+        platform | checkDir     | checkoutDir   | expectedDir
+        "2019"   | ""           | null          | "2019/."
+        "2019"   | "."          | null          | "2019/."
+        "2020"   | "."          | "checkoutdir" | "checkoutdir/."
+        "2015"   | "dir"        | null          | "2015/dir"
+        "name"   | "dir/subdir" | null          | "name/dir/subdir"
+        "1234"   | "dir/subdir" | "checkout"    | "checkout/dir/subdir"
     }
 
     @Unroll("#description all check workspaces when clearWs is #clearWs")
@@ -488,14 +498,14 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             }
         }
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs? versions.size() : 0)
+        calls["cleanWs"].length == (clearWs ? versions.size() : 0)
 
         where:
-        versions | clearWs
-        ["2019"] | true
-        ["2019"] | false
+        versions         | clearWs
+        ["2019"]         | true
+        ["2019"]         | false
         ["2019", "2022"] | true
         ["2019", "2022"] | false
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 }

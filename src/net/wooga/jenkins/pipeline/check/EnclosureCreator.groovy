@@ -13,7 +13,7 @@ class EnclosureCreator {
         this.buildNumber = buildNumber
     }
 
-    Closure withNodeAndEnv(Platform platform, PackedStep mainCls, Closure catchCls, PackedStep finallyCls) {
+    Closure nodeForPlatform(Platform platform, PackedStep mainCls, Closure catchCls, PackedStep finallyCls) {
         def testEnvironment = platform.testEnvironment +
                 ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
         return {

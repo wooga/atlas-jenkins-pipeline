@@ -48,7 +48,7 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         inSandbox { buildGradlePlugin() }
 
         then: "runs gradle with parameters"
-        def gradleCall = getShGradleCalls().first()
+        def gradleCall = (getShGradleCalls().find() ?: "") as String
         skipsRelease || (gradleCall != null)
         skipsRelease ^ gradleCall.contains(releaseType)
         skipsRelease ^ gradleCall.contains("-Pgradle.publish.key=key")

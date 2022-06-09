@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-import net.wooga.jenkins.pipeline.config.JavaConfig
+import net.wooga.jenkins.pipeline.config.Config
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -11,7 +11,7 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 
 def call(Map configMap = [:]) {
     javaLibs(configMap) { stages ->
-        stages.publish = { stage, params, JavaConfig config ->
+        stages.publish = { stage, params, Config config ->
             stage.action = {
                 def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
                 publisher.gradlePlugin('gradle.publish.key', 'gradle.publish.secret')

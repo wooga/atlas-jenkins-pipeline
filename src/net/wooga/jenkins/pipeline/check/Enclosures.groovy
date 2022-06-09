@@ -17,17 +17,17 @@ class Enclosures {
     }
 
     def withDocker(Platform platform, PackedStep mainCls, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        return enclosureCreator.withNodeAndEnv(platform,
+        return enclosureCreator.nodeForPlatform(platform,
                 withCheckout(platform.checkoutDirectory, { docker.runOnImage(mainCls) }),
-                catchCls,
+                withOptional(platform.name, platform.optional, catchCls),
                 withCleanup(platform.clearWs, finallyCls)
         )
     }
 
     def simple(Platform platform, PackedStep mainClosure, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        return enclosureCreator.withNodeAndEnv(platform,
+        return enclosureCreator.nodeForPlatform(platform,
                 withCheckout(platform.checkoutDirectory, mainClosure),
-                catchCls,
+                withOptional(platform.name, platform.optional, catchCls),
                 withCleanup(platform.clearWs, finallyCls)
         )
     }
@@ -36,8 +36,8 @@ class Enclosures {
         return {
             jenkins.dir(checkoutDir) {
                 jenkins.checkout(jenkins.scm)
+                step()
             }
-            step()
         }
     }
 
@@ -46,6 +46,18 @@ class Enclosures {
             step()
             if(hasCleanup) {
                 jenkins.cleanWs()
+            }
+        }
+    }
+
+
+    //TODO tests
+    private Closure withOptional(String name, boolean isOptional, Closure catchCls) {
+        return  { exception ->
+            if (isOptional) {
+                jenkins.unstable(message: "Optional run ${name} failed, continuing other runs\n${exception.toString()}")
+            } else {
+                catchCls(exception)
             }
         }
     }

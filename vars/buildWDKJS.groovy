@@ -1,5 +1,5 @@
 #!/usr/bin/env groovy
-import net.wooga.jenkins.pipeline.config.JSConfig
+import net.wooga.jenkins.pipeline.check.steps.Step
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -14,7 +14,7 @@ def call(Map configMap = [:]) {
     configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
     configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
     configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-    def config  = JSConfig.fromConfigMap(configMap, this)
+    def config  = configs().jsWDK(configMap, this)
     def platforms = config.platforms
     def mainPlatform = platforms[0]
 
@@ -65,11 +65,9 @@ def call(Map configMap = [:]) {
 
                 steps {
                     script {
-                        withEnv(["COVERALLS_PARALLEL=true"]) {
-                            def jsChecks = config.pipelineTools.checks.forJSPipelines()
-                            def checksForParallel = jsChecks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
-                            parallel checksForParallel
-                        }
+                        Step checkTemplate = jsCheckTemplate(config.pipelineTools.checks, config.checkArgs, config.conventions)
+                        def checksForParallel = parallelize(checkTemplate, config.platforms, config.conventions.javaParallelPrefix)
+                        parallel checksForParallel
                     }
                 }
                 post {

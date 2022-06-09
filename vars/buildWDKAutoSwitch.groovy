@@ -1,9 +1,7 @@
 #!/usr/bin/env groovy
-import net.wooga.jenkins.pipeline.assemble.Assemblers
-import net.wooga.jenkins.pipeline.check.Checks
-import net.wooga.jenkins.pipeline.config.WDKConfig
-import net.wooga.jenkins.pipeline.model.Gradle
-import net.wooga.jenkins.pipeline.setup.Setups
+import net.wooga.jenkins.pipeline.BuildVersion
+import net.wooga.jenkins.pipeline.check.steps.Step
+import net.wooga.jenkins.pipeline.config.Config
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -13,12 +11,13 @@ import net.wooga.jenkins.pipeline.setup.Setups
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [ unityVersions:[] ]) {
+  def buildLabel = "macos"
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  def config = WDKConfig.fromConfigMap("macos", configMap, this)
-  def mainPlatform = config.unityVersions[0].platform
+  def config = configs().unityWDK(buildLabel, configMap, this) as Config
+  def mainPlatform = config.platforms[0]
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -51,7 +50,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
       stage('setup') {
         agent {
-          label "atlas && $config.buildLabel"
+          label "atlas && $buildLabel"
         }
 
         steps {
@@ -86,7 +85,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && $config.buildLabel"
+               label "atlas && $buildLabel"
             }
 
             steps {
@@ -124,11 +123,10 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
             steps {
               script {
-                def checks = config.pipelineTools.checks.forWDKPipelines()
-                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
-                        config.checkArgs, config.conventions)
-                  parallel stepsForParallel
+                Step checkTemplate = wdkCheckTemplate(config.pipelineTools.checks, config.checkArgs,
+                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String, config.conventions)
+                def checksForParallel = parallelize(checkTemplate, config.platforms, config.conventions.wdkParallelPrefix)
+                parallel checksForParallel
               }
             }
           }
@@ -137,7 +135,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
       stage('publish') {
         agent {
-           label "atlas && $config.buildLabel"
+           label "atlas && $buildLabel"
         }
 
         environment {
@@ -154,7 +152,9 @@ def call(Map configMap = [ unityVersions:[] ]) {
           script {
             def applicationsHome = env.APPLICATIONS_HOME?: ""
             def unityExecPackagePath = env.UNITY_EXEC_PACKAGE_PATH?: ""
-            def unityPath = "${applicationsHome}/${config.unityVersions[0].stepDescription}/${unityExecPackagePath}"
+            def mainBuildVersion = BuildVersion.parse(configMap.unityVersions[0]).toLabel()
+            def unityDir = "Unity-${mainBuildVersion}"
+            def unityPath = "${applicationsHome}/${unityDir}/${unityExecPackagePath}".toString()
 
             def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
             publisher.unityArtifactoryPaket(unityPath, 'artifactory_publish')

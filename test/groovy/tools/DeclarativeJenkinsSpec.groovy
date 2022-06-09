@@ -9,6 +9,7 @@ import com.lesfurets.jenkins.unit.declarative.WhenDeclaration
 import org.apache.commons.lang3.ClassUtils
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.GenericWhitelist
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.ProxyWhitelist
+import org.powermock.classloading.DeepCloner
 import spock.lang.Shared
 import spock.lang.Specification
 import tools.sandbox.PackageWhitelist
@@ -62,6 +63,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         helper?.callStack?.clear()
         environment.wipe()
         credentials.wipe()
+        currentDir = null
     }
 
     def getUsedEnvironments() {
@@ -124,9 +126,12 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             }
             registerAllowedMethod("dir", [String, Closure]) { String targetDir, cls ->
                 def previousDir = this.currentDir
-                this.currentDir = targetDir
-                cls()
-                this.currentDir = previousDir
+                try {
+                    this.currentDir = [previousDir, targetDir].findAll {it != null }.join("/")
+                    cls()
+                } finally {
+                    this.currentDir = previousDir
+                }
             }
         }
     }
@@ -142,16 +147,26 @@ abstract class DeclarativeJenkinsSpec extends Specification {
     /**
      * Loads a script and the javaLibCheck and publish side scripts inside the sandbox.
      * @param path - path to the script to be loaded.
+     * @param path - path to the script to be loaded.
      * @param varBindingOps - convenience closure to execute operations over the binding
      * object that will be passed to scripts
-     * @param reloadSideScripts - if the side scripts should be loaded, defaults to true.
+     * @param loadSideScripts - if the side scripts should be loaded, defaults to true.
      * @return Script object representing the loaded script
      */
-    Script loadSandboxedScript(String path, Closure varBindingOps={}, boolean reloadSideScripts = true) {
+    Script loadSandboxedScript(String path, Closure varBindingOps={}, boolean loadSideScripts = true) {
         varBindingOps.setDelegate(binding.variables)
         varBindingOps(binding.variables)
-        if(reloadSideScripts) {
-            registerSideScript("vars/javaLibs.groovy", binding)
+        if(loadSideScripts) {
+            inSandbox {
+                registerSideScript("vars/configs.groovy", binding)
+                registerSideScript("vars/gradleWrapper.groovy", binding)
+                registerSideScript("vars/parallelize.groovy", binding)
+                registerSideScript("vars/staticAnalysis.groovy", binding)
+                registerSideScript("vars/javaCheckTemplate.groovy", binding)
+                registerSideScript("vars/wdkCheckTemplate.groovy", binding)
+                registerSideScript("vars/jsCheckTemplate.groovy", binding)
+                registerSideScript("vars/javaLibs.groovy", binding)
+            }
         }
         return helper.loadSandboxedScript(path, binding)
     }
@@ -201,24 +216,39 @@ abstract class DeclarativeJenkinsSpec extends Specification {
 
     /**
      * Runs a closure in sandbox environment.
-     *
-     * IMPORTANT:
-     * Avoid object exchange from in to outside the sandbox environment (ie. parameters pass or returns).
+     *<br><br>
+     * IMPORTANT:<br>
+     * Object exchange from in to outside the sandbox environment (ie. parameters pass or returns), is non-trivial.
      * As the sandbox environment has its own ClassLoader, trying to use any 'non-basic'
      * (ie. not loaded by the bootstrap ClassLoader) JVM object will fail.
      * If you are having trouble with inane ClassNotFoundException(s), this is probably the case.
-     *
+     *<br><br>
      * Example of safe classes are Map, String, Object, and primitives, but there are many others besides these.
-     *
-     * If you absolutely have to pass a custom object, you can try serializing the it, passing the bytes,
-     * and then deserialize it on the other side, for instance, using ObjectOutputStream/ObjectInputStream.
-     *
+     *<br><br>
+     * If you have to pass in a custom object, `helper.cloneToSandbox` will generate a clone of that object in the sandbox classLoader,
+     * which then can be used inside the sandbox.
+     * For returns, you can use inSandboxClonedReturn or `helper.cloneTo`, to generate a clone of a sandboxed object in a non-sandbox environment.
+     *<br>
      * @param cls function to run into the sandbox
-     * @return the return of the cls closure
+     * @return the direct return of the cls closure
      */
     protected <T> T inSandbox(Closure<T> cls) {
         return helper.inSandbox(cls)
     }
+
+    /**
+     * Runs a closure in sandbox environment.
+     * Limitations from inSandbox(Closure) still applies, except for the return object,
+     * which is transfered to this class classLoader.
+     *
+     * @param cls function to run into the sandbox
+     * @return cloned return of the cls closure, transplanted to this class' class loader.
+     */
+    protected <T> T inSandboxClonedReturn(Closure<T> cls) {
+        def sandboxedReturn = inSandbox { cls() }
+        return helper.cloneTo(sandboxedReturn, this.class.classLoader)
+    }
+
 
     String[] getShGradleCalls() {
         return calls["sh"].collect { it.args[0]["script"].toString() }.findAll {

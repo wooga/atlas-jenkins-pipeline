@@ -1,28 +1,37 @@
-package net.wooga.jenkins.pipeline.config
+package scripts
 
 import net.wooga.jenkins.pipeline.BuildVersion
+import net.wooga.jenkins.pipeline.config.BaseConfig
+import net.wooga.jenkins.pipeline.config.CheckArgs
+import net.wooga.jenkins.pipeline.config.DockerArgs
+import net.wooga.jenkins.pipeline.config.GradleArgs
+import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.config.JenkinsMetadata
+import net.wooga.jenkins.pipeline.config.PipelineConventions
+import net.wooga.jenkins.pipeline.config.Platform
 import spock.lang.Shared
-import spock.lang.Specification
 import spock.lang.Unroll
+import tools.DeclarativeJenkinsSpec
 import tools.FakeJenkinsObject
 
-class WDKConfigSpec extends Specification {
+class WDKConfigSpec extends DeclarativeJenkinsSpec {
 
     @Shared
     def jenkinsScript = new FakeJenkinsObject([BUILD_NUMBER: 1, BRANCH_NAME: "branch"])
 
 
-    @Unroll("creates valid WDKConfig object from #configMap")
-    def "creates valid WDKConfig object from config map"() {
+    @Unroll("creates valid WDK Config object from #configMap")
+    def "creates valid WDK Config object from config map"() {
         given: "a configuration map"
         and: "a jenkins build label"
+        and: "loaded configs script"
+        def configs = loadSandboxedScript("vars/configs.groovy")
         when:
-        def wdkConf = WDKConfig.fromConfigMap(label, configMap, jenkinsScript)
+        def wdkConf = inSandboxClonedReturn { configs().unityWDK(label, configMap, jenkinsScript)}  as Config
         then:
         wdkConf.pipelineTools != null
         wdkConf.checkArgs == expected.checkArgs
-        wdkConf.unityVersions == expected.unityVersions
-        wdkConf.buildLabel == expected.buildLabel
+        wdkConf.platforms == expected.platforms
         wdkConf.gradleArgs == expected.gradleArgs
         wdkConf.metadata == expected.metadata
 
@@ -38,12 +47,14 @@ class WDKConfigSpec extends Specification {
     }
 
     @Unroll
-    def "fails to create valid WDKConfig object if config map has null or empty unityVersions list"() {
+    def "fails to create valid WDK Config object if config map has null or empty unityVersions list"() {
         given: "a null or empty configuration map"
+        and: "loaded configs script"
+        def configs = loadSandboxedScript("vars/configs.groovy")
         when:
-        WDKConfig.fromConfigMap("any", [unityVersions: unityVersions], new FakeJenkinsObject([:]))
+        inSandbox { configs().unityWDK("any", [unityVersions: unityVersions], new FakeJenkinsObject([:])) }
         then:
-        def e = thrown(IllegalArgumentException)
+        def e = thrown(Exception)
         e.message == "Please provide at least one unity version."
 
         where:
@@ -52,22 +63,21 @@ class WDKConfigSpec extends Specification {
 
     def configFor(List<String> plats, String label, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        def unityVersions = platsFor(plats, label)
+        def platforms = platsFor(plats, label)
         def baseConfig = new BaseConfig(jenkinsScript,
                 PipelineConventions.standard.mergeWithConfigMap([:]),
                 metadata,
                 GradleArgs.fromConfigMap([refreshDependencies: refreshDependencies, showStackTrace: showStackTrace, logLevel: logLevel]),
                 DockerArgs.fromConfigMap([:]),
                 CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]))
-        return new WDKConfig(unityVersions, baseConfig, label)
+        return new Config(baseConfig, platforms)
     }
 
 
     def platsFor(List<?> unityVersionObj, String buildLabel) {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
-            def platform = Platform.forWDK(buildVersion, buildLabel, [:], index == 0)
-            return new UnityVersionPlatform(platform, buildVersion)
+            Platform.forWDK(buildVersion, buildLabel, [:], index == 0)
         }
     }
 }
