@@ -1,22 +1,24 @@
 #!groovy
-@Library('github.com/wooga/atlas-jenkins-pipeline@detach/test-lib') _
+@Library('github.com/wooga/atlas-jenkins-pipeline@1.x') _
 
 def call(Map configMap = [:]) {
-    javaLibs(configMap) { stages ->
-        stages.check = { check, params, config ->
-            check.when = {
-                anyOf {
-                    changeset comparator: 'GLOB', pattern: 'atlas-jenkins-pipeline-gradle/**'
-                    isRestartedRun()
-                    triggeredBy 'UserIdCause'
+    withCredentials([usernamePassword(credentialsId: 'github_integration', passwordVariable: 'ATLAS_GITHUB_INTEGRATION_PASSWORD', usernameVariable: 'ATLAS_GITHUB_INTEGRATION_USER')]) {
+        javaLibs(configMap) { stages ->
+            stages.check = { check, params, config ->
+                check.when = {
+                    anyOf {
+                        changeset comparator: 'GLOB', pattern: 'atlas-jenkins-pipeline-gradle/**'
+                        isRestartedRun()
+                        triggeredBy 'UserIdCause'
+                    }
                 }
             }
-        }
 
-        stages.publish = { publish, params, config ->
-            publish.when = { false }
+            stages.publish = { publish, params, config ->
+                publish.when = { false }
+            }
         }
     }
 }
 
-call(plaforms: ['unix'], checkDir: "atlas-jenkins-pipeline-gradle")
+call(platforms: ['macos'], checkDir: "atlas-jenkins-pipeline-gradle")
