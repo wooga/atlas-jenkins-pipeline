@@ -76,6 +76,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         helper?.callStack?.clear()
         environment.wipe()
         credentials.wipe()
+        currentDir = null
     }
 
     /**
@@ -160,9 +161,12 @@ abstract class DeclarativeJenkinsSpec extends Specification {
             }
             registerAllowedMethod("dir", [String, Closure]) { String targetDir, cls ->
                 def previousDir = this.currentDir
-                this.currentDir = targetDir
-                cls()
-                this.currentDir = previousDir
+                try {
+                    this.currentDir = [previousDir, targetDir].findAll {it != null }.join("/")
+                    cls()
+                } finally {
+                    this.currentDir = previousDir
+                }
             }
         }
     }

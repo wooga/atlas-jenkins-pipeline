@@ -440,7 +440,9 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
+        def checkoutDir = "."
         def configMap = [unityVersions: ["2019"], checkDir: checkDir,
+            checkoutDir: checkoutDir,
             testWrapper: { testOp, platform ->
                 stepsDirs.add(this.currentDir)
                 testOp(platform)
@@ -462,7 +464,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.unityVersions.size() + 1
-        stepsDirs.every { it == checkDir }
+        stepsDirs.every {it == "${checkoutDir}/${checkDir}"}
 
         where:
         checkDir << [".", "dir", "dir/subdir"]

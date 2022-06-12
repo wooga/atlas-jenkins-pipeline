@@ -244,7 +244,9 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         def buildWDKJS = loadSandboxedScript(SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test result capture"
         def stepsDirs = []
+        def checkoutDir = "."
         def configMap = [platforms: ["linux"], checkDir: checkDir,
+                         checkoutDir: checkoutDir,
                          testWrapper: { testOp, platform ->
                              stepsDirs.add(this.currentDir)
                              testOp(platform)
@@ -263,7 +265,7 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.platforms.size() + 1
-        stepsDirs.every {it == checkDir}
+        stepsDirs.every {it == "${checkoutDir}/${checkDir}"}
 
         where:
         checkDir << [".", "dir", "dir/subdir"]

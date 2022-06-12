@@ -33,23 +33,37 @@ abstract class SandboxedDeclarativeJenkinsSpec extends DeclarativeJenkinsSpec {
 
     /**
      * Runs a closure in sandbox environment.
-     *
-     * IMPORTANT:
-     * Avoid object exchange from in to outside the sandbox environment (ie. parameters pass or returns).
+     *<br><br>
+     * IMPORTANT:<br>
+     * Object exchange from in to outside the sandbox environment (ie. parameters pass or returns), is non-trivial.
      * As the sandbox environment has its own ClassLoader, trying to use any 'non-basic'
      * (ie. not loaded by the bootstrap ClassLoader) JVM object will fail.
      * If you are having trouble with inane ClassNotFoundException(s), this is probably the case.
-     *
+     *<br><br>
      * Example of safe classes are Map, String, Object, and primitives, but there are many others besides these.
-     *
-     * If you absolutely have to pass a custom object, you can try serializing the it, passing the bytes,
-     * and then deserialize it on the other side, for instance, using ObjectOutputStream/ObjectInputStream.
+     *<br><br>
+     * If you have to pass in a custom object, `helper.cloneToSandbox` will generate a clone of that object in the sandbox classLoader,
+     * which then can be used inside the sandbox.
+     * For returns, you can use inSandboxClonedReturn or `helper.cloneTo`, to generate a clone of a sandboxed object in a non-sandbox environment.
+     *<br>
+     * @param cls function to run into the sandbox
+     * @return the direct return of the cls closure
+     */
+    protected <T> T inSandbox(Closure<T> cls) {
+        return helper.inSandbox(cls)
+    }
+
+    /**
+     * Runs a closure in sandbox environment.
+     * Limitations from inSandbox(Closure) still applies, except for the return object,
+     * which is transfered to this class classLoader.
      *
      * @param cls function to run into the sandbox
-     * @return the return of the cls closure
+     * @return cloned return of the cls closure, transplanted to this class' class loader.
      */
-    public <T> T inSandbox(Closure<T> cls) {
-        return helper.inSandbox(cls)
+    protected <T> T inSandboxClonedReturn(Closure<T> cls) {
+        def sandboxedReturn = inSandbox { cls() }
+        return helper.cloneTo(sandboxedReturn, this.class.classLoader)
     }
 
     /**
