@@ -3,6 +3,7 @@ package net.wooga.jenkins.pipeline.stages
 import net.wooga.jenkins.pipeline.config.PipelineConfig
 
 class Stage {
+     String name
      Closure when
      Closure action
 

@@ -59,7 +59,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         }
       }
 
-      stage("check") {
+      stage(actions.check.name?: "check") {
         agent none
         when {
           beforeAgent true
@@ -88,7 +88,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
        }
      }
 
-      stage('publish') {
+      stage(actions.publish.name?: 'publish') {
         when {
           beforeAgent true
           //TODO this should be variable, as private libs publishes on snapshot
