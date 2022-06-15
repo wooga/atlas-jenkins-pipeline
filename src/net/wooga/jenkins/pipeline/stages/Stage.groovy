@@ -9,13 +9,14 @@ class Stage {
 
      static Stage fromClosure(Map jenkinsParams, PipelineConfig config, Closure cls) {
           def clsClone = cls.clone() as Closure
-          def stage = new Stage(null, null)
+          def stage = new Stage(null, null, null)
           clsClone.delegate = stage
           clsClone(stage, jenkinsParams, config)
           return stage
      }
 
-     Stage(Closure when, Closure action) {
+     Stage(String name, Closure when, Closure action) {
+          this.name = name
           this.when = when
           this.action = action
      }

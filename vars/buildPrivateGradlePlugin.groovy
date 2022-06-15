@@ -8,7 +8,7 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map configMap = [:]) {
+def call(Map configMap = [:], Closure stagesConfigCls = {it -> }) {
     javaLibs(configMap) { stages ->
         stages.publish = { stage, params, JavaConfig config ->
             stage.when = { true } //always
@@ -20,5 +20,6 @@ def call(Map configMap = [:]) {
                         'ossrh.signing.passphrase')
             }
         }
+        stagesConfigCls(stages)
     }
 }

@@ -9,14 +9,14 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map configMap = [:], Closure stepsConfigCls) {
+def call(Map configMap = [:], Closure stagesConfigCls) {
   //organize configs inside neat object. Defaults are defined there as well
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
   def config = JavaConfig.fromConfigMap(configMap, this)
-  def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
+  def actions = Stages.fromClosure(params as Map, config, stagesConfigCls)
   def mainPlatform = config.mainPlatform.name
 
   pipeline {
@@ -59,7 +59,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         }
       }
 
-      stage(actions.check.name?: "check") {
+      stage("${actions.check.name?: "check"}") {
         agent none
         when {
           beforeAgent true
