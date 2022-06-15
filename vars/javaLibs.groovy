@@ -26,6 +26,12 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
       buildDiscarder(logRotator(artifactNumToKeepStr:'40'))
     }
 
+    environment {
+      SNYK_TOKEN = credentials("atlas_plugins_snyk_token")
+      SNYK_AUTO_DOWNLOAD = "YES"
+      SNYK_ORG_NAME = "wooga-pipeline"
+    }
+
     parameters {
       choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
       choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
