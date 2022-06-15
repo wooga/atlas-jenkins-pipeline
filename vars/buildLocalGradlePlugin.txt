@@ -1,0 +1,14 @@
+Custom step to build and test local gradle plugins.
+
+usage:
+
+```
+def coveralls_token = "coveralls token" //can be null
+
+def testEnvironment = [
+                        "test_var_1=value1",
+                        "test_var_2=value2"
+                       ]
+
+buildLocalGradlePlugin plaforms: ['macos'], coverallsToken: coveralls_token, testEnvironment: testEnvironment, checkDir: "my-project-gradle"
+```
