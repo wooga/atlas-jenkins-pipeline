@@ -1,7 +1,5 @@
 package net.wooga.jenkins.pipeline.check
 
-import net.wooga.jenkins.pipeline.model.Gradle
-
 class Coveralls {
 
     final Object jenkins
@@ -10,23 +8,6 @@ class Coveralls {
     Coveralls(Object jenkins, String token) {
         this.jenkins = jenkins
         this.token = token
-    }
-
-    void maybeRun(Gradle gradle, String task) {
-        if (token) {
-            jenkins.withEnv(["COVERALLS_REPO_TOKEN=${token}"]) {
-                gradle.wrapper(task)
-                jenkins.publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'build/reports/jacoco/test/html',
-                        reportFiles: 'index.html',
-                        reportName: "Coverage ${it}",
-                        reportTitles: ''
-                ])
-            }
-        }
     }
 
     boolean equals(o) {

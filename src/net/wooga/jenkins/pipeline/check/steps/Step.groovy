@@ -5,6 +5,8 @@ import net.wooga.jenkins.pipeline.config.Platform
 
 class Step {
 
+    final static StepWrapper identityWrapper = { step, plat -> step(plat) }
+
     StepFunction stepFunction
 
     Step(Closure closure) {

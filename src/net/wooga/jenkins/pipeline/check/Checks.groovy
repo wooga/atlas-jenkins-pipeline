@@ -1,48 +1,45 @@
 package net.wooga.jenkins.pipeline.check
 
-import net.wooga.jenkins.pipeline.check.steps.GradleSteps
+import net.wooga.jenkins.pipeline.check.steps.Step
+import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.model.Docker
-import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
+    final Object jenkins
+    final Enclosures enclosures
 
-    Docker docker
-    Gradle gradle
-    GradleSteps steps
-    EnclosureCreator enclosureCreator
-    Enclosures enclosures
-    CheckCreator checkCreator
-
-    //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
-    //for non-trivial constructors, prefer static factories.
-    static Checks create(Object jenkinsScript, Docker docker, Gradle gradle, int buildNumber) {
+    static Checks create(Object jenkinsScript, Docker docker, int buildNumber) {
         def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
         def enclosures = new Enclosures(jenkinsScript, docker, enclosureCreator)
-        def checkCreator = new CheckCreator(jenkinsScript, enclosures)
-        def steps = new GradleSteps(jenkinsScript, gradle)
-
-        return new Checks(docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
+        return new Checks(jenkinsScript, enclosures)
     }
 
-    private Checks(Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
-           Enclosures enclosures, CheckCreator checkCreator) {
-        this.docker = docker
-        this.gradle = gradle
-        this.steps = steps
-        this.enclosureCreator = enclosureCreator
+    public Checks(Object jenkinsScript, Enclosures enclosures) {
+        this.jenkins = jenkinsScript
         this.enclosures = enclosures
-        this.checkCreator = checkCreator
     }
 
-    JavaChecks forJavaPipelines() {
-        return new JavaChecks(checkCreator, steps)
+    Step enclosedSimpleCheck(Step testStep, Step analysisStep, Closure catchClosure, Closure finallyClosure) {
+        return simpleCheck(testStep, analysisStep).wrappedBy { checkStep, platform ->
+            def enclosedPackedStep = platform.runsOnDocker ?
+                    enclosures.withDocker(platform, checkStep.pack(platform), catchClosure, finallyClosure) :
+                    enclosures.simple(platform, checkStep.pack(platform), catchClosure, finallyClosure)
+            enclosedPackedStep()
+        }
     }
 
-    WDKChecks forWDKPipelines() {
-        return new WDKChecks(checkCreator, steps)
+    Step simpleCheck(Step testStep, Step analysisStep) {
+        return new Step({ Platform platform ->
+            jenkins.dir(platform.checkDirectory) {
+                testStep(platform)
+                if (platform.isMain()) {
+                    analysisStep(platform)
+                }
+            }
+        })
     }
 
-    JSChecks forJSPipelines() {
-        return new JSChecks(checkCreator, steps)
-    }
+
 }
+
+

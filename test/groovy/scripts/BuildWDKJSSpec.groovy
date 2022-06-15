@@ -142,10 +142,10 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         given: "loaded check in a running jenkins build"
         def buildWDKJS = loadSandboxedScript(SCRIPT_PATH)
         and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux"],
-                         sonarToken: "token", coverallsToken: "token",
-                         checkTask: convCheck, sonarqubeTask: convSonarqubeTask,
-                         jacocoTask: convJacocoTask, javaParallelPrefix: convJavaParallelPrefix,
+        def configMap = [platforms    : ["linux"],
+                         sonarToken   : "token", coverallsToken: "token",
+                         checkTask    : convCheck, sonarqubeTask: convSonarqubeTask,
+                         jacocoTask   : convJacocoTask, javaParallelPrefix: convJavaParallelPrefix,
                          coverallsTask: convCoverallsTask]
 
         when: "running check"
@@ -180,9 +180,9 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms and desired wrappers"
 
         def configMap = [
-                platforms: ["linux", "windows"],
-                sonarToken: "token", coverallsToken: "token",
-                testWrapper: { testOp, platform ->
+                platforms      : ["linux", "windows"],
+                sonarToken     : "token", coverallsToken: "token",
+                testWrapper    : { testOp, platform ->
                     testCount.incrementAndGet()
                     testOp(platform)
                 },
@@ -244,15 +244,17 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         def buildWDKJS = loadSandboxedScript(SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test result capture"
         def stepsDirs = []
-        def configMap = [platforms: ["linux"], checkDir: checkDir,
-                         testWrapper: { testOp, platform ->
-                             stepsDirs.add(this.currentDir)
-                             testOp(platform)
-                         },
-                         analysisWrapper: { analysisOp, platform ->
-                             stepsDirs.add(this.currentDir)
-                             analysisOp(platform)
-                         }]
+        def configMap = [
+                platforms      : ["linux"],
+                checkDir       : checkDir, checkoutDir: checkoutDir,
+                testWrapper    : { testOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    testOp(platform)
+                },
+                analysisWrapper: { analysisOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    analysisOp(platform)
+                }]
 
         when: "running check"
         inSandbox {
@@ -263,10 +265,16 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.platforms.size() + 1
-        stepsDirs.every {it == checkDir}
+        stepsDirs.every { it == expectedDir }
 
         where:
-        checkDir << [".", "dir", "dir/subdir"]
+        checkDir     | checkoutDir   | expectedDir
+        ""           | null          | "./."
+        "."          | null          | "./."
+        "."          | "checkoutdir" | "checkoutdir/."
+        "dir"        | null          | "./dir"
+        "dir/subdir" | null          | "./dir/subdir"
+        "dir/subdir" | "checkout"    | "checkout/dir/subdir"
     }
 
     @Unroll("#description all check workspaces when clearWs is #clearWs")
@@ -281,15 +289,15 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         }
 
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs? platforms.size() : 0)
+        calls["cleanWs"].length == (clearWs ? platforms.size() : 0)
 
         where:
-        platforms | clearWs
-        ["linux"] | true
-        ["linux"] | false
+        platforms            | clearWs
+        ["linux"]            | true
+        ["linux"]            | false
         ["linux", "windows"] | true
         ["linux", "windows"] | false
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 //    jenkins.usernamePassword(credentialsId: npmCredsSecret,
 //    usernameVariable:"NODE_RELEASE_NPM_USER",
@@ -316,7 +324,7 @@ class BuildWDKJSSpec extends DeclarativeJenkinsSpec {
         skipsRelease ^ gradleCall.contains("-Prelease.scope=${releaseScope}")
         skipsRelease ^ gradleCall.contains("-x check")
         and: "sets credentials on environment"
-        def env =  usedEnvironments.last()
+        def env = usedEnvironments.last()
         skipsRelease ^ env["NODE_RELEASE_NPM_USER"] == "npmusr"
         skipsRelease ^ env["NODE_RELEASE_NPM_PASS"] == "npmpwd"
 

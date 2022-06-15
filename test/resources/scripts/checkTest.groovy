@@ -1,29 +1,36 @@
 package scripts
 
-import net.wooga.jenkins.pipeline.config.JavaConfig
-import net.wooga.jenkins.pipeline.config.WDKConfig
+import net.wooga.jenkins.pipeline.check.steps.Step
+import net.wooga.jenkins.pipeline.config.Config
 
 def javaCoverage(Map configMap) {
-    def config = JavaConfig.fromConfigMap(configMap, this)
-    def checks = config.pipelineTools.checks.forJavaPipelines()
-    return checks.gradleCheckWithCoverage(config.platforms, config.checkArgs, config.conventions)
+    def config = configs().java(configMap, this) as Config
+    Step checkTemplate = javaCheckTemplate(config.pipelineTools.checks, config.checkArgs, config.conventions)
+    return parallelize(checkTemplate, config.platforms, config.conventions.javaParallelPrefix)
 }
 
 def parallel(Map configMap, Closure checkCls, Closure analysisCls) {
-    def config = JavaConfig.fromConfigMap(configMap, this)
-    def checks = config.pipelineTools.checks.forJavaPipelines()
-    return checks.parallel(config.platforms, checkCls, analysisCls, config.conventions)
+    def config = configs().java(configMap, this) as Config
+    def checkStep = config.pipelineTools.checks.enclosedSimpleCheck(
+            new Step(checkCls).wrappedBy(config.checkArgs.testWrapper),
+            new Step(analysisCls).wrappedBy(config.checkArgs.analysisWrapper),
+            { ex -> throw ex },{  })
+    return parallelize(checkStep, config.platforms, config.conventions.javaParallelPrefix)
 }
 
-
 def wdkCoverage(String buildLabel, Map configMap, String releaseType, String releaseScope) {
-    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
-    def checks = config.pipelineTools.checks.forWDKPipelines()
-    return checks.wdkCoverage(config.unityVersions, releaseType, releaseScope, config.checkArgs, config.conventions)
+    def config = configs().unityWDK(buildLabel, configMap, this) as Config
+    Step checkTemplate = wdkCheckTemplate(config.pipelineTools.checks, config.checkArgs,
+            releaseType, releaseScope, config.conventions)
+    return parallelize(checkTemplate, config.platforms, config.conventions.wdkParallelPrefix)
 }
 
 def simpleWDK(String buildLabel, Map configMap, Closure checkCls, Closure analysisCls) {
-    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
-    def checks = config.pipelineTools.checks.forWDKPipelines()
-    return checks.parallel(config.unityVersions, checkCls, analysisCls)
+    def config = configs().unityWDK(buildLabel, configMap, this) as Config
+    def checkStep = config.pipelineTools.checks.enclosedSimpleCheck(
+            new Step(checkCls).wrappedBy(config.checkArgs.testWrapper),
+            new Step(analysisCls).wrappedBy(config.checkArgs.analysisWrapper),
+            { ex -> throw ex },
+            {  })
+    return parallelize(checkStep, config.platforms, config.conventions.wdkParallelPrefix)
 }

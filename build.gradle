@@ -41,6 +41,7 @@ dependencies {
     }
     testImplementation "org.jenkins-ci.main:jenkins-test-harness:2.71"
     testImplementation 'com.github.ben-manes.caffeine:caffeine:2.9.2'
+    testImplementation 'org.powermock:powermock-classloading-xstream:2.0.9'
 }
 
 

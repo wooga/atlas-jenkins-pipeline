@@ -1,10 +1,18 @@
-package net.wooga.jenkins.pipeline.config
+package scripts
 
+import net.wooga.jenkins.pipeline.config.BaseConfig
+import net.wooga.jenkins.pipeline.config.CheckArgs
+import net.wooga.jenkins.pipeline.config.Config
+import net.wooga.jenkins.pipeline.config.DockerArgs
+import net.wooga.jenkins.pipeline.config.GradleArgs
+import net.wooga.jenkins.pipeline.config.JenkinsMetadata
+import net.wooga.jenkins.pipeline.config.PipelineConventions
+import net.wooga.jenkins.pipeline.config.Platform
 import spock.lang.Shared
-import spock.lang.Specification
 import spock.lang.Unroll
+import tools.DeclarativeJenkinsSpec
 
-class JSConfigSpec extends Specification {
+class JSConfigSpec extends DeclarativeJenkinsSpec {
 
     @Shared
     def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
@@ -13,8 +21,11 @@ class JSConfigSpec extends Specification {
     def "creates valid config object from config map"() {
         given: "a configuration map"
         def configMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: cvallsToken] + extraFields
+        and: "loaded configs script"
+        def configs = loadSandboxedScript("vars/configs.groovy")
+
         when: "generating config object from map"
-        def config = JSConfig.fromConfigMap(configMap, jenkinsScript)
+        def config = inSandboxClonedReturn { configs().jsWDK(configMap, jenkinsScript) } as Config
         then: "generated config object is valid and matches map values"
         config.metadata == expected.metadata
         config.platforms == expected.platforms
@@ -33,7 +44,7 @@ class JSConfigSpec extends Specification {
         ["plat"]              | null                                   | [logLevel: "info", stackTrace: true, refreshDependencies: true] | null        | ["labels": "label"]     | configWith(["plat"], [:], [logLevel: "info", stackTrace: true, refreshDependencies: true], ["labels": "label"], null)
     }
 
-    JavaConfig configWith(List<String> platforms, Map dockerArgs = [:], Map gradleArgs = [:], Map extraFields = [:], String coverallsToken = null) {
+    Config configWith(List<String> platforms, Map dockerArgs = [:], Map gradleArgs = [:], Map extraFields = [:], String coverallsToken = null) {
         def cfgMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: coverallsToken] + extraFields
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
         def baseConfig = new BaseConfig(jenkinsScript,
@@ -45,6 +56,6 @@ class JSConfigSpec extends Specification {
         def platformObjs = platforms.withIndex().collect { String platName, int index ->
             Platform.forJava(platName, cfgMap, index == 0)
         }
-        return new JavaConfig(baseConfig, platformObjs)
+        return new Config(baseConfig, platformObjs)
     }
 }

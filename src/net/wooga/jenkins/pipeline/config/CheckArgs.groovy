@@ -2,13 +2,15 @@ package net.wooga.jenkins.pipeline.config
 
 import net.wooga.jenkins.pipeline.check.Coveralls
 import net.wooga.jenkins.pipeline.check.Sonarqube
+import net.wooga.jenkins.pipeline.check.steps.Step
+import net.wooga.jenkins.pipeline.check.steps.StepWrapper
 
 class CheckArgs {
 
     final JenkinsMetadata metadata
 
-    final Closure testWrapper
-    final Closure analysisWrapper
+    final StepWrapper testWrapper
+    final StepWrapper analysisWrapper
 
     final Sonarqube sonarqube
     final Coveralls coveralls
@@ -16,8 +18,8 @@ class CheckArgs {
     static CheckArgs fromConfigMap(Object jenkins, JenkinsMetadata metadata, Map configMap) {
         def sonarqubeToken = configMap.sonarToken as String
         def coverallsToken = configMap.coverallsToken as String
-        def testWrapper = (configMap.testWrapper ?:{ testOp, plat -> testOp(plat) }) as Closure
-        def analysisWrapper = (configMap.analysisWrapper ?: { analysisOp, plat -> analysisOp(plat) }) as Closure
+        def testWrapper = (configMap.testWrapper ?: Step.identityWrapper) as StepWrapper
+        def analysisWrapper = (configMap.analysisWrapper ?: Step.identityWrapper) as StepWrapper
 
         def sonarqube = new Sonarqube(sonarqubeToken)
         def coveralls = new Coveralls(jenkins, coverallsToken)
@@ -25,7 +27,7 @@ class CheckArgs {
         return new CheckArgs(metadata, testWrapper, analysisWrapper, sonarqube, coveralls)
     }
 
-    CheckArgs(JenkinsMetadata metadata, Closure testWrapper, Closure analysisWrapper, Sonarqube sonarqube, Coveralls coveralls) {
+    CheckArgs(JenkinsMetadata metadata, StepWrapper testWrapper, StepWrapper analysisWrapper, Sonarqube sonarqube, Coveralls coveralls) {
         this.metadata = metadata
         this.testWrapper = testWrapper
         this.analysisWrapper = analysisWrapper

@@ -21,7 +21,7 @@ class PipelineTools {
         def gradle = Gradle.fromJenkins(jenkins, config.gradleArgs)
         def docker = Docker.fromJenkins(jenkins, config.dockerArgs)
         def setups = Setups.create(jenkins, gradle)
-        def checks = Checks.create(jenkins, docker, gradle, config.metadata.buildNumber)
+        def checks = Checks.create(jenkins, docker, config.metadata.buildNumber)
         def assemblers = Assemblers.fromJenkins(jenkins, gradle)
         def publishersFactory = {
             String releaseType, String releaseScope -> Publishers.fromJenkins(jenkins, gradle, releaseType, releaseScope)

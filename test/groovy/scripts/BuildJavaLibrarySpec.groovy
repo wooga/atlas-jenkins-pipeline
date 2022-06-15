@@ -49,8 +49,8 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
         inSandbox { buildJavaLibrary() }
 
         then: "runs gradle with parameters"
-        def gradleCall = getShGradleCalls().first()
-        skipsRelease || (gradleCall != null)
+        def gradleCall = (getShGradleCalls().find() ?: "") as String
+        skipsRelease || (gradleCall != "")
         skipsRelease ^ gradleCall.contains(releaseType)
         skipsRelease ^ gradleCall.contains("-Pbintray.user=user")
         skipsRelease ^ gradleCall.contains("-Pbintray.key=key")

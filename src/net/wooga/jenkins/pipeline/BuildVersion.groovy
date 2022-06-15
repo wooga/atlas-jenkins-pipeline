@@ -41,6 +41,7 @@ class BuildVersion {
     }
 
     final String version
+    @Deprecated
     final Boolean optional
     // net_4_6, net_standard_2_0 (DEFAULT)
     final String apiCompatibilityLevel
@@ -58,7 +59,7 @@ class BuildVersion {
     }
 
     @NonCPS
-    String toLabel(){
+    String toLabel() {
         def result = version
         if (optional){
             result += " (optional)"
