@@ -32,6 +32,7 @@ class Platform {
     }
 
     static Platform forJS(String platformName, Map config, boolean isMain) {
+
         return new Platform(
                 (config.checkoutDir?: ".") as String,
                 (config.checkDir?: ".") as String,
@@ -96,6 +97,7 @@ class Platform {
     }
 
     List<String> getTestEnvironment() {
+
         return testEnv.collect { item ->
             if (item instanceof Closure) {
                 return item.call().toString()

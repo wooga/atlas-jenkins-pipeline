@@ -74,16 +74,13 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
             currentBuild["result"] = null
             params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
-            env.GRGIT_USR = "usr"
-            env.GRGIT_PSW = "pwd"
         }
 
         when: "running buildJavaLibrary pipeline"
         inSandbox { buildJavaLibrary() }
 
         then: "sets up GRGIT environment"
-        def env = buildJavaLibrary.binding.env
-        env["GRGIT"] == credentials['github_access']
+        def env = usedEnvironments.last()
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"

@@ -9,8 +9,8 @@ class Stages {
 
      static Stages standard(Map jenkinsParams, PipelineConfig config) {
           return new Stages(
-                  new Stage(null, null),
-                  new Stage(null, null),
+                  new Stage(null, null, null),
+                  new Stage(null, null, null),
                   { Closure cls -> Stage.fromClosure(jenkinsParams , config, cls) })
      }
 

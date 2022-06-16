@@ -9,7 +9,7 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def call(Map configMap = [:]) {
+def call(Map configMap = [:], Closure stagesConfigCls = {it -> }) {
     def checkDir = configMap.checkDir?: "."
     javaLibs(configMap) { stages ->
         stages.check = { check, params, config ->
@@ -24,5 +24,6 @@ def call(Map configMap = [:]) {
         stages.publish = { publish, params, JavaConfig config ->
             publish.when = { false }
         }
+        stagesConfigCls(stages)
     }
 }

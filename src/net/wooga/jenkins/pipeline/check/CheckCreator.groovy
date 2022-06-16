@@ -16,7 +16,7 @@ class CheckCreator {
     Closure junitCheck(Platform platform, Step testStep, Step analysisStep) {
         def mainClosure = createCheck(testStep, analysisStep).pack(platform)
         def catchClosure = {throw it}
-        def finallyClosure = {
+        def finallyClosure = { _ ->
             jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
         }
 
@@ -35,7 +35,7 @@ class CheckCreator {
                 throw e
             }
         }
-        def finallyClosure = {
+        def finallyClosure = { _ ->
             jenkins.nunit failIfNoResults: false, testResultsPattern: '**/build/reports/unity/test*/*.xml'
             jenkins.archiveArtifacts artifacts: '**/build/logs/**/*.log', allowEmptyArchive: true
             jenkins.archiveArtifacts artifacts: '**/build/reports/unity/**/*.xml', allowEmptyArchive: true

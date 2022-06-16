@@ -78,27 +78,23 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
             currentBuild["result"] = null
             params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
-            env.GRGIT_USR = "usr"
-            env.GRGIT_PSW = "pwd"
         }
 
         when: "running buildJavaLibrary pipeline"
         inSandbox { buildJavaLibrary() }
 
         then: "sets up GRGIT environment"
-        def env = buildJavaLibrary.binding.env
-        env["GRGIT"] == credentials['github_access']
+        def env = usedEnvironments.first()
         env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
         env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up github environment"
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up ossrh keys"
-        def publishEnv = usedEnvironments.last()
-        publishEnv["OSSRH_USERNAME"] == "user"
-        publishEnv["OSSRH_PASSWORD"] == "key"
-        publishEnv["OSSRH_SIGNING_KEY"] == "signing_key"
-        publishEnv["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
-        publishEnv["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
+        env["OSSRH_USERNAME"] == "user"
+        env["OSSRH_PASSWORD"] == "key"
+        env["OSSRH_SIGNING_KEY"] == "signing_key"
+        env["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
+        env["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
     }
 }

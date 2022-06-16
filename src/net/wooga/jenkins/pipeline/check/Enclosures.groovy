@@ -8,28 +8,40 @@ class Enclosures {
 
     private Object jenkins
     private Docker docker
-    private EnclosureCreator enclosureCreator
+    private NodeCreator enclosureCreator
+    private int buildNumber
 
-    Enclosures(Object jenkins, Docker docker, EnclosureCreator enclosureCreator) {
+    Enclosures(Object jenkins, Docker docker, NodeCreator enclosureCreator, int buildNumber) {
         this.jenkins = jenkins
         this.docker = docker
         this.enclosureCreator = enclosureCreator
+        this.buildNumber = buildNumber
     }
 
-    def withDocker(Platform platform, PackedStep mainCls, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        return enclosureCreator.withNodeAndEnv(platform,
+    Closure withDocker(Platform platform, PackedStep mainCls, Closure catchCls = {throw it}, Closure finallyCls = {ex ->}) {
+        return forPlatform(platform,
                 withCheckout(platform.checkoutDirectory, { docker.runOnImage(mainCls) }),
                 catchCls,
                 withCleanup(platform.clearWs, finallyCls)
         )
     }
 
-    def simple(Platform platform, PackedStep mainClosure, Closure catchCls = {throw it}, PackedStep finallyCls = {}) {
-        return enclosureCreator.withNodeAndEnv(platform,
+    Closure simple(Platform platform, PackedStep mainClosure, Closure catchCls = {throw it}, Closure finallyCls = {ex ->}) {
+        return forPlatform(platform,
                 withCheckout(platform.checkoutDirectory, mainClosure),
                 catchCls,
                 withCleanup(platform.clearWs, finallyCls)
         )
+    }
+
+    private Closure forPlatform(Platform platform, PackedStep mainClosure,
+                                Closure catchCls = {throw it}, Closure finallyCls = {ex -> }) {
+        def testEnvironment = platform.testEnvironment +
+                ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"] as List<String>
+        def platformLabels = platform.generateTestLabelsString()
+        def nodeLabels = platformLabels && !platformLabels.empty ?
+                "atlas && ${platform.generateTestLabelsString()}" : "atlas"
+        return enclosureCreator.nodeWithEnv(nodeLabels, testEnvironment, mainClosure.&call, catchCls, finallyCls)
     }
 
     private PackedStep withCheckout(String checkoutDir, PackedStep step) {
@@ -41,9 +53,9 @@ class Enclosures {
         }
     }
 
-    private PackedStep withCleanup(boolean hasCleanup, PackedStep step) {
-        return {
-            step()
+    private Closure withCleanup(boolean hasCleanup, Closure step) {
+        return { exception ->
+            step(exception)
             if(hasCleanup) {
                 jenkins.cleanWs()
             }
