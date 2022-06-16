@@ -9,27 +9,27 @@ class Checks {
     Docker docker
     Gradle gradle
     GradleSteps steps
-    EnclosureCreator enclosureCreator
+    NodeCreator nodeCreator
     Enclosures enclosures
     CheckCreator checkCreator
 
     //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
     //for non-trivial constructors, prefer static factories.
     static Checks create(Object jenkinsScript, Docker docker, Gradle gradle, int buildNumber) {
-        def enclosureCreator = new EnclosureCreator(jenkinsScript, buildNumber)
-        def enclosures = new Enclosures(jenkinsScript, docker, enclosureCreator)
+        def enclosureCreator = new NodeCreator(jenkinsScript)
+        def enclosures = new Enclosures(jenkinsScript, docker, enclosureCreator, buildNumber)
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
         def steps = new GradleSteps(jenkinsScript, gradle)
 
         return new Checks(docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
     }
 
-    private Checks(Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
-           Enclosures enclosures, CheckCreator checkCreator) {
+    private Checks(Docker docker, Gradle gradle, GradleSteps steps, NodeCreator enclosureCreator,
+                   Enclosures enclosures, CheckCreator checkCreator) {
         this.docker = docker
         this.gradle = gradle
         this.steps = steps
-        this.enclosureCreator = enclosureCreator
+        this.nodeCreator = enclosureCreator
         this.enclosures = enclosures
         this.checkCreator = checkCreator
     }

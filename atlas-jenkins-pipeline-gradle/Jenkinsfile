@@ -2,7 +2,5 @@
 @Library('github.com/wooga/atlas-jenkins-pipeline@improve/stage-names') _
 
 withCredentials([usernamePassword(credentialsId: 'github_integration', passwordVariable: 'ATLAS_GITHUB_INTEGRATION_PASSWORD', usernameVariable: 'ATLAS_GITHUB_INTEGRATION_USER')]) {
-    buildLocalGradlePlugin(platforms: ['macos'], checkDir: "atlas-jenkins-pipeline-gradle") {
-        it.check.name = "my check stage"
-    }
+    buildLocalGradlePlugin(platforms: ['macos'], checkDir: "atlas-jenkins-pipeline-gradle")
 }
