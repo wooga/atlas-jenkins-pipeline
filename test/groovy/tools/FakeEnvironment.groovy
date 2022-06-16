@@ -24,7 +24,9 @@ class FakeEnvironment {
         try {
             cls()
         } finally {
-            usedEnvironments.add(deepCopy(binding.env as Map))
+            if((binding.env as Map).size() > 0) {
+                usedEnvironments.add(deepCopy(binding.env as Map))
+            }
             env.each {
                 binding.env.remove(it.key)
                 binding.variables.remove(it.key)

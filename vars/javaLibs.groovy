@@ -20,30 +20,9 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
     def mainPlatform = config.mainPlatform.name
     def nodes = config.pipelineTools.checks.nodeCreator
 
-    pipeline {
-        agent none
-
-        options {
-            buildDiscarder(logRotator(artifactNumToKeepStr: '40'))
-        }
-
-        parameters {
-            choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
-            choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
-            choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
-            booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
-            booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
-            booleanParam(defaultValue: false, description: 'Whether to clear workspaces after build', name: 'CLEAR_WS')
-        }
-
-        stages {
-            stage('Preparation') {
-                agent any
-                steps {
-                    sendSlackNotification "STARTED", true
-                    script {
-                    stage(actions.check.name?: "check") {
-                        nodes.node([
+    def stages = [
+            {stage(actions.check.name ?: "check") {
+                nodes.node([
                         when : { actions.check.runWhenOrElse { params.RELEASE_TYPE == "snapshot" } },
                         steps: {
                             actions.check.runActionOrElse {
@@ -59,65 +38,33 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
                                 httpRequest httpMode: 'POST', ignoreSslErrors: true, validResponseCodes: '100:599', url: "https://coveralls.io/webhook?repo_token=${config.checkArgs.coveralls.token}"
                             }
                         }
-                        ])()
-                    }
-                    }
+                ])
                 }
-                post {
-                    cleanup {
-                        script {
-                            if (config.mainPlatform.clearWs) {
-                                cleanWs()
-                            }
-                        }
-                    }
-                }
-            }
-
-            stage('publish') {
-                when {
-                    beforeAgent true
-                    //TODO this should be variable, as private libs publishes on snapshot
-                    expression { return actions.publish.runWhenOrElse { params.RELEASE_TYPE != "snapshot" } }
-                }
-                agent {
-                    label "$mainPlatform && atlas"
-                }
-
-                environment {
-                    GRGIT = credentials('github_access')
-                    GRGIT_USER = "${GRGIT_USR}"
-                    GRGIT_PASS = "${GRGIT_PSW}"
-                    GITHUB_LOGIN = "${GRGIT_USR}"
-                    GITHUB_PASSWORD = "${GRGIT_PSW}"
-                }
-
-
-                steps {
-                    script {
+            },
+        {stage(actions.check.name ?: "publish") {
+            nodes.node([
+                    label      : "$mainPlatform && atlas",
+                    credentials: [
+                            usernamePassword(credentialsId: 'github_access',
+                                    usernameVariable: 'GRGIT_USER', passwordVariable: 'GRGIT_PASS'),
+                            usernamePassword(credentialsId: 'github_access',
+                                    usernameVariable: 'GITHUB_LOGIN', passwordVariable: 'GITHUB_PASSWORD')
+                    ],
+                    when       : { actions.publish.runWhenOrElse { params.RELEASE_TYPE != "snapshot" } },
+                    steps      : {
                         actions.publish.runActionOrElse {
                             error "This pipeline has no publish action whatsoever, " +
                                     "if you don't want to ever run publish, set 'when' to always return false"
                         }
-                    }
-                }
-
-                post {
-                    cleanup {
-                        script {
-                            if (config.mainPlatform.clearWs) {
-                                cleanWs()
-                            }
+                    },
+                    after      : { exception ->
+                        if (config.mainPlatform.clearWs) {
+                            cleanWs()
                         }
                     }
-                }
+            ])
             }
         }
-
-        post {
-            always {
-                sendSlackNotification currentBuild.result, true
-            }
-        }
-    }
+    ]
+    declarativePipelineTemplate(config, stages)
 }

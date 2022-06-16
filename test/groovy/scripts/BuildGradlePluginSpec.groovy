@@ -71,18 +71,15 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         def buildGradlePlugin = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_TYPE = "not-snapshot"
             params.RELEASE_SCOPE = "any"
-            env.GRGIT_USR = "usr"
-            env.GRGIT_PSW = "pwd"
         }
 
         when: "running buildGradlePlugin pipeline"
         inSandbox { buildGradlePlugin() }
 
         then: "sets up GRGIT environment"
-        def env = buildGradlePlugin.binding.env
-        env["GRGIT"] == credentials['github_access']
-        env["GRGIT_USER"] == "usr" //"${GRGIT_USR}"
-        env["GRGIT_PASS"] == "pwd" //"${GRGIT_PSW}"
+        def env = usedEnvironments.last() as Map<String, String>
+        env["GRGIT_USER"] == "usr"
+        env["GRGIT_PASS"] == "pwd"
         and: "sets up github environment"
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"

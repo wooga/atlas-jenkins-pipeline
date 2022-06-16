@@ -1,5 +1,5 @@
 #!groovy
-@Library('github.com/wooga/atlas-jenkins-pipeline@improve/stage-names') _
+@Library('github.com/wooga/atlas-jenkins-pipeline@1.x') _
 
 withCredentials([usernamePassword(credentialsId: 'github_integration', passwordVariable: 'ATLAS_GITHUB_INTEGRATION_PASSWORD', usernameVariable: 'ATLAS_GITHUB_INTEGRATION_USER')]) {
     buildLocalGradlePlugin(platforms: ['macos'], checkDir: "atlas-jenkins-pipeline-gradle")

@@ -12,9 +12,7 @@ class NodeCreator {
                         Closure mainCls, Closure catchCls, Closure finallyCls) {
         return {
             jenkins.node(nodeLabels) {
-                jenkins.withEnv(environment) {
-                    runSteps(mainCls, catchCls, finallyCls)
-                }
+                runSteps(environment, [], mainCls, catchCls, finallyCls)
             }
         }
     }
@@ -27,44 +25,55 @@ class NodeCreator {
         return node(paramsMap)
     }
 
-    Closure node(Map params = [
-            label  : null,
-            when   : { -> true },
-            steps  : {},
-            onError: {},
-            after  : { maybeException -> }
-    ]) {
-        node(params.label as String,
-                params.when as Closure<Boolean>,
-                params.steps as Closure,
-                params.onError as Closure,
-                params.after as Closure)
+    Closure node(Map params) {
+        def fullParams = [
+                label      : null,
+                when       : { -> true },
+                environment: [:],
+                credentials: [],
+                steps      : {},
+                onError    : {ex -> throw ex},
+                after      : { maybeException -> }
+        ]
+        fullParams.putAll(params)
+        node(fullParams.label as String,
+                fullParams.environment as Map<String, String>,
+                fullParams.credentials as List,
+                fullParams.when as Closure<Boolean>,
+                fullParams.steps as Closure,
+                fullParams.onError as Closure,
+                fullParams.after as Closure)
     }
 
-    Closure node(String label, Closure<Boolean> when = { -> true },
+    Closure node(String label, Map<String, String> environment, List<Object> credentials, Closure<Boolean> when = { -> true },
                  Closure steps, Closure onError, Closure after) {
         return {
             if (when()) {
+                def envList = environment.collect {"${it.key}=${it.value}".toString() }
                 if (label) {
                     jenkins.node(label) {
-                        runSteps(steps, onError, after)
+                        runSteps(envList, credentials, steps, onError, after)
                     }
                 } else {
-                    runSteps(steps, onError, after)
+                    runSteps(envList, credentials, steps, onError, after)
                 }
             }
         }
     }
 
-    private static def runSteps(Closure steps, Closure onError, Closure after) {
+    private def runSteps(List<String> environment, List credentials, Closure steps, Closure onError, Closure after) {
         def maybeException = null as Exception
-        try {
-            steps.call()
-        } catch (Exception e) {
-            maybeException = e
-            onError?.call(e)
-        } finally {
-            after?.call(maybeException)
+        jenkins.withEnv(environment) {
+            jenkins.withCredentials(credentials) {
+                try {
+                    steps.call()
+                } catch (Exception e) {
+                    maybeException = e
+                    onError?.call(e)
+                } finally {
+                    after?.call(maybeException)
+                }
+            }
         }
     }
 

@@ -17,5 +17,6 @@ def call(Map configMap = [:], Closure stagesConfigCls = {it -> }) {
                 publisher.gradlePlugin('gradle.publish.key', 'gradle.publish.secret')
             }
         }
+        stagesConfigCls(stages)
     }
 }
