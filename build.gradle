@@ -36,7 +36,7 @@ dependencies {
     testImplementation  group: "org.kohsuke", name: "groovy-sandbox", version:"1.27", ext: "jar"
 
     //needed jenkins stuff used implicitly
-    testImplementation("org.jenkins-ci.main:jenkins-core:2.332.2") {
+    testImplementation("org.jenkins-ci.main:jenkins-core:2.357") {
         exclude module: "groovy-all"
     }
     testImplementation "org.jenkins-ci.main:jenkins-test-harness:2.71"
