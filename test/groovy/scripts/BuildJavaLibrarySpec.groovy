@@ -16,7 +16,7 @@ class BuildJavaLibrarySpec extends DeclarativeJenkinsSpec {
         given: "loaded buildJavaLibrary in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
-            currentBuild["result"] = "SUCCESS"
+           currentBuild["result"] = "SUCCESS"
         }
 
         and: "a coveralls token"

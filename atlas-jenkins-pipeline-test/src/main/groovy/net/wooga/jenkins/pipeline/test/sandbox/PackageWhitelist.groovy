@@ -1,4 +1,4 @@
-package tools.sandbox
+package net.wooga.jenkins.pipeline.test.sandbox
 
 import org.jenkinsci.plugins.scriptsecurity.sandbox.Whitelist
 

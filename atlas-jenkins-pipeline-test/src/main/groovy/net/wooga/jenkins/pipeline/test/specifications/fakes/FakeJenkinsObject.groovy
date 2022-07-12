@@ -1,4 +1,4 @@
-package tools
+package net.wooga.jenkins.pipeline.test.specifications.fakes
 
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -13,10 +13,10 @@ class FakeJenkinsObject extends LinkedHashMap {
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:${glob}");
         def stream = Files.walk(Paths.get("."));
         try {
-        return stream.
-                filter {matcher.matches(it) }.
-                map { it.toFile().absolutePath }.
-                collect(Collectors.toList())
+            return stream.
+                    filter {matcher.matches(it) }.
+                    map { it.toFile().absolutePath }.
+                    collect(Collectors.toList())
         } finally {
             stream.close()
         }

@@ -1,4 +1,4 @@
-package tools
+package net.wooga.jenkins.pipeline.test.specifications.fakes
 
 import com.lesfurets.jenkins.unit.MethodCall
 import com.lesfurets.jenkins.unit.PipelineTestHelper

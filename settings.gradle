@@ -4,3 +4,6 @@
 
 rootProject.name = 'atlas-jenkins-pipeline'
 includeBuild('atlas-jenkins-pipeline-gradle')
+
+include 'atlas-jenkins-pipeline-test'
+project(':atlas-jenkins-pipeline-test').projectDir = file('atlas-jenkins-pipeline-test')

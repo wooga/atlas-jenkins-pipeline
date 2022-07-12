@@ -1,4 +1,4 @@
-package tools.sandbox
+package net.wooga.jenkins.pipeline.test.sandbox
 
 import com.lesfurets.jenkins.unit.PipelineTestHelper
 import org.codehaus.groovy.control.CompilerConfiguration
@@ -6,6 +6,7 @@ import org.jenkinsci.plugins.scriptsecurity.sandbox.Whitelist
 import org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.ClassLoaderWhitelist
 import org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.GroovySandbox
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.ProxyWhitelist
+import org.powermock.classloading.DeepCloner
 
 /**
  * Pipeline version test that integrates its own Groovy compilations shenanigans with the groovy sandbox ones.
@@ -30,7 +31,7 @@ class SandboxPipelineTestHelper extends PipelineTestHelper {
 
     private Whitelist createWhitelist() {
         return new ProxyWhitelist(whitelist,
-                new ClassLoaderWhitelist(gse.groovyClassLoader),
+                new GroovyClassLoaderWhitelist(gse.groovyClassLoader),
                 new MethodSignatureWhitelist(allowedMethodCallbacks.keySet()))
     }
 
@@ -54,7 +55,8 @@ class SandboxPipelineTestHelper extends PipelineTestHelper {
         return sandboxGse
     }
 
-    Script loadSandboxedScript(String scriptName, Binding binding) {
+    @Override
+    Script loadScript(String scriptName, Binding binding) {
         Script script = inSandbox {
             super.loadScript(scriptName, binding)
         }
@@ -69,6 +71,32 @@ class SandboxPipelineTestHelper extends PipelineTestHelper {
             scope.close()
         }
     }
+
+    /**
+     * Uses powermock's org.powermock.classloading.DeepCloner to deep clone a object to the target classloader.
+     * Assumes that a identical class is loaded in the target classloader.
+     *
+     * @param object - Object to be cloned
+     * @param cl - Target classloader. Defaults to the classloader used to load this class.
+     * @return cloned object in the target classloader.
+     */
+    public <T> T cloneTo(T object, ClassLoader cl = this.class.classLoader) {
+        def deepCloner = new DeepCloner(cl)
+        return deepCloner.clone(object)
+    }
+
+    /**
+     * Deep clones a object to the sandbox classloader.
+     * Assumes that a identical class is loaded in the sandbox classloader.
+     *
+     * @param object - Object to be cloned
+     * @param cl - Target classloader. Defaults to the classloader used to load this class.
+     * @return cloned object in the target classloader.
+     */
+    public <T> T cloneToSandbox(T object) {
+        return cloneTo(object, gse.groovyClassLoader)
+    }
+
 
 
 }

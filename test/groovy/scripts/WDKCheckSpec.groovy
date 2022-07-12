@@ -25,7 +25,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         helper.registerAllowedMethod("sourceFiles", [String]) { it -> it }
         helper.registerAllowedMethod("publishCoverage", [Map]) { it -> it }
         and: "stashed setup data"
-        jenkinsStash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
+        stash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
 
         when: "running gradle pipeline with coverage token"
         inSandbox {
@@ -55,7 +55,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [unityVersions: "2019", sonarToken: sonarToken]
 
         and: "stashed setup data"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check with sonarqube token"
         inSandbox {
@@ -86,7 +86,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def config = [unityVersions: "2019"]
 
         and: "stashed setup data"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check without sonarqube token"
         inSandbox {
@@ -116,7 +116,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def configMap = [unityVersions: "2019", sonarToken: "sonarToken"]
 
         and: "stashed setup data"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check with sonarqube token"
         inSandbox {
@@ -148,7 +148,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with given platforms"
         def configMap = [unityVersions: versions, wdkSetupStashId: setupStash]
         and: "stashed setup data"
-        jenkinsStash[setupStash] = [:]
+        stash[setupStash] = [:]
         and: "wired checkout call"
         def checkoutDirs = []
         helper.registerAllowedMethod("checkout", [String]) {
@@ -346,7 +346,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
                          wdkSetupStashId  : convWDKSetupStashId
         ]
         and: "stashed setup data"
-        jenkinsStash[convWDKSetupStashId] = [:]
+        stash[convWDKSetupStashId] = [:]
 
         when: "running check"
         def checkSteps = inSandbox {
@@ -392,7 +392,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
                  analysisOp(unityPlatform)
              }]
         and: "stashed setup data"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check"
         inSandbox {
@@ -414,7 +414,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms"
         def configMap = [unityVersions: ["2019"], checkoutDir: checkoutDir]
         and: "stashed setup"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check"
         def actualCheckoutDir = ""
@@ -440,7 +440,9 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
+        def checkoutDir = "."
         def configMap = [unityVersions: ["2019"], checkDir: checkDir,
+            checkoutDir: checkoutDir,
             testWrapper: { testOp, platform ->
                 stepsDirs.add(this.currentDir)
                 testOp(platform)
@@ -450,7 +452,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
                 analysisOp(platform)
         }]
         and: "stashed setup"
-        jenkinsStash["setup_w"] = [:]
+        stash["setup_w"] = [:]
 
 
         when: "running check"
@@ -462,7 +464,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.unityVersions.size() + 1
-        stepsDirs.every { it == checkDir }
+        stepsDirs.every {it == "${checkoutDir}/${checkDir}"}
 
         where:
         checkDir << [".", "dir", "dir/subdir"]
@@ -475,7 +477,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "a configuration with a mandatory platform and clearWs"
         def configMap = [unityVersions: versions, clearWs: clearWs]
         and: "stashed setup"
-        jenkinsStash[PipelineConventions.standard.wdkSetupStashId] = [:]
+        stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
         when: "running check"
         inSandbox {
