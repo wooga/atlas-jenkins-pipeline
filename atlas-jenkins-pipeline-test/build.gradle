@@ -34,7 +34,7 @@ dependencies {
     implementation("org.jenkins-ci.main:jenkins-core:2.332.2") {
         exclude module: "groovy-all"
     }
-    implementation "org.jenkins-ci.main:jenkins-test-harness:2.71"
+    implementation "org.jenkins-ci.main:jenkins-test-harness:1812.v6d4e97d91fd8"
     implementation 'com.github.ben-manes.caffeine:caffeine:2.9.2'
     implementation 'org.powermock:powermock-classloading-xstream:2.0.9'
 
