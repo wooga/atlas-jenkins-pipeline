@@ -43,7 +43,7 @@ class WDKConfigSpec extends Specification {
         when:
         WDKConfig.fromConfigMap("any", [unityVersions: unityVersions], new FakeJenkinsObject([:]))
         then:
-        def e = thrown(IllegalArgumentException)
+        def e = thrown(Exception)
         e.message == "Please provide at least one unity version."
 
         where:

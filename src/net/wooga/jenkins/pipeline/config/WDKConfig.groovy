@@ -22,7 +22,7 @@ class WDKConfig implements PipelineConfig {
     static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
         def unityVersions = collectUnityVersions(configMap.unityVersions as List, buildLabel, configMap)
-        if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
+        if (unityVersions.isEmpty()) throw new Exception("Please provide at least one unity version.")
 
         def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)
 
