@@ -17,7 +17,9 @@ class CheckCreator {
         def mainClosure = createCheck(testStep, analysisStep).pack(platform)
         def catchClosure = {throw it}
         def finallyClosure = {
-            jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
+            jenkins.withChecks(name: "check ${platform.name}") {
+                jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
+            }
         }
 
         def checkStep = platform.runsOnDocker ?
