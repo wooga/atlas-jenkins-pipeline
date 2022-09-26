@@ -52,7 +52,7 @@ class Gradle {
             result += " --stacktrace"
         }
         if(refreshDependencies && !containsOptions(result, "refresh-dependencies")) {
-            result += "--refresh-dependencies"
+            result += " --refresh-dependencies"
         }
 
         return result

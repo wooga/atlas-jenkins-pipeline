@@ -117,7 +117,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
             calls.has["sh"] { MethodCall call ->
                 String args = call.args[0]["script"]
                 args.contains("gradlew") &&
-                args.contains("--refresh-dependencies")
+                args.contains(" --refresh-dependencies")
             }
         }
         Map env = binding.env

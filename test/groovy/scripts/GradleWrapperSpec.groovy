@@ -27,8 +27,8 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
         callString.contains("gradlew")
         callString.contains(command)
         containsArgIf(callString, logLevel, "--${logLevel}".toString())
-        containsArgIf(callString, stackTrace, "--stacktrace")
-        containsArgIf(callString, refreshDependencies, "--refresh-dependencies")
+        containsArgIf(callString, stackTrace, " --stacktrace")
+        containsArgIf(callString, refreshDependencies, " --refresh-dependencies")
 
         where:
         command | logLevel | stackTrace | refreshDependencies
