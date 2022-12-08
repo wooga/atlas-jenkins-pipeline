@@ -107,8 +107,11 @@ class Publishers {
 
     def unityArtifactoryUpm(String artifactorySecret) {
         jenkins.withEnv(["UNITY_PACKAGE_MANAGER = upm", "UNITY_LOG_CATEGORY=build"]) {
-            jenkins.withCredentials([jenkins.usernamePassword(credentialsId: artifactorySecret,
-                    usernameVariable:"UPM_USERNAME", passwordVariable: "UPM_PASSWORD")]) {
+            jenkins.withCredentials([jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"UPM_USERNAME", passwordVariable: "UPM_PASSWORD"),
+                                     jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
+                                     jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
+
+
                 gradle.wrapper("${releaseType} " +
                         "-Ppublish.repository='${releaseType}' " +
                         "-Prelease.stage=${releaseType} " +
