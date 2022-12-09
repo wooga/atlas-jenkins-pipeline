@@ -112,12 +112,11 @@ class Publishers {
                                      jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
 
 
-                gradle.wrapper("${releaseType} " +
+                gradle.wrapper("publish " +
                         "-Ppublish.repository='${releaseType}' " +
-                        "-Prelease.stage=${releaseType} " +
-                        "-Prelease.scope=${releaseScope}")
+                        "-PversionBuilder.stage=${releaseType} " +
+                        "-PversionBuilder.scope=${releaseScope}")
             }
         }
     }
-
 }
