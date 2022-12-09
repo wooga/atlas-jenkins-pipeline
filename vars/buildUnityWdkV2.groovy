@@ -159,6 +159,7 @@ def call(Map configMap = [unityVersions: []]) {
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
