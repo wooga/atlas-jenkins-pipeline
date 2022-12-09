@@ -39,7 +39,6 @@ def call(Map configMap = [unityVersions: []]) {
     environment {
       UVM_AUTO_SWITCH_UNITY_EDITOR = "YES"
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
-//      UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials') cant be here
       LOG_LEVEL = "${config.gradleArgs.logLevel}"
       ATLAS_READ = credentials('artifactory_read') //needed for gradle sto read private packages
     }
@@ -120,7 +119,7 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Check") {
         failFast true
         parallel {
-          stage("check paket") {
+          stage("check with paket dependencies") {
             environment {
               UNITY_PACKAGE_MANAGER = 'paket'
             }
@@ -130,7 +129,7 @@ def call(Map configMap = [unityVersions: []]) {
               }
             }
           }
-          stage("check upm") {
+          stage("check with upm dependencies") {
             environment {
               UNITY_PACKAGE_MANAGER = 'upm'
             }
