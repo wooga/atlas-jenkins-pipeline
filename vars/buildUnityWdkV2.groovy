@@ -172,28 +172,6 @@ def call(Map configMap = [unityVersions: []]) {
                 failFast : true
               }
             }
-//            parallel {
-//              stage("check with paket dependencies") {
-//                environment {
-//                  UNITY_PACKAGE_MANAGER = 'paket'
-//                }
-//                steps {
-//                  script {
-//                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-//                  }
-//                }
-//              }
-//              stage("check with upm dependencies") {
-//                environment {
-//                  UNITY_PACKAGE_MANAGER = 'upm'
-//                }
-//                steps {
-//                  script {
-//                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-//                  }
-//                }
-//              }
-//            }
           }
         }
       }
