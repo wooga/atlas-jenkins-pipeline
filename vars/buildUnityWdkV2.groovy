@@ -157,30 +157,44 @@ def call(Map configMap = [unityVersions: []]) {
                 return params.RELEASE_STAGE == "snapshot"
               }
             }
-            parallel {
-              stage("check with paket dependencies") {
-                environment {
-                  UNITY_PACKAGE_MANAGER = 'paket'
-                }
-                steps {
-                  script {
+            steps {
+              script {
+                parallel paket:{
+                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
                     parallel checkSteps(config, "paket check unity ", "paket_setup_w")
                   }
-                }
-              }
-              stage("check with upm dependencies") {
-                environment {
-                  UNITY_PACKAGE_MANAGER = 'upm'
-                }
-                steps {
-                  script {
+                },
+                upm:{
+                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
-                }
+                },
+                failFast : true
               }
             }
+//            parallel {
+//              stage("check with paket dependencies") {
+//                environment {
+//                  UNITY_PACKAGE_MANAGER = 'paket'
+//                }
+//                steps {
+//                  script {
+//                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+//                  }
+//                }
+//              }
+//              stage("check with upm dependencies") {
+//                environment {
+//                  UNITY_PACKAGE_MANAGER = 'upm'
+//                }
+//                steps {
+//                  script {
+//                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+//                  }
+//                }
+//              }
+//            }
           }
-
         }
       }
 
