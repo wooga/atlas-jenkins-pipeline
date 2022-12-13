@@ -115,35 +115,10 @@ def call(Map configMap = [unityVersions: []]) {
         }
       }
 
-      stage("Check") {
+      stage("Build") {
         failFast true
-        when {
-          beforeAgent true
-          expression {
-            return params.RELEASE_STAGE == "snapshot"
-          }
-        }
         parallel {
-          stage("check with paket dependencies") {
-            environment {
-              UNITY_PACKAGE_MANAGER = 'paket'
-            }
-            steps {
-              script {
-                parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-              }
-            }
-          }
-          stage("check with upm dependencies") {
-            environment {
-              UNITY_PACKAGE_MANAGER = 'upm'
-            }
-            steps {
-              script {
-                parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-              }
-            }
-          }
+
           stage('assemble package') {
             agent {
               label "atlas && $config.buildLabel"
@@ -173,6 +148,39 @@ def call(Map configMap = [unityVersions: []]) {
               }
             }
           }
+
+          stage("Check") {
+            failFast true
+            when {
+              beforeAgent true
+              expression {
+                return params.RELEASE_STAGE == "snapshot"
+              }
+            }
+            parallel {
+              stage("check with paket dependencies") {
+                environment {
+                  UNITY_PACKAGE_MANAGER = 'paket'
+                }
+                steps {
+                  script {
+                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+                  }
+                }
+              }
+              stage("check with upm dependencies") {
+                environment {
+                  UNITY_PACKAGE_MANAGER = 'upm'
+                }
+                steps {
+                  script {
+                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+                  }
+                }
+              }
+            }
+          }
+
         }
       }
 
