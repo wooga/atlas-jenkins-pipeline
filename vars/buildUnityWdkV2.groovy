@@ -44,9 +44,8 @@ def call(Map configMap = [unityVersions: []]) {
     }
 
     parameters {
-      // TODO: Rename RELEASE_TYPE to RELEASE_STAGE
       choice(name: 'RELEASE_STAGE', choices: ["snapshot", "preflight", "rc", "final"], description: 'Choose the distribution type')
-      choice(name: 'RELEASE_SCOPE', choices: ["", "patch", "minor", "major"], description: 'Choose the change scope')
+      choice(name: 'RELEASE_SCOPE', choices: ["", "patch", "minor", "major"], description: 'Choose the scope (semver2)')
       choice(name: 'LOG_LEVEL', choices: ["info", "quiet", "warn", "debug"], description: 'Choose the log level')
       booleanParam(name: 'STACK_TRACE', defaultValue: false, description: 'Whether to log truncated stacktraces')
       booleanParam(name: 'REFRESH_DEPENDENCIES', defaultValue: false, description: 'Whether to refresh dependencies')
@@ -118,6 +117,12 @@ def call(Map configMap = [unityVersions: []]) {
 
       stage("Check") {
         failFast true
+        when {
+          beforeAgent true
+          expression {
+            return params.RELEASE_STAGE == "snapshot"
+          }
+        }
         parallel {
           stage("check with paket dependencies") {
             environment {
