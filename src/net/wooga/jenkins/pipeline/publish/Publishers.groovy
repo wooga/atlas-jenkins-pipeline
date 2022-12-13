@@ -113,6 +113,7 @@ class Publishers {
 
 
                 gradle.wrapper("publish " +
+                        "-Ppaket.publish.repository='${releaseType}' " +
                         "-Ppublish.repository='${releaseType}' " +
                         "-PversionBuilder.stage=${releaseType} " +
                         "-PversionBuilder.scope=${releaseScope}")
