@@ -44,7 +44,7 @@ class PipelineConventions implements Cloneable {
     String setupTask = "setup"
 
     String javaParallelPrefix = "check "
-    String wdkParallelPrefix = "check Unity-"
+    String wdkParallelPrefix = "check "
     String wdkCoberturaFile = '**/codeCoverage/Cobertura.xml'
     String wdkSetupStashId = 'setup_w'
 }

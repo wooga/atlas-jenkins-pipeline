@@ -161,10 +161,24 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return checkSteps
         }
 
-        then: "check steps names are in the `check Unity-#version` format"
-        checkSteps.collect {
-            it -> it.key.replace("check Unity-", "").trim()
-        } == versions
+        then: "check steps names are in the `check Unity-#version(?optional)(?api)` format"
+        def stepNames = checkSteps.collect { it -> it.key }
+        stepNames.size() == versions.size()
+        def expectedSteps = versions.collect {
+            def expectedStepName = it.toString()
+            if(it instanceof Map) {
+                def versionsMap = it as Map
+                expectedStepName = versionsMap.version
+                if(versionsMap.optional) {
+                    expectedStepName += " (optional)"
+                }
+                if(versionsMap.apiCompatibilityLevel) {
+                    expectedStepName += " (${versionsMap.apiCompatibilityLevel})"
+                }
+            }
+            return "check Unity-$expectedStepName".toString()
+        }
+        expectedSteps == stepNames
 
         and: "code checkouted in the right dir"
         calls["checkout"].length == versions.size()
@@ -192,11 +206,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         } == versions.size()
 
         where:
-        versions                    | releaseType | releaseScope | setupStash
-        ["2019"]                    | "type"      | "scope"      | "setup_w"
-        ["2019", "2020"]            | "other "    | "others"     | "stash"
-        ["2019", "2020"]            | "other "    | "others"     | "stash"
-        ["project_version", "2020"] | "other "    | "others"     | "stash"
+        versions                                                                     | releaseType | releaseScope | setupStash
+        [[version: "2019"]]                                                          | "type"      | "scope"      | "setup_w"
+        ["2019"]                                                                     | "type"      | "scope"      | "setup_w"
+        [[version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_standard_2_0'],
+         [version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_4_6']]  | "type"      | "scope"      | "setup_w"
+        ["2019", "2020"]                                                             | "other "    | "others"     | "stash"
+        ["project_version", "2020"]                                                  | "other "    | "others"     | "stash"
     }
 
     @Unroll("executes finally steps on check #throwsException for #versions")
@@ -338,7 +354,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with given platforms"
-        def configMap = [unityVersions: ["any"],
+        def configMap = [unityVersions    : ["any"],
                          checkTask        : convCheck,
                          sonarqubeTask    : convSonarqube,
                          wdkCoberturaFile : convWDKCoberturaFile,
@@ -382,15 +398,15 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def testCount = new AtomicInteger(0)
         def analysisCount = new AtomicInteger(0)
         and: "configuration object with given platforms with wrapper code"
-        def configMap = [unityVersions: ["any", "other"],
-             testWrapper: { testOp, unityPlatform ->
-                 testCount.incrementAndGet()
-                 testOp(unityPlatform)
-             },
-             analysisWrapper: { analysisOp, unityPlatform ->
-                 analysisCount.incrementAndGet()
-                 analysisOp(unityPlatform)
-             }]
+        def configMap = [unityVersions  : ["any", "other"],
+                         testWrapper    : { testOp, unityPlatform ->
+                             testCount.incrementAndGet()
+                             testOp(unityPlatform)
+                         },
+                         analysisWrapper: { analysisOp, unityPlatform ->
+                             analysisCount.incrementAndGet()
+                             analysisOp(unityPlatform)
+                         }]
         and: "stashed setup data"
         stash[PipelineConventions.standard.wdkSetupStashId] = [:]
 
@@ -441,16 +457,16 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
         def checkoutDir = "."
-        def configMap = [unityVersions: ["2019"], checkDir: checkDir,
-            checkoutDir: checkoutDir,
-            testWrapper: { testOp, platform ->
-                stepsDirs.add(this.currentDir)
-                testOp(platform)
-        },
-            analysisWrapper: { analysisOp, platform ->
-                stepsDirs.add(this.currentDir)
-                analysisOp(platform)
-        }]
+        def configMap = [unityVersions  : ["2019"], checkDir: checkDir,
+                         checkoutDir    : checkoutDir,
+                         testWrapper    : { testOp, platform ->
+                             stepsDirs.add(this.currentDir)
+                             testOp(platform)
+                         },
+                         analysisWrapper: { analysisOp, platform ->
+                             stepsDirs.add(this.currentDir)
+                             analysisOp(platform)
+                         }]
         and: "stashed setup"
         stash["setup_w"] = [:]
 
@@ -464,7 +480,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.unityVersions.size() + 1
-        stepsDirs.every {it == "${checkoutDir}/${checkDir}"}
+        stepsDirs.every { it == "${checkoutDir}/${checkDir}" }
 
         where:
         checkDir << [".", "dir", "dir/subdir"]
@@ -490,14 +506,14 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             }
         }
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs? versions.size() : 0)
+        calls["cleanWs"].length == (clearWs ? versions.size() : 0)
 
         where:
-        versions | clearWs
-        ["2019"] | true
-        ["2019"] | false
+        versions         | clearWs
+        ["2019"]         | true
+        ["2019"]         | false
         ["2019", "2022"] | true
         ["2019", "2022"] | false
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 }

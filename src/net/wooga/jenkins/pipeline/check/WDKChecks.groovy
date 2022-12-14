@@ -38,7 +38,7 @@ class WDKChecks {
     Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Step checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
-            [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep.pack(wdkPlatform.platform)]
+            [("${conventions.wdkParallelPrefix}${wdkPlatform.stepDescription}".toString()): checkStep.pack(wdkPlatform.platform)]
         }
     }
 
@@ -51,7 +51,7 @@ class WDKChecks {
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
             def checkStep = checkCreator.csWDKChecks(wdkPlatform, testStep, analysisStep)
-            return [("${conventions.wdkParallelPrefix}${wdkPlatform.platform.name}".toString()): checkStep]
+            return [("${conventions.wdkParallelPrefix}${wdkPlatform.stepDescription}".toString()): checkStep]
         }
     }
 
