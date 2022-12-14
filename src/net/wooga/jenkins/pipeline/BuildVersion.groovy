@@ -22,7 +22,7 @@ class BuildVersion {
             return parse(unityVerObj())
         }
         if (unityVerObj instanceof BuildVersion) {
-            return new BuildVersion(unityVerObj.version, unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
+            return new BuildVersion(unityVerObj.label, unityVerObj.version, unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
         }
         else if (unityVerObj instanceof Map) {
             return fromBuildVersionMap(unityVerObj as Map)
@@ -34,18 +34,33 @@ class BuildVersion {
         if(unityVerMap["version"] == null) {
             throw new IllegalArgumentException("Entry ${unityVerMap} does not contain version")
         }
+        String label = unityVerMap["label"]?: "macos"
         String version = unityVerMap["version"]
         boolean optional = unityVerMap["optional"]?: false
         String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
-        return new BuildVersion(version, optional, apiCompatibilityLevel)
+        return new BuildVersion(label, version, optional, apiCompatibilityLevel)
     }
 
+    final String label
     final String version
     final Boolean optional
     // net_4_6, net_standard_2_0 (DEFAULT)
     final String apiCompatibilityLevel
 
+    /**
+     * Constructor to keep backwards compatibility. Assigns 'macos' to the label field, please use
+     * BuildVersion(String label, String version, boolean optional, String apiCompatibilityLevel) instead
+     * @param version
+     * @param optional
+     * @param apiCompatibilityLevel
+     */
+    @Deprecated
     BuildVersion(String version, boolean optional, String apiCompatibilityLevel = null) {
+        this("macos", version, optional, apiCompatibilityLevel)
+    }
+
+    BuildVersion(String label, String version, boolean optional, String apiCompatibilityLevel = null) {
+        this.label = label
         this.version = version
         this.optional = optional
         this.apiCompatibilityLevel = apiCompatibilityLevel
@@ -57,9 +72,19 @@ class BuildVersion {
         return version
     }
 
+    /**
+     * Please use toDescription() instead
+     * @return
+     */
     @NonCPS
-    String toLabel(){
-        def result = version
+    @Deprecated
+    String toLabel() {
+        return toDescription()
+    }
+
+    @NonCPS
+    String toDescription() {
+        def result = "$label Unity-$version"
         if (optional){
             result += " (optional)"
         }

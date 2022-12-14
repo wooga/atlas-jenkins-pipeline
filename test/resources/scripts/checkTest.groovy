@@ -16,14 +16,14 @@ def parallel(Map configMap, Closure checkCls, Closure analysisCls) {
 }
 
 
-def wdkCoverage(String buildLabel, Map configMap, String releaseType, String releaseScope) {
-    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
+def wdkCoverage(Map configMap, String releaseType, String releaseScope) {
+    def config = WDKConfig.fromConfigMap(configMap, this)
     def checks = config.pipelineTools.checks.forWDKPipelines()
     return checks.wdkCoverage(config.unityVersions, releaseType, releaseScope, config.checkArgs, config.conventions)
 }
 
-def simpleWDK(String buildLabel, Map configMap, Closure checkCls, Closure analysisCls) {
-    def config = WDKConfig.fromConfigMap(buildLabel, configMap, this)
+def simpleWDK(Map configMap, Closure checkCls, Closure analysisCls) {
+    def config = WDKConfig.fromConfigMap(configMap, this)
     def checks = config.pipelineTools.checks.forWDKPipelines()
     return checks.parallel(config.unityVersions, checkCls, analysisCls)
 }

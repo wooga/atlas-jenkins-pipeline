@@ -46,7 +46,7 @@ class Platform {
         )
     }
 
-    static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
+    static Platform forWDK(BuildVersion buildVersion, Map config, boolean isMain) {
         def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
         if(buildVersion.hasVersion()) {
             unityEnv.add("UVM_UNITY_VERSION=${buildVersion.version}")
@@ -58,7 +58,7 @@ class Platform {
                 (config.checkoutDir?: buildVersion.toDirectoryName()) as String,
                 (config.checkDir?: ".") as String,
                 buildVersion.version,
-                buildOS,
+                buildVersion.label,
                 false,
                 (config.labels ?: '') as String,
                 mapOrCollection(buildVersion.version, config.testEnvironment) + unityEnv,

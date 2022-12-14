@@ -16,7 +16,7 @@ class UnityVersionPlatform {
     }
 
     String getStepDescription() {
-        return "Unity-${buildVersion.toLabel()}"
+        return buildVersion.toDescription()
     }
 
     boolean getOptional() {

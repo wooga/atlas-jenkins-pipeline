@@ -29,7 +29,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running gradle pipeline with coverage token"
         inSandbox {
-            check.wdkCoverage("label", configMap, "any", "any").each { it.value() }
+            check.wdkCoverage(configMap, "any", "any").each { it.value() }
         }
 
         then: "jenkins coverage plugins are called"
@@ -59,7 +59,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -90,7 +90,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check without sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(config, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -120,7 +120,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -156,27 +156,27 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         }
         when: "running check"
         def checkSteps = inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, releaseType, releaseScope)
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, releaseType, releaseScope)
             checkSteps.each { it.value.call() }
             return checkSteps
         }
 
-        then: "check steps names are in the `check Unity-#version(?optional)(?api)` format"
+        then: "check steps names are in the `check label Unity-version(?optional)(?api)` format"
         def stepNames = checkSteps.collect { it -> it.key }
         stepNames.size() == versions.size()
         def expectedSteps = versions.collect {
-            def expectedStepName = it.toString()
-            if(it instanceof Map) {
+            def expectedStepName = "macos Unity-${it.toString()}"
+            if (it instanceof Map) {
                 def versionsMap = it as Map
-                expectedStepName = versionsMap.version
-                if(versionsMap.optional) {
+                expectedStepName = "${versionsMap.label ?: "macos"} Unity-${versionsMap.version}"
+                if (versionsMap.optional) {
                     expectedStepName += " (optional)"
                 }
-                if(versionsMap.apiCompatibilityLevel) {
+                if (versionsMap.apiCompatibilityLevel) {
                     expectedStepName += " (${versionsMap.apiCompatibilityLevel})"
                 }
             }
-            return "check Unity-$expectedStepName".toString()
+            return "check $expectedStepName".toString()
         }
         expectedSteps == stepNames
 
@@ -208,11 +208,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         where:
         versions                                                                     | releaseType | releaseScope | setupStash
         [[version: "2019"]]                                                          | "type"      | "scope"      | "setup_w"
+        [[version: "2019"], [label: "linux", version: "2019.4", optional: true]]     | "type"      | "scope"      | "setup_w"
         ["2019"]                                                                     | "type"      | "scope"      | "setup_w"
         [[version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_standard_2_0'],
-         [version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_4_6']]  | "type"      | "scope"      | "setup_w"
+         [version: '2020.3.1f1', optional: false, apiCompatibilityLevel: 'net_4_6']] | "type"      | "scope"      | "setup_w"
         ["2019", "2020"]                                                             | "other "    | "others"     | "stash"
         ["project_version", "2020"]                                                  | "other "    | "others"     | "stash"
+        [[label: "windows", version: "project_version"], "2020"]                     | "other "    | "others"     | "stash"
     }
 
     @Unroll("executes finally steps on check #throwsException for #versions")
@@ -228,7 +230,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each {
                 try {
                     it.value.call()
@@ -266,7 +268,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -291,7 +293,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(config, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -314,7 +316,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> checkEnvMap = versions.collectEntries { [(it): [:]] }
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         inSandbox { _ ->
-            Map<String, Closure> steps = check.simpleWDK("label", configMap,
+            Map<String, Closure> steps = check.simpleWDK(configMap,
                     { platform ->
                         binding.env.every { checkEnvMap[platform.name][it.key] = it.value }
                     },
@@ -366,7 +368,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         def checkSteps = inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "releaseType", "releaseScope")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "releaseType", "releaseScope")
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -412,7 +414,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "releaseType", "releaseScope")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "releaseType", "releaseScope")
             checkSteps.each { it.value.call() }
         }
 
@@ -438,7 +440,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             actualCheckoutDir = this.currentDir
         }
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -473,7 +475,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -497,7 +499,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each {
                 try {
                     it.value.call()

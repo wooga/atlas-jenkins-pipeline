@@ -17,31 +17,30 @@ class WDKConfigSpec extends Specification {
         given: "a configuration map"
         and: "a jenkins build label"
         when:
-        def wdkConf = WDKConfig.fromConfigMap(label, configMap, jenkinsScript)
+        def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
         then:
         wdkConf.pipelineTools != null
         wdkConf.checkArgs == expected.checkArgs
         wdkConf.unityVersions == expected.unityVersions
-        wdkConf.buildLabel == expected.buildLabel
         wdkConf.gradleArgs == expected.gradleArgs
         wdkConf.metadata == expected.metadata
 
         where:
-        configMap                                                                                      | label | expected
-        [unityVersions: ["2019", "2020"]]                                                              | "l"   | configFor(["2019", "2020"], "l", null, false, false, null)
-        [unityVersions: ["2019"], refreshDependencies: true]                                           | "p"   | configFor(["2019"], "p", null, true, false, null)
-        [unityVersions: ["2019"], logLevel: "level"]                                                   | "o"   | configFor(["2019"], "o", null, false, false, "level")
-        [unityVersions: ["2019"], refreshDependencies: true, logLevel: "level"]                        | "l"   | configFor(["2019"], "l", null, true, false, "level")
-        [unityVersions: ["2019"], refreshDependencies: false, logLevel: "level"]                       | "l"   | configFor(["2019"], "l", null, false, false, "level")
-        [unityVersions: ["2019"], refreshDependencies: false, showStackTrace: true, logLevel: "level"] | "l"   | configFor(["2019"], "l", null, false, true, "level")
-        [unityVersions: ["2019"], sonarToken: "token", refreshDependencies: false, logLevel: "level"]  | "l"   | configFor(["2019"], "l", "token", false, false, "level")
+        configMap                                                                                       | expected
+        [unityVersions: ["2019", "2020"]]                                                               | configFor(["2019", "2020"], null, false, false, null)
+        [unityVersions: ["2019"], refreshDependencies: true]                                            | configFor(["2019"], null, true, false, null)
+        [unityVersions: ["2019"], logLevel: "level"]                                                    | configFor(["2019"], null, false, false, "level")
+        [unityVersions: ["2019"], refreshDependencies: true, logLevel: "level"]                         | configFor(["2019"], null, true, false, "level")
+        [unityVersions: ["2019"], refreshDependencies: false, logLevel: "level"]                        | configFor(["2019"], null, false, false, "level")
+        [unityVersions: ["2019"], refreshDependencies: false, showStackTrace: true, logLevel: "level"]  | configFor(["2019"], null, false, true, "level")
+        [unityVersions: ["2019"], sonarToken: "token", refreshDependencies: false, logLevel: "level"]   | configFor(["2019"], "token", false, false, "level")
     }
 
     @Unroll
     def "fails to create valid WDKConfig object if config map has null or empty unityVersions list"() {
         given: "a null or empty configuration map"
         when:
-        WDKConfig.fromConfigMap("any", [unityVersions: unityVersions], new FakeJenkinsObject([:]))
+        WDKConfig.fromConfigMap([unityVersions: unityVersions], new FakeJenkinsObject([:]))
         then:
         def e = thrown(IllegalArgumentException)
         e.message == "Please provide at least one unity version."
@@ -50,23 +49,23 @@ class WDKConfigSpec extends Specification {
         unityVersions << [[], null]
     }
 
-    def configFor(List<String> plats, String label, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
+    def configFor(List<String> unityVersionObj, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
-        def unityVersions = platsFor(plats, label)
+        def unityVersions = platsFor(unityVersionObj)
         def baseConfig = new BaseConfig(jenkinsScript,
                 PipelineConventions.standard.mergeWithConfigMap([:]),
                 metadata,
                 GradleArgs.fromConfigMap([refreshDependencies: refreshDependencies, showStackTrace: showStackTrace, logLevel: logLevel]),
                 DockerArgs.fromConfigMap([:]),
                 CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]))
-        return new WDKConfig(unityVersions, baseConfig, label)
+        return new WDKConfig(unityVersions, baseConfig)
     }
 
 
-    def platsFor(List<?> unityVersionObj, String buildLabel) {
+    def platsFor(List<?> unityVersionObj) {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
-            def platform = Platform.forWDK(buildVersion, buildLabel, [:], index == 0)
+            def platform = Platform.forWDK(buildVersion, [:], index == 0)
             return new UnityVersionPlatform(platform, buildVersion)
         }
     }
