@@ -25,7 +25,7 @@ class UnityVersionPlatform {
 
     @Override
     String toString() {
-        return buildVersion.version
+        return buildVersion.toDescription()
     }
 
     boolean equals(o) {

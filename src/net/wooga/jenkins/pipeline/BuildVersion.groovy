@@ -69,7 +69,7 @@ class BuildVersion {
     @Override
     @NonCPS
     String toString() {
-        return version
+        return toDescription()
     }
 
     /**
@@ -96,7 +96,7 @@ class BuildVersion {
 
     @NonCPS
     String toDirectoryName() {
-        def result = version
+        def result = "${label}_Unity_${version.replaceAll("\\.", "_")}"
         if (optional){
             result += "_optional"
         }
@@ -104,6 +104,14 @@ class BuildVersion {
             result += "_${apiCompatibilityLevel}"
         }
         return result
+    }
+
+    BuildVersion copy(Map properties) {
+        new BuildVersion(
+                (String) (properties.label?: label),
+                (String) (properties.version?: version),
+                (boolean) (properties.optional?: optional),
+                (String) (properties.apiCompatibilityLevel?: apiCompatibilityLevel))
     }
 
     boolean hasVersion() {
@@ -116,6 +124,7 @@ class BuildVersion {
 
         BuildVersion that = (BuildVersion) o
 
+        if (label != that.label) return false
         if (apiCompatibilityLevel != that.apiCompatibilityLevel) return false
         if (optional != that.optional) return false
         if (version != that.version) return false
@@ -126,6 +135,7 @@ class BuildVersion {
     int hashCode() {
         int result
         result = (version != null ? version.hashCode() : 0)
+        result = 31 * result + (label != null ? label.hashCode() : 0)
         result = 31 * result + (optional != null ? optional.hashCode() : 0)
         result = 31 * result + (apiCompatibilityLevel != null ? apiCompatibilityLevel.hashCode() : 0)
         return result

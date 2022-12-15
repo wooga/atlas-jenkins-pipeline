@@ -8,19 +8,37 @@ class WDKConfig implements PipelineConfig {
     final UnityVersionPlatform[] unityVersions
     final BaseConfig baseConfig
 
+    static List<BuildVersion> collectBuildVersionsForLabel(String label, List unityVerObjs) {
+        def buildVersions = []
+        for (Object unityVersionObj : unityVerObjs) {
+            def baseBuildVersion = BuildVersion.parse(unityVersionObj)
+            baseBuildVersion.label != label?
+                    buildVersions.addAll([baseBuildVersion, baseBuildVersion.copy(label: label, optional: true)]) :
+                    buildVersions.add(baseBuildVersion)
+        }
+        return buildVersions
+    }
+
     static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, Map configMap) {
         def index = 0
-        return unityVerObjs.collect { Object unityVersionObj ->
-            def buildVersion = BuildVersion.parse(unityVersionObj)
-            def platform = Platform.forWDK(buildVersion, configMap, index == 0)
-            index++
-            return new UnityVersionPlatform(platform, buildVersion)
+        def extraLabels = ["linux"]
+        def platforms = []
+        //this has to be a bunch of nested fors because of the jenkins sandbox
+        for (String label : extraLabels) {
+            def buildVersions = collectBuildVersionsForLabel(label, unityVerObjs)
+            for (BuildVersion buildVersion : buildVersions) {
+                def platform = Platform.forWDK(buildVersion, configMap, index == 0)
+                index++
+                platforms.add(new UnityVersionPlatform(platform, buildVersion))
+            }
         }
+        return platforms
     }
 
     static WDKConfig fromConfigMap(Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
         def unityVersions = collectUnityVersions(configMap.unityVersions as List, configMap)
+
         if (unityVersions.isEmpty()) throw new IllegalArgumentException("Please provide at least one unity version.")
 
         def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)

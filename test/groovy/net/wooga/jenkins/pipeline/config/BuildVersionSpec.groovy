@@ -22,11 +22,17 @@ class BuildVersionSpec extends Specification {
         obj                                                                 | expected
         new BuildVersion("2021", true, "a")                                 | new BuildVersion("macos", "2021", true, "a")
         new BuildVersion("label", "2021", true, "a")                        | new BuildVersion("label", "2021", true, "a")
-        { -> new BuildVersion("2021", true, "a") }                          | new BuildVersion("macos", "2021", true, "a")
+                { ->
+                    new BuildVersion("2021", true, "a")
+                }                                                          | new BuildVersion("macos", "2021", true, "a")
         "2020"                                                              | new BuildVersion("macos", "2020", false, null)
-        { -> "2020" }                                                       | new BuildVersion("macos", "2020", false, null)
+                { ->
+                    "2020"
+                }                                                                                         | new BuildVersion("macos", "2020", false, null)
         [version: "2019"]                                                   | new BuildVersion("macos", "2019", false, null)
-        { -> [version: "2019"] }                                            | new BuildVersion("macos", "2019", false, null)
+                { ->
+                    [version: "2019"]
+                }                                                                              | new BuildVersion("macos", "2019", false, null)
         [label: "label", version: "2019", optional: true]                   | new BuildVersion("label", "2019", true, null)
         [version: "2019", optional: true]                                   | new BuildVersion("macos", "2019", true, null)
         [version: "2019", apiCompatibilityLevel: "net_4_6"]                 | new BuildVersion("macos", "2019", false, "net_4_6")
@@ -50,18 +56,18 @@ class BuildVersionSpec extends Specification {
     @Unroll
     def "generates directory name"() {
         given: "valid build version object"
-        def buildVersion = new BuildVersion(version, optional, apiCompatibilityLevel)
+        def buildVersion = new BuildVersion(label, version, optional, apiCompatibilityLevel)
         when:
         def dirName = buildVersion.toDirectoryName()
         then:
         dirName == expected
 
         where:
-        version | optional | apiCompatibilityLevel | expected
-        "2019"  | false    | null                  | "2019"
-        "2019"  | true     | null                  | "2019_optional"
-        "2019"  | false    | "level"               | "2019_level"
-        "2019"  | true     | "level"               | "2019_optional_level"
+        label     | version | optional | apiCompatibilityLevel | expected
+        "macos"   | "2019"  | false    | null                  | "macos_Unity_2019"
+        "linux"   | "2020"  | true     | null                  | "linux_Unity_2020_optional"
+        "windows" | "2021"  | false    | "level"               | "windows_Unity_2021_level"
+        "other"   | "2015"  | true     | "level"               | "other_Unity_2015_optional_level"
     }
 
     @Unroll
