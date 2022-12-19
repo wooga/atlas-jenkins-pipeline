@@ -74,7 +74,7 @@ def call(Map configMap = [unityVersions: []]) {
               }
 
               always {
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'paket.lock, **/build/logs/*.log', allowEmptyArchive: true
               }
 
               cleanup {
@@ -99,7 +99,8 @@ def call(Map configMap = [unityVersions: []]) {
             }
             post {
               success {
-                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/package.lock, " +
+                archiveArtifacts artifacts: '**/Packages/packages-lock.json'
+                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/packages-lock.json, " +
                         "**/PackageCache/**, " +
                         "**/build/**")
               }
