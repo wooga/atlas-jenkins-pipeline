@@ -9,5 +9,5 @@ def call(String command, Boolean returnStatus = false, Boolean returnStdout = fa
                 params.LOG_LEVEL?: env.LOG_LEVEL as String,
                 params.STACK_TRACE? params.STACK_TRACE as Boolean : false,
                 params.REFRESH_DEPENDENCIES? params.REFRESH_DEPENDENCIES as Boolean : false)
-    gradle.wrapper(command, returnStatus, returnStdout)
+    gradle.wrapper(env.UMASK as String, command, returnStatus, returnStdout)
 }

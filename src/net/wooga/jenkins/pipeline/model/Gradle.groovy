@@ -36,6 +36,19 @@ class Gradle {
         }
     }
 
+    def wrapper(String umask, String command, Boolean returnStatus = false,
+                Boolean returnStdout = false) {
+        if (jenkins.isUnix()) {
+            if(umask != null && umask != "") {
+                def numericUmask = umask.replaceAll("[^\\d]", "")
+                return jenkins.sh(script: "umask $numericUmask && ./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
+            }
+            return jenkins.sh(script: "./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
+        } else {
+            return jenkins.bat(script: "gradlew.bat ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
+        }
+    }
+
     /**
      * @param command
      * @return A formatted command for the gradle process. If a log level was provided by the

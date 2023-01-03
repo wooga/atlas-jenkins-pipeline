@@ -16,6 +16,9 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
 
         and: "set variables in params"
         binding.setVariable("params", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace, REFRESH_DEPENDENCIES: refreshDependencies])
+        if(umask) {
+            environment["UMASK"] = umask
+        }
 
         when: "running gradle pipeline with coverallsToken parameter"
         inSandbox { gradleWrapper(command) }
@@ -26,20 +29,23 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
         String callString = calls["sh"].args["script"][0]
         callString.contains("gradlew")
         callString.contains(command)
-        containsArgIf(callString, logLevel, "--${logLevel}".toString())
-        containsArgIf(callString, stackTrace, " --stacktrace")
-        containsArgIf(callString, refreshDependencies, " --refresh-dependencies")
+        containsIf(callString, logLevel, "--${logLevel}".toString())
+        containsIf(callString, umask, "umask $umask &&".toString())
+        containsIf(callString, stackTrace, " --stacktrace")
+        containsIf(callString, refreshDependencies, " --refresh-dependencies")
 
         where:
-        command | logLevel | stackTrace | refreshDependencies
-        "tasks" | null     | null       | null
-        "check" | "info"   | true       | null
-        "check" | "debug"  | false      | null
-        "check" | "debug"  | false      | true
-        "check" | "debug"  | false      | false
+        umask  | command | logLevel | stackTrace | refreshDependencies
+        null   | "tasks" | null     | null       | null
+        "0123" | "tasks" | null     | null       | null
+        null   | "check" | "info"   | true       | null
+        null   | "check" | "debug"  | false      | null
+        null   | "check" | "debug"  | false      | true
+        null   | "check" | "debug"  | false      | false
+        "1234" | "check" | "debug"  | false      | false
     }
 
-    def containsArgIf(String callStr, def condition, String argStr) {
+    def containsIf(String callStr, def condition, String argStr) {
         return condition as Boolean ? callStr.contains(argStr) : !callStr.contains(argStr)
     }
 }
