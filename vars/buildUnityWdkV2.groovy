@@ -116,6 +116,24 @@ def call(Map configMap = [unityVersions: []]) {
         }
       }
 
+      stage("Validate package resolution") {
+        agent {
+          label "atlas && $config.buildLabel"
+        }
+        steps {
+          unstash 'upm_setup_w'
+          unstash 'paket_setup_w'
+          script {
+            gradleWrapper "packageLockDiff"
+          }
+        }
+        post {
+          success {
+            archiveArtifacts artifacts: '**/package-lock.diff'
+          }
+        }
+      }
+
       stage("Build") {
         failFast true
         parallel {
