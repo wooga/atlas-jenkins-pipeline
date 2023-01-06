@@ -126,10 +126,17 @@ def call(Map configMap = [unityVersions: []]) {
           script {
             gradleWrapper "packageLockDiff"
           }
+          publishHTML([allowMissing: false,
+                       alwaysLinkToLastBuild: false,
+                       keepAll: false,
+                       reportDir: 'build/reports/packages/html',
+                       reportFiles: 'index.html',
+                       reportName: 'Package Resolution',
+                       reportTitles: ''])
         }
         post {
           success {
-            archiveArtifacts artifacts: '**/package-lock.diff'
+            archiveArtifacts artifacts: '**/build/reports/packages/**/*'
           }
         }
       }
