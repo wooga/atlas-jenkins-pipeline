@@ -170,15 +170,11 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             def (linuxStepName, linuxFolderName) = generateStepName(it, [label: "linux", optional: true])
             return [stepName, linuxStepName, folderName, linuxFolderName]
         }.split {it.startsWith("check") }
-        expectedSteps == stepNames
+        expectedSteps.toSorted() == stepNames.toSorted()
 
         and: "code checkouted in the right dir"
         calls["checkout"].length == expectedSteps.size()
-
-        [expectedDirs, checkoutDirs].transpose().every { versionDir ->
-            def (expectedDir, checkoutedDir) = versionDir
-            expectedDir == checkoutedDir
-        }
+        expectedDirs.toSorted() == checkoutDirs.toSorted()
 
         and: "setup unstashed"
         calls["unstash"].count { it.args[0] == setupStash } == expectedSteps.size()

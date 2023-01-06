@@ -21,7 +21,7 @@ class WDKConfigSpec extends Specification {
         then:
         wdkConf.pipelineTools != null
         wdkConf.checkArgs == expected.checkArgs
-        wdkConf.unityVersions == expected.unityVersions
+        wdkConf.unityVersions.toSorted() == expected.unityVersions.toSorted()
         wdkConf.gradleArgs == expected.gradleArgs
         wdkConf.metadata == expected.metadata
 

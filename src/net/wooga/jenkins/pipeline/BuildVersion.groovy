@@ -6,6 +6,14 @@ class BuildVersion {
 
     static final String AUTO_UNITY_VERSION = "project_version"
 
+    static List<BuildVersion> parseMany(List<Object> unityVerObjs) {
+        def result = [] as List<BuildVersion>
+        for (Object unityVerObj : unityVerObjs) {
+            result.add(parse(unityVerObj))
+        }
+        return result
+    }
+
     /**
      * For each entry in a versions map, if they are not in the standard format
      * we process them into the newer format that supports optional arguments per version
@@ -65,6 +73,8 @@ class BuildVersion {
         this.optional = optional
         this.apiCompatibilityLevel = apiCompatibilityLevel
     }
+
+
 
     @Override
     @NonCPS

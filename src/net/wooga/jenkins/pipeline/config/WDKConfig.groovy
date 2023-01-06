@@ -8,13 +8,21 @@ class WDKConfig implements PipelineConfig {
     final UnityVersionPlatform[] unityVersions
     final BaseConfig baseConfig
 
-    static List<BuildVersion> collectBuildVersionsForLabel(String label, List unityVerObjs) {
+    static List<BuildVersion> copyBuildVersionsWithLabels(List<String> labels, List<BuildVersion> buildVersions) {
+        def result = [] as List<BuildVersion>
+        for (String label : labels) {
+            def copyBuildVersion = copyBuildVersionsWithLabel(label, buildVersions)
+            result.addAll(copyBuildVersion)
+        }
+        return result
+    }
+
+    static List<BuildVersion> copyBuildVersionsWithLabel(String label, List<BuildVersion> baseBuildVersions) {
         def buildVersions = []
-        for (Object unityVersionObj : unityVerObjs) {
-            def baseBuildVersion = BuildVersion.parse(unityVersionObj)
-            baseBuildVersion.label != label?
-                    buildVersions.addAll([baseBuildVersion, baseBuildVersion.copy(label: label, optional: true)]) :
-                    buildVersions.add(baseBuildVersion)
+        for (BuildVersion baseBuildVersion : baseBuildVersions) {
+            if(baseBuildVersion.label != label) {
+                buildVersions.add(baseBuildVersion.copy(label: label, optional: true))
+            }
         }
         return buildVersions
     }
@@ -23,14 +31,14 @@ class WDKConfig implements PipelineConfig {
         def index = 0
         def extraLabels = ["linux"]
         def platforms = []
-        //this has to be a bunch of nested fors because of the jenkins sandbox
-        for (String label : extraLabels) {
-            def buildVersions = collectBuildVersionsForLabel(label, unityVerObjs)
-            for (BuildVersion buildVersion : buildVersions) {
-                def platform = Platform.forWDK(buildVersion, configMap, index == 0)
-                index++
-                platforms.add(new UnityVersionPlatform(platform, buildVersion))
-            }
+
+        def buildVersions = BuildVersion.parseMany(unityVerObjs)
+        buildVersions.addAll(copyBuildVersionsWithLabels(extraLabels, buildVersions))
+
+        for (BuildVersion buildVersion : buildVersions) {
+            def platform = Platform.forWDK(buildVersion, configMap, index == 0)
+            index++
+            platforms.add(new UnityVersionPlatform(platform, buildVersion))
         }
         return platforms
     }
