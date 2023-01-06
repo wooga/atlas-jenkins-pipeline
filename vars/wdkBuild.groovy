@@ -84,7 +84,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
       stage('build') {
         failFast true
         parallel {
-          stage('assemble package macos') {
+          stage('assemble package') {
             agent {
                label "atlas && macos"
             }
@@ -94,52 +94,16 @@ def call(Map configMap = [ unityVersions:[] ]) {
               script {
                 def assembler = config.pipelineTools.assemblers
                 assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                def nupkgSha = sha256 file: nupkgFile
-                writeFile(file: "nupkg-macos.sha256", text: nupkgSha)
               }
             }
 
             post {
-              success {
-                stash(name: "macos_wdk_sha", includes: "nupkg-macos.sha256")
-              }
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
-              cleanup {
-                script {
-                  if(mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
-              }
-            }
-          }
-
-          stage('assemble package linux') {
-            agent {
-              label "atlas && linux"
-            }
-
-            steps {
-              unstash 'setup_w'
-              script {
-                catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
-                  def assembler = config.pipelineTools.assemblers
-                  assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                  def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                  def nupkgSha = sha256 file: nupkgFile
-                  writeFile(file: "nupkg-linux.sha256", text: nupkgSha)
-                  stash(name: "linux_wdk_sha", includes: "nupkg-linux.sha256")
-                }
-              }
-            }
-
-            post {
               cleanup {
                 script {
                   if(mainPlatform.clearWs) {
@@ -165,27 +129,6 @@ def call(Map configMap = [ unityVersions:[] ]) {
                         params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
                         config.checkArgs, config.conventions)
                   parallel stepsForParallel
-              }
-            }
-          }
-        }
-      }
-
-      stage("compare hashes") {
-        agent {
-          label "atlas"
-        }
-        steps {
-          script {
-            catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
-              unstash "macos_wdk_sha"
-              unstash "linux_wdk_sha"
-              def linux_hash = readFile file: "nupkg-linux.sha256"
-              def macos_hash = readFile file: "nupkg-macos.sha256"
-              echo "linux hash: $linux_hash"
-              echo "macos hash: $macos_hash"
-              if (linux_hash != macos_hash) {
-                throw new Exception("Hashes are not equal: $linux_hash != $macos_hash")
               }
             }
           }
