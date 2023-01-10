@@ -11,6 +11,9 @@ import net.wooga.jenkins.pipeline.config.WDKConfig
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [unityVersions: []]) {
+  def defaultReleaseType = "snapshot"
+  def defaultReleaseScope = ""
+
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL ?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
@@ -46,8 +49,8 @@ def call(Map configMap = [unityVersions: []]) {
     }
 
     parameters {
-      choice(name: 'RELEASE_STAGE', choices: ["snapshot", "preflight", "rc", "final"], description: 'Choose the distribution type')
-      choice(name: 'RELEASE_SCOPE', choices: ["", "patch", "minor", "major"], description: 'Choose the scope (semver2)')
+      choice(name: 'RELEASE_STAGE', choices: [defaultReleaseType, "preflight", "rc", "final"], description: 'Choose the distribution type')
+      choice(name: 'RELEASE_SCOPE', choices: [defaultReleaseScope, "patch", "minor", "major"], description: 'Choose the scope (semver2)')
       choice(name: 'LOG_LEVEL', choices: ["info", "quiet", "warn", "debug"], description: 'Choose the log level')
       choice(name: 'UPM_RESOLUTION_STRATEGY', choices: ["", "lowest", "highestPatch", "highestMinor", "highest"], description: 'Override the resolution strategy for indirect dependencies')
       booleanParam(name: 'STACK_TRACE', defaultValue: false, description: 'Whether to log truncated stacktraces')
@@ -68,8 +71,10 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
+                env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
+                env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
-                setup.wdk(params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
+                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
               }
             }
             post {
@@ -101,8 +106,10 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
+                env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
+                env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
-                setup.wdk(params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
+                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
               }
             }
             post {
@@ -169,7 +176,7 @@ def call(Map configMap = [unityVersions: []]) {
               unstash 'upm_setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
+                assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
               }
             }
 
@@ -196,7 +203,7 @@ def call(Map configMap = [unityVersions: []]) {
             when {
               beforeAgent true
               expression {
-                return params.RELEASE_STAGE == "snapshot"
+                return env.RELEASE_STAGE == "snapshot"
               }
             }
             steps {
@@ -236,7 +243,7 @@ def call(Map configMap = [unityVersions: []]) {
           unstash 'upm_setup_w'
           unstash 'wdk_output'
           script {
-            def publisher = config.pipelineTools.createPublishers(params.RELEASE_STAGE, params.RELEASE_SCOPE)
+            def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
             publisher.unityArtifactoryUpm('artifactory_publish')
           }
         }
@@ -269,7 +276,7 @@ def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashI
   conventions.wdkSetupStashId = setupStashId
   def checks = config.pipelineTools.checks.forWDKPipelines()
   def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-          params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String,
+          env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String,
           config.checkArgs, conventions)
   return stepsForParallel
 }

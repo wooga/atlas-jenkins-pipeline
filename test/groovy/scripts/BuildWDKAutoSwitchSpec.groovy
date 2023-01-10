@@ -3,6 +3,7 @@ package scripts
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
+import tools.GradleInvocation
 
 class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildWDKAutoSwitch.groovy"
@@ -24,15 +25,16 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         inSandbox { buildWDK(unityVersions: ["2019"], logLevel: "level") }
 
         then: "runs gradle with parameters"
-        skipsRelease ^/*XOR*/calls.has["sh"] { MethodCall call ->
-            String args = call.args[0]["script"]
-            args.contains("gradlew") &&
-                    args.contains(releaseType) &&
-                    args.contains("-Ppaket.publish.repository='${releaseType}'") &&
-                    args.contains("-Prelease.stage=${releaseType}") &&
-                    args.contains("-Prelease.scope=${releaseScope}") &&
-                    args.contains("-x check")
-        }
+        def gradleCalls = getShGradleCalls()
+        def publishCallStr = gradleCalls.find { it.contains("paket.publish.repository") }
+        skipsRelease || (publishCallStr != null)
+        def publishCall = GradleInvocation.parseCommandLine(publishCallStr)
+        skipsRelease ^ publishCall.tasks.contains(releaseType?: "snapshot")
+        skipsRelease ^ publishCall["paket.publish.repository"] == "'${releaseType?: "snapshot"}'"
+        skipsRelease ^ publishCall["release.stage"] == (releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.scope"] == releaseScope
+        skipsRelease ^ publishCall.containsRaw("-x check")
+
         and: "has set up environment"
         def env = usedEnvironments.last()
         skipsRelease ^ hasBaseEnvironment(env, "level")
@@ -47,6 +49,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
 
         where:
         releaseType | releaseScope | skipsRelease
+        null        | null         | false
         "snapshot"  | "patch"      | false
         "preflight" | "minor"      | false
         "rc"        | "minor"      | false

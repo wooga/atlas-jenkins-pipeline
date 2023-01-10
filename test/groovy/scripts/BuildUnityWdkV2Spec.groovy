@@ -26,13 +26,13 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         then: "runs gradle with parameters"
         assertShCallsWith("gradlew",
                 "publish",
-                "-Ppaket.publish.repository='${releaseType}'",
-                "-Ppublish.repository='${releaseType}'",
-                "-PversionBuilder.stage=${releaseType}",
-                "-PversionBuilder.scope=${releaseScope}"
+                "-Ppaket.publish.repository='${releaseType?:"snapshot"}'",
+                "-Ppublish.repository='${releaseType?:"snapshot"}'",
+                "-PversionBuilder.stage=${releaseType?:"snapshot"}",
+                "-PversionBuilder.scope=${releaseScope?:""}"
         )
         and: "has set up environment"
-        def env = usedEnvironments[usedEnvironments.size()-2]
+        def env = usedEnvironments[usedEnvironments.size() - 2]
         hasBaseEnvironment(env, "level")
         env.GRGIT == this.credentials['github_access']
         env.GRGIT_USER == "usr" //"${GRGIT_USR}"
@@ -47,6 +47,7 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
 
         where:
         releaseType | releaseScope
+        null        | null
         "snapshot"  | "patch"
         "preflight" | "minor"
         "rc"        | "minor"
@@ -81,7 +82,7 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         env.UPM_USER_CONFIG_FILE == upmCredsFile.absolutePath
 
         and: "stashes gradle cache and build outputs"
-        stash['wdk_output']["includes"] ==".gradle/**, **/build/outputs/**/*"
+        stash['wdk_output']["includes"] == ".gradle/**, **/build/outputs/**/*"
 
         where:
         releaseType | releaseScope
@@ -107,7 +108,7 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         }
 
         then: "runs gradle with parameters"
-        assertShCallsWith(2,"gradlew", //2 calls 1 for upm, 1 for paket
+        assertShCallsWith(2, "gradlew", //2 calls 1 for upm, 1 for paket
                 "-Prelease.stage=${releaseType}",
                 "-Prelease.scope=${releaseScope}",
                 "setup")
@@ -150,11 +151,11 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         }
 
         then: "all workspaces are clean"
-        calls["cleanWs"].length == (clearWs? 4 : 0) //setup, build, hash, and publish steps
+        calls["cleanWs"].length == (clearWs ? 4 : 0) //setup, build, hash, and publish steps
 
         where:
         clearWs << [true, false]
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 
     def hasBaseEnvironment(Map env, String logLevel) {

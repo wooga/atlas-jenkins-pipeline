@@ -3,6 +3,7 @@ package scripts
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
+import tools.GradleInvocation
 
 class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildGradlePlugin.groovy"
@@ -50,15 +51,18 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         then: "runs gradle with parameters"
         def gradleCall = getShGradleCalls().first()
         skipsRelease || (gradleCall != null)
-        skipsRelease ^ gradleCall.contains(releaseType)
-        skipsRelease ^ gradleCall.contains("-Pgradle.publish.key=key")
-        skipsRelease ^ gradleCall.contains("-Pgradle.publish.secret=secret")
-        skipsRelease ^ gradleCall.contains("-Prelease.stage=${releaseType}")
-        skipsRelease ^ gradleCall.contains("-Prelease.scope=${releaseScope}")
-        skipsRelease ^ gradleCall.contains("-x check")
+        def publishCall = GradleInvocation.parseCommandLine(gradleCall)
+
+        skipsRelease ^ publishCall.tasks.contains(releaseType?: "snapshot")
+        skipsRelease ^ publishCall["gradle.publish.key"] == "key"
+        skipsRelease ^ publishCall["gradle.publish.secret"] == "secret"
+        skipsRelease ^ publishCall["release.stage"] == (releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.scope"] == (releaseScope?: "")
+        skipsRelease ^ publishCall.containsRaw("-x check")
 
         where:
         releaseType | releaseScope | skipsRelease
+        null        | null         | true
         "snapshot"  | "patch"      | true
         "rc"        | "minor"      | false
         "final"     | "major"      | false
@@ -89,7 +93,6 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
     }
 
 
-
     @Unroll("#description publish workspace when clearWs is #clearWs")
     def "clears publish and preparation workspaces if clearWs is set"() {
         given: "loaded check in a running jenkins build"
@@ -104,11 +107,11 @@ class BuildGradlePluginSpec extends DeclarativeJenkinsSpec {
         }
 
         then: "all workspaces are clean"
-        calls["cleanWs"].length == (clearWs? 2 : 0) //publish (1) + preparation (1)
+        calls["cleanWs"].length == (clearWs ? 2 : 0) //publish (1) + preparation (1)
 
         where:
         clearWs << [true, false]
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 
     String[] getShGradleCalls() {
