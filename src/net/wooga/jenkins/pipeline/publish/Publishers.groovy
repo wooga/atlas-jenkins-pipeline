@@ -17,8 +17,8 @@ class Publishers {
     Publishers(Object jenkinsScript, Gradle gradle, String releaseType, String releaseScope) {
         this.jenkins = jenkinsScript
         this.gradle = gradle
-        this.releaseScope = releaseScope.trim()
-        this.releaseType = releaseType.trim()
+        this.releaseScope = releaseScope?.trim()?: "snapshot"
+        this.releaseType = releaseType?.trim() ?: ""
     }
 
     def gradlePlugin(String publishKeySecret, String publishSecretSecret,
