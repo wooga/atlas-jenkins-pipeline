@@ -131,7 +131,7 @@ def call(Map configMap = [unityVersions: []]) {
           success {
             publishHTML([allowMissing: false,
                          alwaysLinkToLastBuild: true,
-                         keepAll: false,
+                         keepAll: true,
                          reportDir: 'build/reports/packages/html',
                          reportFiles: 'index.html',
                          reportName: 'Package Resolution',
