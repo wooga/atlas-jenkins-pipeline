@@ -124,19 +124,19 @@ def call(Map configMap = [unityVersions: []]) {
           unstash 'upm_setup_w'
           unstash 'paket_setup_w'
           script {
-            gradleWrapper "packageLockDiff"
+            gradleWrapper "packageLockDiff -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
           }
-          publishHTML([allowMissing: false,
-                       alwaysLinkToLastBuild: false,
-                       keepAll: false,
-                       reportDir: 'build/reports/packages/html',
-                       reportFiles: 'index.html',
-                       reportName: 'Package Resolution',
-                       reportTitles: ''])
         }
         post {
           success {
-            archiveArtifacts artifacts: '**/build/reports/packages/**/*'
+            publishHTML([allowMissing: false,
+                         alwaysLinkToLastBuild: true,
+                         keepAll: false,
+                         reportDir: 'build/reports/packages/html',
+                         reportFiles: 'index.html',
+                         reportName: 'Package Resolution',
+                         reportTitles: ''])
+            archiveArtifacts artifacts: 'build/reports/packages/**/*'
           }
         }
       }
