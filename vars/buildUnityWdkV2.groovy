@@ -47,6 +47,7 @@ def call(Map configMap = [unityVersions: []]) {
       choice(name: 'RELEASE_STAGE', choices: ["snapshot", "preflight", "rc", "final"], description: 'Choose the distribution type')
       choice(name: 'RELEASE_SCOPE', choices: ["", "patch", "minor", "major"], description: 'Choose the scope (semver2)')
       choice(name: 'LOG_LEVEL', choices: ["info", "quiet", "warn", "debug"], description: 'Choose the log level')
+      choice(name: 'UPM_RESOLUTION_STRATEGY', choices: ["", "lowest", "highestPatch", "highestMinor", "highest"], description: 'Override the resolution strategy for indirect dependencies')
       booleanParam(name: 'STACK_TRACE', defaultValue: false, description: 'Whether to log truncated stacktraces')
       booleanParam(name: 'REFRESH_DEPENDENCIES', defaultValue: false, description: 'Whether to refresh dependencies')
     }
