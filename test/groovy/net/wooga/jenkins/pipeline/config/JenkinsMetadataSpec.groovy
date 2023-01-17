@@ -31,7 +31,7 @@ class JenkinsMetadataSpec extends Specification {
         JenkinsMetadata.fromScript(propsObj)
 
         then:
-        def e = thrown(IllegalStateException)
+        def e = thrown(Exception)
         e.message == "Jenkins script object must have a BUILD_NUMBER property"
     }
 

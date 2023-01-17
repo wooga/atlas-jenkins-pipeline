@@ -36,7 +36,7 @@ class BuildVersionSpec extends Specification {
         when:
         BuildVersion.parse(obj)
         then:
-        def e = thrown(IllegalArgumentException)
+        def e = thrown(Exception)
         e.message == message
         where:
         obj              | message

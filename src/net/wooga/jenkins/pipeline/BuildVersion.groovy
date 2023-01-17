@@ -16,7 +16,7 @@ class BuildVersion {
      */
     static BuildVersion parse(Object unityVerObj) {
         if(unityVerObj == null){
-            throw new IllegalArgumentException("Entry cannot be null")
+            throw new Exception("Entry cannot be null")
         }
         if (unityVerObj instanceof Closure) {
             return parse(unityVerObj())
@@ -32,7 +32,7 @@ class BuildVersion {
 
     static BuildVersion fromBuildVersionMap(Map unityVerMap) {
         if(unityVerMap["version"] == null) {
-            throw new IllegalArgumentException("Entry ${unityVerMap} does not contain version")
+            throw new Exception("Entry ${unityVerMap} does not contain version")
         }
         String version = unityVerMap["version"]
         boolean optional = unityVerMap["optional"]?: false
