@@ -124,12 +124,12 @@ def call(Map configMap = [unityVersions: []]) {
         steps {
           unstash 'upm_setup_w'
           unstash 'paket_setup_w'
-          script {
-            gradleWrapper "packageLockDiff -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
+          catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
+            gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
           }
         }
         post {
-          success {
+          always {
             publishHTML([allowMissing: false,
                          alwaysLinkToLastBuild: true,
                          keepAll: true,
