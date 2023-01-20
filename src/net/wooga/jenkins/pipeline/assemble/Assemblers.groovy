@@ -20,6 +20,7 @@ class Assemblers {
         jenkins.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
             gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} assemble")
         }
+        return jenkins.findFiles(glob: 'build/outputs/*.nupkg')[0]
     }
 
 }

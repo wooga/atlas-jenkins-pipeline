@@ -93,9 +93,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
               unstash 'setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                sh "cp $nupkgFile nupkg-macos.nupkg"
+                def nupkgFile = assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                sh script: "cp ${nupkgFile?.path} nupkg-macos.nupkg"
                 stash(name: "macos_wdk_nupkg", includes: "nupkg-macos.nupkg")
               }
             }
@@ -127,9 +126,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
               script {
                 catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
                   def assembler = config.pipelineTools.assemblers
-                  assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
-                  def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                  sh "cp $nupkgFile nupkg-linux.nupkg"
+                  def nupkgFile = assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                  sh script: "cp ${nupkgFile?.path} nupkg-linux.nupkg"
                   stash(name: "linux_wdk_nupkg", includes: "nupkg-linux.nupkg")
                 }
               }
@@ -146,24 +144,24 @@ def call(Map configMap = [ unityVersions:[] ]) {
             }
           }
 
-//          stage("check") {
-//            when {
-//              beforeAgent true
-//              expression {
-//                return params.RELEASE_TYPE == "snapshot"
-//              }
-//            }
-//
-//            steps {
-//              script {
-//                def checks = config.pipelineTools.checks.forWDKPipelines()
-//                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-//                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
-//                        config.checkArgs, config.conventions)
-//                  parallel stepsForParallel
-//              }
-//            }
-//          }
+          stage("check") {
+            when {
+              beforeAgent true
+              expression {
+                return params.RELEASE_TYPE == "snapshot"
+              }
+            }
+
+            steps {
+              script {
+                def checks = config.pipelineTools.checks.forWDKPipelines()
+                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
+                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
+                        config.checkArgs, config.conventions)
+                  parallel stepsForParallel
+              }
+            }
+          }
         }
       }
 
@@ -174,15 +172,18 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           script {
             catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
+              def zip_sha256 = { file ->
+                def dirName = "${file}_unzipped".toString()
+                unzip zipFile: file, dir: dirName
+                return sh(returnStdout: true, script: "find $dirName -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
+              }
 
               unstash "macos_wdk_nupkg"
-              unzip zipFile: "nupkg-macos.nupkg", dir: "macos_nupkg"
-              def macos_hash = sh(returnStdout: true, script: "find macos_nupkg -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
+              def macos_hash = zip_sha256("nupkg-macos.nupkg")
               echo "macos hash: $macos_hash"
 
               unstash "linux_wdk_nupkg"
-              unzip zipFile: "nupkg-linux.nupkg", dir: "linux_nupkg"
-              def linux_hash = sh(returnStdout: true, script: "find linux_nupkg -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
+              def linux_hash = zip_sha256("nupkg-linux.nupkg")
               echo "linux hash: $linux_hash"
 
               if (linux_hash != macos_hash) {
