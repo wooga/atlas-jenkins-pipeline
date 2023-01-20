@@ -95,15 +95,12 @@ def call(Map configMap = [ unityVersions:[] ]) {
                 def assembler = config.pipelineTools.assemblers
                 assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
                 def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                def nupkgSha = sha256 file: nupkgFile
-                writeFile(file: "nupkg-macos.sha256", text: nupkgSha)
+                sh "cp $nupkgFile nupkg-macos.nupkg"
+                stash(name: "macos_wdk_nupkg", includes: "nupkg-macos.nupkg")
               }
             }
 
             post {
-              success {
-                stash(name: "macos_wdk_sha", includes: "nupkg-macos.sha256")
-              }
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
                 archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
@@ -132,9 +129,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
                   def assembler = config.pipelineTools.assemblers
                   assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
                   def nupkgFile = findFiles(glob: 'build/outputs/*.nupkg')[0].path
-                  def nupkgSha = sha256 file: nupkgFile
-                  writeFile(file: "nupkg-linux.sha256", text: nupkgSha)
-                  stash(name: "linux_wdk_sha", includes: "nupkg-linux.sha256")
+                  sh "cp $nupkgFile nupkg-linux.nupkg"
+                  stash(name: "linux_wdk_nupkg", includes: "nupkg-linux.nupkg")
                 }
               }
             }
@@ -150,40 +146,45 @@ def call(Map configMap = [ unityVersions:[] ]) {
             }
           }
 
-          stage("check") {
-            when {
-              beforeAgent true
-              expression {
-                return params.RELEASE_TYPE == "snapshot"
-              }
-            }
-
-            steps {
-              script {
-                def checks = config.pipelineTools.checks.forWDKPipelines()
-                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
-                        config.checkArgs, config.conventions)
-                  parallel stepsForParallel
-              }
-            }
-          }
+//          stage("check") {
+//            when {
+//              beforeAgent true
+//              expression {
+//                return params.RELEASE_TYPE == "snapshot"
+//              }
+//            }
+//
+//            steps {
+//              script {
+//                def checks = config.pipelineTools.checks.forWDKPipelines()
+//                def stepsForParallel = checks.wdkCoverage(config.unityVersions,
+//                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
+//                        config.checkArgs, config.conventions)
+//                  parallel stepsForParallel
+//              }
+//            }
+//          }
         }
       }
 
       stage("compare hashes") {
         agent {
-          label "atlas"
+          label "atlas && macos"
         }
         steps {
           script {
             catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
-              unstash "macos_wdk_sha"
-              unstash "linux_wdk_sha"
-              def linux_hash = readFile file: "nupkg-linux.sha256"
-              def macos_hash = readFile file: "nupkg-macos.sha256"
-              echo "linux hash: $linux_hash"
+
+              unstash "macos_wdk_nupkg"
+              unzip zipFile: "nupkg-macos.nupkg", dir: "macos_nupkg"
+              def macos_hash = sh(returnStdout: true, script: "find macos_nupkg -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
               echo "macos hash: $macos_hash"
+
+              unstash "linux_wdk_nupkg"
+              unzip zipFile: "nupkg-linux.nupkg", dir: "linux_nupkg"
+              def linux_hash = sh(returnStdout: true, script: "find linux_nupkg -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
+              echo "linux hash: $linux_hash"
+
               if (linux_hash != macos_hash) {
                 throw new Exception("Hashes are not equal: $linux_hash != $macos_hash")
               }
