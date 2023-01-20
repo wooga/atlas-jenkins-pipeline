@@ -7,7 +7,7 @@ import net.wooga.jenkins.pipeline.test.sandbox.SandboxPipelineTestHelper
 import org.jenkinsci.plugins.scriptsecurity.sandbox.Whitelist
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.GenericWhitelist
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.ProxyWhitelist
-
+//TODO check this out: https://github.com/jenkinsci/script-security-plugin/blob/master/src/main/resources/org/jenkinsci/plugins/scriptsecurity/sandbox/whitelists/generic-whitelist
 abstract class SandboxedDeclarativeJenkinsSpec extends DeclarativeJenkinsSpec {
 
 

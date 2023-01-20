@@ -154,6 +154,6 @@ class Platform {
         if(obj instanceof Collection) {
             return obj as Collection
         }
-        throw new IllegalArgumentException("${obj} should be a Collection or a Map of [key:collection] or [key:string]")
+        throw new Exception("${obj} should be a Collection or a Map of [key:collection] or [key:string]")
     }
 }

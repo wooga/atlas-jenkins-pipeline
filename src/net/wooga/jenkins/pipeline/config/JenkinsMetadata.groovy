@@ -8,7 +8,7 @@ class JenkinsMetadata {
 
     static JenkinsMetadata fromScript(Object jenkinsScript) {
         if(jenkinsScript.BUILD_NUMBER == null) {
-            throw new IllegalStateException("Jenkins script object must have a BUILD_NUMBER property")
+            throw new Exception("Jenkins script object must have a BUILD_NUMBER property")
         }
         def envMap = jenkinsScript.env?: [:]
         return new JenkinsMetadata(

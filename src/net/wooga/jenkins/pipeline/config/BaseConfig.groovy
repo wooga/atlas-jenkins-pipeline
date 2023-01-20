@@ -1,7 +1,5 @@
 package net.wooga.jenkins.pipeline.config
 
-import net.wooga.jenkins.pipeline.PipelineTools
-
 class BaseConfig {
     final Object jenkins
     final PipelineConventions conventions
