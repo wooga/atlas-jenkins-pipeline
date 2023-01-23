@@ -17,6 +17,8 @@ class DeclarativeJenkinsSpec extends SandboxedDeclarativeJenkinsSpec {
             registerAllowedMethod("sendSlackNotification", [String, boolean]) {}
             registerAllowedMethod("junit", [LinkedHashMap]) {}
             registerAllowedMethod("nunit", [LinkedHashMap]) {}
+            registerAllowedMethod("catchError", [LinkedHashMap, Closure]) {}
+
         }
     }
 

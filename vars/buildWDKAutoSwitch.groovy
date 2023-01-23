@@ -84,7 +84,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
       stage('build') {
         failFast true
         parallel {
-          stage('assemble package') {
+          stage('assemble package macos') {
             agent {
                label "atlas && macos"
             }
@@ -93,7 +93,9 @@ def call(Map configMap = [ unityVersions:[] ]) {
               unstash 'setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                def nupkgFile = assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                sh script: "cp ${nupkgFile?.path} nupkg-macos.nupkg"
+                stash(name: "macos_wdk_nupkg", includes: "nupkg-macos.nupkg")
               }
             }
 
@@ -104,6 +106,34 @@ def call(Map configMap = [ unityVersions:[] ]) {
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
+              cleanup {
+                script {
+                  if(mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
+              }
+            }
+          }
+
+          stage('assemble package linux') {
+            agent {
+              label "atlas && linux"
+            }
+
+            steps {
+              unstash 'setup_w'
+              script {
+                catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
+                  def assembler = config.pipelineTools.assemblers
+                  def nupkgFile = assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                  sh script: "cp ${nupkgFile?.path} nupkg-linux.nupkg"
+                  stash(name: "linux_wdk_nupkg", includes: "nupkg-linux.nupkg")
+                }
+              }
+            }
+
+            post {
               cleanup {
                 script {
                   if(mainPlatform.clearWs) {
@@ -129,6 +159,35 @@ def call(Map configMap = [ unityVersions:[] ]) {
                         params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
                         config.checkArgs, config.conventions)
                   parallel stepsForParallel
+              }
+            }
+          }
+        }
+      }
+
+      stage("compare hashes") {
+        agent {
+          label "atlas && macos"
+        }
+        steps {
+          script {
+            catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE") {
+              def zip_sha256 = { file ->
+                def dirName = "${file}_unzipped".toString()
+                unzip zipFile: file, dir: dirName
+                return sh(returnStdout: true, script: "find $dirName -type f | xargs cat | shasum -a 256 | awk '{print \$1}'").trim()
+              }
+
+              unstash "macos_wdk_nupkg"
+              def macos_hash = zip_sha256("nupkg-macos.nupkg")
+              echo "macos hash: $macos_hash"
+
+              unstash "linux_wdk_nupkg"
+              def linux_hash = zip_sha256("nupkg-linux.nupkg")
+              echo "linux hash: $linux_hash"
+
+              if (linux_hash != macos_hash) {
+                throw new Exception("Hashes are not equal: $linux_hash != $macos_hash")
               }
             }
           }

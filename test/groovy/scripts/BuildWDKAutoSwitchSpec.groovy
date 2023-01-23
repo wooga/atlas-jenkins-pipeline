@@ -149,7 +149,7 @@ class BuildWDKAutoSwitchSpec extends DeclarativeJenkinsSpec {
         }
 
         then: "all workspaces are clean"
-        calls["cleanWs"].length == (clearWs? 3 : 0) //setup, build, and publish steps
+        calls["cleanWs"].length == (clearWs? 4 : 0) //setup, build, hash, and publish steps
 
         where:
         clearWs << [true, false]
