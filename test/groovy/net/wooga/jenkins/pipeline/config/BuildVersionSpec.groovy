@@ -13,21 +13,30 @@ class BuildVersionSpec extends Specification {
         when:
         def buildVersion = BuildVersion.parse(obj)
         then:
+        buildVersion.label == expected.label
         buildVersion.version == expected.version
         buildVersion.optional == expected.optional
         buildVersion.apiCompatibilityLevel == expected.apiCompatibilityLevel
 
         where:
         obj                                                                 | expected
-        new BuildVersion("2021", true, "a")                                 | new BuildVersion("2021", true, "a")
-                { -> new BuildVersion("2021", true, "a") } | new BuildVersion("2021", true, "a")
-        "2020"                                                              | new BuildVersion("2020", false, null)
-                { -> "2020" } | new BuildVersion("2020", false, null)
-        [version: "2019"]                                                   | new BuildVersion("2019", false, null)
-                { -> [version: "2019"] } | new BuildVersion("2019", false, null)
-        [version: "2019", optional: true]                                   | new BuildVersion("2019", true, null)
-        [version: "2019", apiCompatibilityLevel: "net_4_6"]                 | new BuildVersion("2019", false, "net_4_6")
-        [version: "2019", optional: true, apiCompatibilityLevel: "net_4_6"] | new BuildVersion("2019", true, "net_4_6")
+        new BuildVersion("2021", true, "a")                                 | new BuildVersion("macos", "2021", true, "a")
+        new BuildVersion("label", "2021", true, "a")                        | new BuildVersion("label", "2021", true, "a")
+                { ->
+                    new BuildVersion("2021", true, "a")
+                }                                                          | new BuildVersion("macos", "2021", true, "a")
+        "2020"                                                              | new BuildVersion("macos", "2020", false, null)
+                { ->
+                    "2020"
+                }                                                                                         | new BuildVersion("macos", "2020", false, null)
+        [version: "2019"]                                                   | new BuildVersion("macos", "2019", false, null)
+                { ->
+                    [version: "2019"]
+                }                                                                              | new BuildVersion("macos", "2019", false, null)
+        [label: "label", version: "2019", optional: true]                   | new BuildVersion("label", "2019", true, null)
+        [version: "2019", optional: true]                                   | new BuildVersion("macos", "2019", true, null)
+        [version: "2019", apiCompatibilityLevel: "net_4_6"]                 | new BuildVersion("macos", "2019", false, "net_4_6")
+        [version: "2019", optional: true, apiCompatibilityLevel: "net_4_6"] | new BuildVersion("macos", "2019", true, "net_4_6")
     }
 
     @Unroll("fails to parse #obj into buildVersion if no version source is provided")
@@ -47,35 +56,35 @@ class BuildVersionSpec extends Specification {
     @Unroll
     def "generates directory name"() {
         given: "valid build version object"
-        def buildVersion = new BuildVersion(version, optional, apiCompatibilityLevel)
+        def buildVersion = new BuildVersion(label, version, optional, apiCompatibilityLevel)
         when:
         def dirName = buildVersion.toDirectoryName()
         then:
         dirName == expected
 
         where:
-        version | optional | apiCompatibilityLevel | expected
-        "2019"  | false    | null                  | "2019"
-        "2019"  | true     | null                  | "2019_optional"
-        "2019"  | false    | "level"               | "2019_level"
-        "2019"  | true     | "level"               | "2019_optional_level"
+        label     | version | optional | apiCompatibilityLevel | expected
+        "macos"   | "2019"  | false    | null                  | "macos_Unity_2019"
+        "linux"   | "2020"  | true     | null                  | "linux_Unity_2020_optional"
+        "windows" | "2021"  | false    | "level"               | "windows_Unity_2021_level"
+        "other"   | "2015"  | true     | "level"               | "other_Unity_2015_optional_level"
     }
 
     @Unroll
     def "generates step label"() {
         given: "valid build version object"
-        def buildVersion = new BuildVersion(version, optional, apiCompatibilityLevel)
+        def buildVersion = new BuildVersion(label, version, optional, apiCompatibilityLevel)
         when:
-        def label = buildVersion.toLabel()
+        def description = buildVersion.toDescription()
         then:
-        label == expected
+        description == expected
 
         where:
-        version | optional | apiCompatibilityLevel | expected
-        "2019"  | false    | null                  | "2019"
-        "2019"  | true     | null                  | "2019 (optional)"
-        "2019"  | false    | "level"               | "2019 (level)"
-        "2019"  | true     | "level"               | "2019 (optional) (level)"
+        label     | version | optional | apiCompatibilityLevel | expected
+        "windows" | "2019"  | false    | null                  | "windows Unity-2019"
+        "macos"   | "2019"  | true     | null                  | "macos Unity-2019 (optional)"
+        "linux"   | "2019"  | false    | "level"               | "linux Unity-2019 (level)"
+        "label"   | "2019"  | true     | "level"               | "label Unity-2019 (optional) (level)"
     }
 
 

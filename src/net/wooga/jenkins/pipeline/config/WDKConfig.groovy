@@ -7,32 +7,57 @@ class WDKConfig implements PipelineConfig {
 
     final UnityVersionPlatform[] unityVersions
     final BaseConfig baseConfig
-    final String buildLabel
 
-    static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, String buildLabel, Map configMap) {
-        def index = 0
-        return unityVerObjs.collect { Object unityVersionObj ->
-            def buildVersion = BuildVersion.parse(unityVersionObj)
-            def platform = Platform.forWDK(buildVersion, buildLabel, configMap, index == 0)
-            index++
-            return new UnityVersionPlatform(platform, buildVersion)
+    static List<BuildVersion> copyBuildVersionsWithLabels(List<String> labels, List<BuildVersion> buildVersions) {
+        def result = [] as List<BuildVersion>
+        for (String label : labels) {
+            def copyBuildVersion = copyBuildVersionsWithLabel(label, buildVersions)
+            result.addAll(copyBuildVersion)
         }
+        return result
     }
 
-    static WDKConfig fromConfigMap(String buildLabel, Map configMap, Object jenkinsScript) {
+    static List<BuildVersion> copyBuildVersionsWithLabel(String label, List<BuildVersion> baseBuildVersions) {
+        def buildVersions = []
+        for (BuildVersion baseBuildVersion : baseBuildVersions) {
+            if(baseBuildVersion.label != label) {
+                buildVersions.add(baseBuildVersion.copy(label: label, optional: true))
+            }
+        }
+        return buildVersions
+    }
+
+    static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, Map configMap) {
+        def index = 0
+        def extraLabels = ["linux"]
+        def platforms = []
+
+        def buildVersions = BuildVersion.parseMany(unityVerObjs)
+        buildVersions.addAll(copyBuildVersionsWithLabels(extraLabels, buildVersions))
+
+        for (BuildVersion buildVersion : buildVersions) {
+            def platform = Platform.forWDK(buildVersion, configMap, index == 0)
+            index++
+            platforms.add(new UnityVersionPlatform(platform, buildVersion))
+        }
+        return platforms
+    }
+
+    static WDKConfig fromConfigMap(Map configMap, Object jenkinsScript) {
         configMap.unityVersions = configMap.unityVersions ?: []
-        def unityVersions = collectUnityVersions(configMap.unityVersions as List, buildLabel, configMap)
+
+        def unityVersions = collectUnityVersions(configMap.unityVersions as List, configMap)
+
         if (unityVersions.isEmpty()) throw new Exception("Please provide at least one unity version.")
 
         def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)
 
-        return new WDKConfig(unityVersions, baseConfig, buildLabel)
+        return new WDKConfig(unityVersions, baseConfig)
     }
 
-    WDKConfig(List<UnityVersionPlatform> unityVersions, BaseConfig baseConfig, String buildLabel) {
+    WDKConfig(List<UnityVersionPlatform> unityVersions, BaseConfig baseConfig) {
         this.unityVersions = unityVersions
         this.baseConfig = baseConfig
-        this.buildLabel = buildLabel
     }
 
     @Override
@@ -63,6 +88,10 @@ class WDKConfig implements PipelineConfig {
     @Override
     PipelineTools getPipelineTools() {
         return PipelineTools.fromConfig(baseConfig.jenkins, this)
+    }
+
+    Platform getMainPlatform() {
+        return unityVersions.find {it.platform.main }.platform
     }
 }
 

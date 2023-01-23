@@ -17,7 +17,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  def config = WDKConfig.fromConfigMap("macos", configMap, this)
+  def config = WDKConfig.fromConfigMap(configMap, this)
   def mainPlatform = config.unityVersions[0].platform
 
   // We can only configure static pipelines atm.
@@ -51,7 +51,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
       stage('setup') {
         agent {
-          label "atlas && $config.buildLabel"
+          label "atlas && macos"
         }
 
         steps {
@@ -86,7 +86,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
         parallel {
           stage('assemble package') {
             agent {
-               label "atlas && $config.buildLabel"
+               label "atlas && macos"
             }
 
             steps {
@@ -137,7 +137,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
       stage('publish') {
         agent {
-           label "atlas && $config.buildLabel"
+           label "atlas && macos"
         }
 
         environment {

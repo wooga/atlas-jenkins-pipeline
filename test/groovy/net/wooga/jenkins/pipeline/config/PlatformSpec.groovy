@@ -51,8 +51,7 @@ class PlatformSpec extends Specification {
         and: "a unity build version"
 
         when: "generating new platform"
-        def buildOS = "macos"
-        def platform = Platform.forWDK(buildVersion, buildOS, config, isMain)
+        def platform = Platform.forWDK(buildVersion, config, isMain)
 
         then: "generated platform is valid, matches map values and contains unity environment"
         def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}", "UVM_UNITY_VERSION=${buildVersion.version}"].with {
@@ -62,7 +61,7 @@ class PlatformSpec extends Specification {
         platform.checkoutDirectory == expected.checkoutDirectory
         platform.checkDirectory == expected.checkDirectory
         platform.name == expected.name
-        platform.os == buildOS
+        platform.os == buildVersion.label
         !platform.runsOnDocker
         platform.labels == expected.labels
         platform.testEnvironment == expected.testEnvironment + unityEnv
@@ -70,25 +69,25 @@ class PlatformSpec extends Specification {
         platform.main == expected.main
 
         where:
-        config                                                                            | isMain | buildVersion            | expected
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | true   | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "", [], [], true, false)
-        [checkDir: "dir"]                                                                 | false  | buildVersion("v")       | new Platform("v", "dir", "v", "macos", false, "", [], [], false, false)
-        [checkoutDir: "dir"]                                                              | false  | buildVersion("v")       | new Platform("dir", ".", "v", "macos", false, "", [], [], false, false)
-        [checkoutDir: "dir", clearWs: true]                                               | false  | buildVersion("v")       | new Platform("dir", ".", "v", "macos", false, "", [], [], false, true)
-        [clearWs: true]                                                                   | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "", [], [], false, true)
-        [testEnvironment: ["t=a", "t2=b"]]                                                | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "", ["t=a", "t2=b"], [], false, false)
-        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | true   | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "", ["t=a", "t2=b"], ["l", "l2"], true, false)
-        [labels: "label", testLabels: ["t", "t2"]]                                        | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", [], ["t", "t2"], false, false)
-        [labels: "label", testLabels: [v: ["t", "t2"]]]                                   | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", [], ["t", "t2"], false, false)
-        [labels: "label", testLabels: [v: "tag"]]                                         | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", [], ["tag"], false, false)
-        [labels: "label", testLabels: [notv: ["t", "t2"]]]                                | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", [], [], false, false)
-        [labels: "label", testEnvironment: [v: ["t=a", "t2=b"]]]                          | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], [], false, false)
-        [labels: "label", testEnvironment: [notv: ["t=a", "t2=b"]]]                       | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", [], [], false, false)
-        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], [], false, false)
-        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false, false)
-        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("v", "lv") | new Platform("v_lv", ".", "v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false, false)
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("v")       | new Platform("v", ".", "v", "macos", false, "", [], [], false, false)
-        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("v", "lv") | new Platform("v_lv", ".", "v", "macos", false, "", [], [], false, false)
+        config                                                                            | isMain | buildVersion                  | expected
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: null]         | true   | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "", [], [], true, false)
+        [checkDir: "dir"]                                                                 | false  | buildVersion("os2", "v")      | new Platform("os2_Unity_v", "dir", "v", "macos", false, "", [], [], false, false)
+        [checkoutDir: "dir"]                                                              | false  | buildVersion("os", "v")       | new Platform("dir", ".", "v", "macos", false, "", [], [], false, false)
+        [checkoutDir: "dir", clearWs: true]                                               | false  | buildVersion("os", "v")       | new Platform("dir", ".", "v", "macos", false, "", [], [], false, true)
+        [clearWs: true]                                                                   | false  | buildVersion("os3", "v")      | new Platform("os3_Unity_v", ".", "v", "macos", false, "", [], [], false, true)
+        [testEnvironment: ["t=a", "t2=b"]]                                                | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "", ["t=a", "t2=b"], [], false, false)
+        [testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]                       | true   | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "", ["t=a", "t2=b"], ["l", "l2"], true, false)
+        [labels: "label", testLabels: ["t", "t2"]]                                        | false  | buildVersion("os4", "v")      | new Platform("os4_Unity_v", ".", "v", "macos", false, "label", [], ["t", "t2"], false, false)
+        [labels: "label", testLabels: [v: ["t", "t2"]]]                                   | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "label", [], ["t", "t2"], false, false)
+        [labels: "label", testLabels: [v: "tag"]]                                         | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "label", [], ["tag"], false, false)
+        [labels: "label", testLabels: [notv: ["t", "t2"]]]                                | false  | buildVersion("os5", "v")      | new Platform("os5_Unity_v", ".", "v", "macos", false, "label", [], [], false, false)
+        [labels: "label", testEnvironment: [v: ["t=a", "t2=b"]]]                          | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], [], false, false)
+        [labels: "label", testEnvironment: [notv: ["t=a", "t2=b"]]]                       | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "label", [], [], false, false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"]]                               | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], [], false, false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("os6", "v")      | new Platform("os6_Unity_v", ".", "v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false, false)
+        [labels: "label", testEnvironment: ["t=a", "t2=b"], testLabels: ["l", "l2"]]      | false  | buildVersion("os", "v", "lv") | new Platform("os_Unity_v_lv", ".", "v", "macos", false, "label", ["t=a", "t2=b"], ["l", "l2"], false, false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("os", "v")       | new Platform("os_Unity_v", ".", "v", "macos", false, "", [], [], false, false)
+        [labels: null, testEnvironment: null, testLabels: null, dockerArgs: [not: "nul"]] | false  | buildVersion("os", "v", "lv") | new Platform("os_Unity_v_lv", ".", "v", "macos", false, "", [], [], false, false)
     }
 
     @Unroll("creates platform named #platName from js config map #config")
@@ -153,13 +152,13 @@ class PlatformSpec extends Specification {
 
     def "creates platform without version environment if build version is set to be found automatically"() {
         given: "build version with 'project_version' version label"
-        def autoBuildVer = buildVersion("project_version")
+        def autoBuildVer = buildVersion("macos", "project_version")
 
         and: "config with other test environments"
         def config = [testEnvironment: ["env=a", "env2=b"]]
 
         when: "creating new WDK platform"
-        def platform = Platform.forWDK(autoBuildVer, "macos", config, true)
+        def platform = Platform.forWDK(autoBuildVer, config, true)
 
         then: "created platform doesn't have the UVM_UNITY_VERSION environment"
         platform.testEnvironment.find { it.trim().startsWith("UVM_UNITY_VERSION=") } == null
@@ -167,7 +166,7 @@ class PlatformSpec extends Specification {
     }
 
 
-    def buildVersion(String version, String apiCompatibilityLevel = null) {
-        return new BuildVersion(version, false, apiCompatibilityLevel)
+    def buildVersion(String label, String version, String apiCompatibilityLevel = null) {
+        return new BuildVersion(label, version, false, apiCompatibilityLevel)
     }
 }

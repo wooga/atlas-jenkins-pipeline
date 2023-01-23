@@ -29,7 +29,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running gradle pipeline with coverage token"
         inSandbox {
-            check.wdkCoverage("label", configMap, "any", "any").each { it.value() }
+            check.wdkCoverage(configMap, "any", "any").each { it.value() }
         }
 
         then: "jenkins coverage plugins are called"
@@ -59,7 +59,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -90,7 +90,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check without sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(config, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -120,7 +120,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check with sonarqube token"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -141,6 +141,8 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         "branchpr"   | "branch" | true  | ""
     }
 
+
+
     @Unroll("runs check step for unity versions #versions")
     def "runs check step for all given versions"() {
         given: "loaded check in a running jenkins build"
@@ -156,38 +158,26 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         }
         when: "running check"
         def checkSteps = inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, releaseType, releaseScope)
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, releaseType, releaseScope)
             checkSteps.each { it.value.call() }
             return checkSteps
         }
 
-        then: "check steps names are in the `check Unity-#version(?optional)(?api)` format"
+        then: "check steps names are in the `check label Unity-version(?optional)(?api)` format"
         def stepNames = checkSteps.collect { it -> it.key }
-        stepNames.size() == versions.size()
-        def expectedSteps = versions.collect {
-            def expectedStepName = it.toString()
-            if(it instanceof Map) {
-                def versionsMap = it as Map
-                expectedStepName = versionsMap.version
-                if(versionsMap.optional) {
-                    expectedStepName += " (optional)"
-                }
-                if(versionsMap.apiCompatibilityLevel) {
-                    expectedStepName += " (${versionsMap.apiCompatibilityLevel})"
-                }
-            }
-            return "check Unity-$expectedStepName".toString()
-        }
-        expectedSteps == stepNames
+        def (expectedSteps, expectedDirs) = versions.collectMany {
+            def (stepName, folderName) = generateStepName(it)
+            def (linuxStepName, linuxFolderName) = generateStepName(it, [label: "linux", optional: true])
+            return [stepName, linuxStepName, folderName, linuxFolderName]
+        }.split {it.startsWith("check") }
+        expectedSteps.toSorted() == stepNames.toSorted()
 
         and: "code checkouted in the right dir"
-        calls["checkout"].length == versions.size()
-        [configMap.unityVersions, checkoutDirs].transpose().each { versionDir ->
-            versionDir[0] == versionDir[1]
-        }
+        calls["checkout"].length == expectedSteps.size()
+        expectedDirs.toSorted() == checkoutDirs.toSorted()
 
         and: "setup unstashed"
-        calls["unstash"].count { it.args[0] == setupStash } == versions.size()
+        calls["unstash"].count { it.args[0] == setupStash } == expectedSteps.size()
 
         and: "gradle check was called"
         calls["sh"].count {
@@ -196,23 +186,25 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
                     call.contains("-Prelease.stage=${releaseType.trim()}") &&
                     call.contains("-Prelease.scope=${releaseScope.trim()}") &&
                     call.contains("check")
-        } == versions.size()
+        } == expectedSteps.size()
 
         and: "nunit results are stored"
         calls["nunit"].count {
             Map args = it.args[0] as Map
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
-        } == versions.size()
+        } == expectedSteps.size()
 
         where:
         versions                                                                     | releaseType | releaseScope | setupStash
         [[version: "2019"]]                                                          | "type"      | "scope"      | "setup_w"
+        [[version: "2019"], [label: "win", version: "2019.4", optional: true]]       | "type"      | "scope"      | "setup_w"
         ["2019"]                                                                     | "type"      | "scope"      | "setup_w"
         [[version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_standard_2_0'],
-         [version: '2020.3.1f1', optional: true, apiCompatibilityLevel: 'net_4_6']]  | "type"      | "scope"      | "setup_w"
+         [version: '2020.3.1f1', optional: false, apiCompatibilityLevel: 'net_4_6']] | "type"      | "scope"      | "setup_w"
         ["2019", "2020"]                                                             | "other "    | "others"     | "stash"
         ["project_version", "2020"]                                                  | "other "    | "others"     | "stash"
+        [[label: "windows", version: "project_version"], "2020"]                     | "other "    | "others"     | "stash"
     }
 
     @Unroll("executes finally steps on check #throwsException for #versions")
@@ -228,7 +220,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each {
                 try {
                     it.value.call()
@@ -242,7 +234,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             Map args = it.args[0] as Map
             return args["failIfNoResults"] == false &&
                     args["testResultsPattern"] == '**/build/reports/unity/test*/*.xml'
-        } == versions.size()
+        } == versions.size() * 2 //times 2 because each version generate an extra linux platform now
 
         where:
         versions                                    | throwsException
@@ -266,7 +258,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -291,7 +283,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", config, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(config, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -314,7 +306,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         Map<String, Map> checkEnvMap = versions.collectEntries { [(it): [:]] }
         Map<String, Map> analysisEnvMap = versions.collectEntries { [(it): [:]] }
         inSandbox { _ ->
-            Map<String, Closure> steps = check.simpleWDK("label", configMap,
+            Map<String, Closure> steps = check.simpleWDK(configMap,
                     { platform ->
                         binding.env.every { checkEnvMap[platform.name][it.key] = it.value }
                     },
@@ -366,7 +358,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         def checkSteps = inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "releaseType", "releaseScope")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "releaseType", "releaseScope")
             checkSteps.each { it.value.call() }
             return checkSteps
         }
@@ -379,7 +371,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             String call = it.args[0]["script"]
             return call.contains("gradlew") &&
                     call.contains(convCheck)
-        } == 1
+        } == 2 //1(normal) + 1(autogenerated linux check)
 
         then: "custom cobertura file was set"
         calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
@@ -412,13 +404,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "releaseType", "releaseScope")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "releaseType", "releaseScope")
             checkSteps.each { it.value.call() }
         }
 
         then: "wrapper test step ran for all platforms"
         def platformCount = configMap["unityVersions"].size()
-        testCount.get() == platformCount
+        testCount.get() == platformCount * 2 //*2 to account for the linux platforms created
         and: "wrapper analysis step ran only once"
         analysisCount.get() == 1
     }
@@ -438,7 +430,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             actualCheckoutDir = this.currentDir
         }
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
@@ -473,13 +465,13 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each { it.value.call() }
         }
 
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
-        stepsDirs.size() == configMap.unityVersions.size() + 1
+        stepsDirs.size() == (configMap.unityVersions.size() * 2) + 1 //times 2 because of generated linux checks
         stepsDirs.every { it == "${checkoutDir}/${checkDir}" }
 
         where:
@@ -497,7 +489,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
         when: "running check"
         inSandbox {
-            Map<String, Closure> checkSteps = check.wdkCoverage("label", configMap, "any", "any")
+            Map<String, Closure> checkSteps = check.wdkCoverage(configMap, "any", "any")
             checkSteps.each {
                 try {
                     it.value.call()
@@ -506,7 +498,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             }
         }
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs ? versions.size() : 0)
+        calls["cleanWs"].length == (clearWs ? versions.size() *2 : 0) //times 2 because of generated linux versions
 
         where:
         versions         | clearWs
@@ -515,5 +507,26 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         ["2019", "2022"] | true
         ["2019", "2022"] | false
         description = clearWs ? "clears" : "doesn't clear"
+    }
+
+    def generateStepName(Object it, Map force = [:]) {
+        def versionsMap = [version: it]
+        if(it instanceof Map) {
+            versionsMap = it as Map
+        }
+        versionsMap.putAll(force)
+
+        def stepName = "check ${versionsMap.label ?: "macos"} Unity-${versionsMap.version}"
+        def folderName = "${versionsMap.label ?: "macos"}_Unity_${versionsMap.version}"
+        if (versionsMap.optional) {
+            stepName += " (optional)"
+            folderName += "_optional"
+        }
+        if (versionsMap.apiCompatibilityLevel) {
+            stepName += " (${versionsMap.apiCompatibilityLevel})"
+            folderName += "_${versionsMap.apiCompatibilityLevel}"
+        }
+        folderName = folderName.replaceAll("\\.","_")
+        return ["$stepName".toString(), folderName.toString()]
     }
 }

@@ -16,7 +16,7 @@ class UnityVersionPlatform {
     }
 
     String getStepDescription() {
-        return "Unity-${buildVersion.toLabel()}"
+        return buildVersion.toDescription()
     }
 
     boolean getOptional() {
@@ -25,7 +25,7 @@ class UnityVersionPlatform {
 
     @Override
     String toString() {
-        return buildVersion.version
+        return buildVersion.toDescription()
     }
 
     boolean equals(o) {

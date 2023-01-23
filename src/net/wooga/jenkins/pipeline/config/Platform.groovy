@@ -46,7 +46,7 @@ class Platform {
         )
     }
 
-    static Platform forWDK(BuildVersion buildVersion, String buildOS, Map config, boolean isMain) {
+    static Platform forWDK(BuildVersion buildVersion, Map config, boolean isMain) {
         def unityEnv = ["UNITY_LOG_CATEGORY=check-${buildVersion.version}"]
         if(buildVersion.hasVersion()) {
             unityEnv.add("UVM_UNITY_VERSION=${buildVersion.version}")
@@ -58,7 +58,7 @@ class Platform {
                 (config.checkoutDir?: buildVersion.toDirectoryName()) as String,
                 (config.checkDir?: ".") as String,
                 buildVersion.version,
-                buildOS,
+                buildVersion.label,
                 false,
                 (config.labels ?: '') as String,
                 mapOrCollection(buildVersion.version, config.testEnvironment) + unityEnv,
@@ -106,17 +106,19 @@ class Platform {
 
     boolean equals(o) {
         if (this.is(o)) return true
-        if (getClass() != o.class) return false
+        if (o == null || getClass() != o.class) return false
 
         Platform platform = (Platform) o
 
-        if (checkDirectory != platform.checkDirectory) return false
+        if (clearWs != platform.clearWs) return false
         if (main != platform.main) return false
         if (runsOnDocker != platform.runsOnDocker) return false
+        if (checkDirectory != platform.checkDirectory) return false
+        if (checkoutDirectory != platform.checkoutDirectory) return false
         if (labels != platform.labels) return false
         if (name != platform.name) return false
         if (os != platform.os) return false
-        if (testEnv != platform.testEnvironment) return false
+        if (testEnv != platform.testEnv) return false
         if (testLabels != platform.testLabels) return false
 
         return true
@@ -124,14 +126,16 @@ class Platform {
 
     int hashCode() {
         int result
-        result = (name != null ? name.hashCode() : 0)
+        result = (checkoutDirectory != null ? checkoutDirectory.hashCode() : 0)
         result = 31 * result + (checkDirectory != null ? checkDirectory.hashCode() : 0)
+        result = 31 * result + (name != null ? name.hashCode() : 0)
         result = 31 * result + (os != null ? os.hashCode() : 0)
         result = 31 * result + (labels != null ? labels.hashCode() : 0)
         result = 31 * result + (testLabels != null ? testLabels.hashCode() : 0)
         result = 31 * result + (testEnv != null ? testEnv.hashCode() : 0)
         result = 31 * result + (runsOnDocker ? 1 : 0)
         result = 31 * result + (main ? 1 : 0)
+        result = 31 * result + (clearWs ? 1 : 0)
         return result
     }
 
