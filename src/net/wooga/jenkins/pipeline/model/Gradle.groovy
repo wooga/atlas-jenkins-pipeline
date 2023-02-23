@@ -30,9 +30,9 @@ class Gradle {
     def wrapper(String command, Boolean returnStatus = false,
                                 Boolean returnStdout = false) {
         if (jenkins.isUnix()) {
-            return jenkins.sh(script: "./gradlew --no-daemon ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
+            return jenkins.sh(script: "./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
         } else {
-            return jenkins.bat(script: "gradlew.bat --no-daemon ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
+            return jenkins.bat(script: "gradlew.bat ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
         }
     }
 
