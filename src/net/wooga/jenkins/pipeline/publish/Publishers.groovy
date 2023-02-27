@@ -83,7 +83,7 @@ class Publishers {
 
     def unityArtifactoryPaket(String unityPath, String artifactorySecret,
                               String checkTask = PipelineConventions.standard.checkTask) {
-        jenkins.withEnv(["UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
+        jenkins.withEnv(["UNITY_PACKAGE_MANAGER = paket", "UNITY_PATH=${unityPath}", "UNITY_LOG_CATEGORY=build"]) {
             jenkins.withCredentials([jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
                                      jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
                 gradle.wrapper("${releaseType} " +
@@ -105,4 +105,19 @@ class Publishers {
         }
     }
 
+    def unityArtifactoryUpm(String artifactorySecret) {
+        jenkins.withEnv(["UNITY_PACKAGE_MANAGER = upm", "UNITY_LOG_CATEGORY=build"]) {
+            jenkins.withCredentials([jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"UPM_USERNAME", passwordVariable: "UPM_PASSWORD"),
+                                     jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
+                                     jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "nugetkey")]) {
+
+
+                gradle.wrapper("publish " +
+                        "-Ppaket.publish.repository='${releaseType}' " +
+                        "-Ppublish.repository='${releaseType}' " +
+                        "-PversionBuilder.stage=${releaseType} " +
+                        "-PversionBuilder.scope=${releaseScope}")
+            }
+        }
+    }
 }
