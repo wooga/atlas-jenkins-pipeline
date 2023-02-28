@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.config.WDKConfig
@@ -14,13 +15,13 @@ def call(Map configMap = [unityVersions: []]) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  configMap.testWrapper = { def testOperationCls, Platform plat ->
+  configMap.testWrapper = { Step testOperation, Platform plat ->
     if(env."UNITY_PACKAGE_MANAGER" == "upm") {
       withCredentials([file(credentialsId: 'atlas-upm-credentials', variable: "UPM_USER_CONFIG_FILE")]) {
-        testOperationCls(plat)
+        testOperation(plat)
       }
     } else {
-      testOperationCls(plat)
+      testOperation(plat)
     }
 
   }
@@ -223,7 +224,6 @@ def call(Map configMap = [unityVersions: []]) {
         }
 
         environment {
-          UNITY_PACKAGE_MANAGER = 'upm'
           GRGIT = credentials('github_access')
           UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
           GRGIT_USER = "${GRGIT_USR}"

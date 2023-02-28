@@ -10,10 +10,14 @@ class FakeCredentialStorage {
         keychain = new HashMap<>()
     }
 
+    def addFile(String key, File secretFile) {
+        keychain[key] = secretFile.absolutePath
+        return secretFile
+    }
     def addFile(String key, String content) {
         def secretFile = Files.createTempFile(key, ".secret").toFile()
         secretFile << content
-        keychain[key] = secretFile.absolutePath
+        return addFile(key, secretFile)
     }
 
     def addString(String key, String value) {

@@ -1,16 +1,16 @@
 package scripts
 
-import com.lesfurets.jenkins.unit.MethodCall
+
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
 
 class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildUnityWdkV2.groovy"
 
-    @Unroll("publishes #releaseType-#releaseScope release ")
-    def "publishes WDK with #release release type"() {
+    @Unroll("publishes UPM/Paket WDK #releaseType-#releaseScope release")
+    def "publishes UPM/Paket WDK with #release release type"() {
         given: "credentials holder with publish keys"
-        credentials.addString("artifactory_read", "usr:pwd")
+        credentials.addUsernamePassword("artifactory_publish", "usr", "pwd")
         credentials.addUsernamePassword('github_access', "usr", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
@@ -24,23 +24,26 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         inSandbox { buildWDK(unityVersions: ["2019"], logLevel: "level") }
 
         then: "runs gradle with parameters"
-        assertShCallWith("gradlew",
+        assertShCallsWith("gradlew",
                 "publish",
                 "-Ppaket.publish.repository='${releaseType}'",
                 "-Ppublish.repository='${releaseType}'",
                 "-PversionBuilder.stage=${releaseType}",
-                "-PversionBuilder.scope=${releaseScope}")
+                "-PversionBuilder.scope=${releaseScope}"
+        )
         and: "has set up environment"
-        def env = usedEnvironments.last()
+        def env = usedEnvironments[usedEnvironments.size()-2]
         hasBaseEnvironment(env, "level")
-        env.with {
-            GRGIT == this.credentials['github_access'] &&
-                    GRGIT_USER == "usr" &&//"${GRGIT_USR}"
-                    GRGIT_PASS == "pwd" &&//"${GRGIT_PSW}"
-                    GITHUB_LOGIN == "usr" &&//"${GRGIT_USR}"
-                    GITHUB_PASSWORD == "pwd" &&//"${GRGIT_PSW}"
-                    UNITY_LOG_CATEGORY == "build"
-        }
+        env.GRGIT == this.credentials['github_access']
+        env.GRGIT_USER == "usr" //"${GRGIT_USR}"
+        env.GRGIT_PASS == "pwd" //"${GRGIT_PSW}"
+        env.GITHUB_LOGIN == "usr" //"${GRGIT_USR}"
+        env.GITHUB_PASSWORD == "pwd" //"${GRGIT_PSW}"
+        env.UNITY_PACKAGE_MANAGER == "upm"
+        env.UNITY_LOG_CATEGORY == "build"
+        env.UPM_USERNAME == "usr" //artifactory_publish user
+        env.UPM_PASSWORD == "pwd" //artifactory_publish password
+        env.NUGET_KEY == this.credentials['artifactory_publish']
 
         where:
         releaseType | releaseScope
@@ -52,8 +55,9 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
 
 
     @Unroll("assemblies WDK for #releaseType-#releaseScope release ")
-    def "assemblies WDK with given release data"() {
+    def "assemblies UPM WDK with given release data"() {
         given: "needed credentials"
+        def upmCredsFile = credentials.addFile("atlas-upm-credentials", "creds")
         credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
@@ -63,9 +67,8 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
 
         when: "running buildWDKAutoSwitch pipeline"
         inSandbox { buildWDK(unityVersions: ["2018"], logLevel: "level") }
-
         then: "runs gradle with parameters"
-        assertShCallWith("gradlew",
+        assertShCallsWith("gradlew",
                 "-Prelease.stage=${releaseType}",
                 "-Prelease.scope=${releaseScope}",
                 "assemble")
@@ -73,9 +76,13 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         and: "has set up environment"
         def env = usedEnvironments.first()
         hasBaseEnvironment(env, "level")
-        env.with {
-            UNITY_LOG_CATEGORY == "build"
-        }
+        env.UNITY_LOG_CATEGORY == "build"
+        env.UNITY_PACKAGE_MANAGER == "upm"
+        env.UPM_USER_CONFIG_FILE == upmCredsFile.absolutePath
+
+        and: "stashes gradle cache and build outputs"
+        stash['wdk_output']["includes"] ==".gradle/**, **/build/outputs/**/*"
+
         where:
         releaseType | releaseScope
         "snapshot"  | "patch"
@@ -84,8 +91,8 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         "final"     | "major"
     }
 
-    @Unroll("sets up WDK for #releaseType-#releaseScope release ")
-    def "sets up WDK with given release data"() {
+    @Unroll("sets up WDK (UPM and Paket) for #releaseType-#releaseScope release")
+    def "sets up WDK (UPM and Paket) with given release data"() {
         given: "needed credentials"
         credentials.addUsernamePassword("artifactory_read", "key", "pwd")
         and: "build plugin with publish parameters"
@@ -100,20 +107,22 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         }
 
         then: "runs gradle with parameters"
-        assertShCallWith("gradlew",
+        assertShCallsWith(2,"gradlew", //2 calls 1 for upm, 1 for paket
                 "-Prelease.stage=${releaseType}",
                 "-Prelease.scope=${releaseScope}",
                 "setup")
-        and: "refresh dependencies if flagged to"
-        if (forceRefreshDependencies) {
-            calls.has["sh"] { MethodCall call ->
-                String args = call.args[0]["script"]
-                args.contains("gradlew") &&
-                        args.contains(" --refresh-dependencies")
-            }
+
+        and: "stashes upm setup"
+        stash['upm_setup_w'].with {
+            assert useDefaultExcludes == true
+            assert includes == "**/Packages/packages-lock.json, **/PackageCache/**, **/build/**"
         }
-        Map env = binding.env
-        hasBaseEnvironment(env, "level")
+        and: "stashes paket setup"
+        stash['paket_setup_w'].with {
+            useDefaultExcludes == true
+            includes == "paket.lock, .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"
+        }
+        //TODO: env asserts need a better way to associate environment with stage/step
 
         where:
         releaseType | releaseScope | forceRefreshDependencies
@@ -157,12 +166,13 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         }
     }
 
-    def assertShCallWith(String... elements) {
+    def assertShCallsWith(int count = 1, String... elements) {
         def callArgs = calls["sh"].collect { it.args[0]["script"] as String }
-        def found = callArgs.any { args ->
+        def found = callArgs.findAll { args ->
             elements.every { args.contains(it) }
         }
-        assert found, "No sh call with arguments [${elements.join(", ")}] found in:\n [${pprintList(callArgs)}]"
+        assert found.size() == count,
+                "${found.size()} sh call with arguments [${elements.join(", ")}] found in:\n [${pprintList(callArgs)}]"
         return found
     }
 

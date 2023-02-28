@@ -21,7 +21,7 @@ class FakeEnvironment {
     void runWithEnv(List<String> envStrs, Closure cls) {
         def envMap = envStrs.
                 collect{it.toString()}.
-                collectEntries{String envStr -> [(envStr.split("=")[0]): envStr.split("=")[1]]}
+                collectEntries{String envStr -> [(envStr.split("=")[0].trim()): envStr.split("=")[1].trim()]}
         runWithEnv(envMap, cls)
     }
     void runWithEnv(Map env, Closure cls) {

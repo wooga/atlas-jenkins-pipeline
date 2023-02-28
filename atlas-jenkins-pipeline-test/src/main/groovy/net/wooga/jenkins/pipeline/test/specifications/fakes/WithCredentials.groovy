@@ -1,9 +1,5 @@
 package net.wooga.jenkins.pipeline.test.specifications.fakes
 
-import sun.security.krb5.internal.ccache.FileCredentialsCache
-
-import java.nio.file.Files
-
 class WithCredentials {
 
     final FakeCredentialStorage credStorage
@@ -50,26 +46,26 @@ class WithCredentials {
 
 
     def bindCredentials(List creds, Closure operation) {
-        Map clsDelegate = [:]
+        Map credsEnv = [:]
         creds.each {
             if(it instanceof FileCredentials) {
                 def fileCreds = it as FileCredentials
                 def secret = credStorage.getFile(fileCreds.key)
-                clsDelegate[fileCreds.filePathVariable] = secret.absolutePath
+                credsEnv[fileCreds.filePathVariable] = secret.absolutePath
             }
             if(it instanceof StringCredentials) {
                 def strCreds = it as StringCredentials
-                clsDelegate[strCreds.variable] = credStorage.getSecretValueAsString(strCreds.key)
+                credsEnv[strCreds.variable] = credStorage.getSecretValueAsString(strCreds.key)
             }
             if(it instanceof UsernamePasswordCredentials) {
                 def upCreds = it as UsernamePasswordCredentials
                 def secrets = credStorage.getUsernamePassword(upCreds.key)
-                clsDelegate[upCreds.usernameVariable] = secrets[0]
-                clsDelegate[upCreds.passwordVariable] = secrets[1]
+                credsEnv[upCreds.usernameVariable] = secrets[0]
+                credsEnv[upCreds.passwordVariable] = secrets[1]
             }
         }
-        operation.setDelegate(clsDelegate)
-        return environment.runWithEnv(clsDelegate, operation)
+        operation.setDelegate(credsEnv)
+        return environment.runWithEnv(credsEnv, operation)
     }
 
     static class StringCredentials {
