@@ -144,6 +144,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
                         jenkinsTest.paramInterceptor : //string() from parameters clause
                         WithCredentials.string(params) //string() from withCredentials() context
             }
+            registerAllowedMethod("file", [Map]) { WithCredentials.file(it) }
             registerAllowedMethod("withCredentials", [List.class, Closure.class],
                                             WithCredentials.&bindCredentials.curry(credentials, environment))
             //needed as utils scripts are dependent on jenkins sandbox

@@ -1,0 +1,173 @@
+package scripts
+
+import com.lesfurets.jenkins.unit.MethodCall
+import spock.lang.Unroll
+import tools.DeclarativeJenkinsSpec
+
+class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
+    private static final String SCRIPT_PATH = "vars/buildUnityWdkV2.groovy"
+
+    @Unroll("publishes #releaseType-#releaseScope release ")
+    def "publishes WDK with #release release type"() {
+        given: "credentials holder with publish keys"
+        credentials.addString("artifactory_read", "usr:pwd")
+        credentials.addUsernamePassword('github_access', "usr", "pwd")
+        and: "build plugin with publish parameters"
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_STAGE = releaseType
+            params.RELEASE_SCOPE = releaseScope
+            env.GRGIT_USR = "usr"
+            env.GRGIT_PSW = "pwd"
+        }
+
+        when: "running buildWDKAutoSwitch pipeline"
+        inSandbox { buildWDK(unityVersions: ["2019"], logLevel: "level") }
+
+        then: "runs gradle with parameters"
+        assertShCallWith("gradlew",
+                "publish",
+                "-Ppaket.publish.repository='${releaseType}'",
+                "-Ppublish.repository='${releaseType}'",
+                "-PversionBuilder.stage=${releaseType}",
+                "-PversionBuilder.scope=${releaseScope}")
+        and: "has set up environment"
+        def env = usedEnvironments.last()
+        hasBaseEnvironment(env, "level")
+        env.with {
+            GRGIT == this.credentials['github_access'] &&
+                    GRGIT_USER == "usr" &&//"${GRGIT_USR}"
+                    GRGIT_PASS == "pwd" &&//"${GRGIT_PSW}"
+                    GITHUB_LOGIN == "usr" &&//"${GRGIT_USR}"
+                    GITHUB_PASSWORD == "pwd" &&//"${GRGIT_PSW}"
+                    UNITY_LOG_CATEGORY == "build"
+        }
+
+        where:
+        releaseType | releaseScope
+        "snapshot"  | "patch"
+        "preflight" | "minor"
+        "rc"        | "minor"
+        "final"     | "major"
+    }
+
+
+    @Unroll("assemblies WDK for #releaseType-#releaseScope release ")
+    def "assemblies WDK with given release data"() {
+        given: "needed credentials"
+        credentials.addUsernamePassword("artifactory_read", "key", "pwd")
+        and: "build plugin with publish parameters"
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_STAGE = releaseType
+            params.RELEASE_SCOPE = releaseScope
+        }
+
+        when: "running buildWDKAutoSwitch pipeline"
+        inSandbox { buildWDK(unityVersions: ["2018"], logLevel: "level") }
+
+        then: "runs gradle with parameters"
+        assertShCallWith("gradlew",
+                "-Prelease.stage=${releaseType}",
+                "-Prelease.scope=${releaseScope}",
+                "assemble")
+
+        and: "has set up environment"
+        def env = usedEnvironments.first()
+        hasBaseEnvironment(env, "level")
+        env.with {
+            UNITY_LOG_CATEGORY == "build"
+        }
+        where:
+        releaseType | releaseScope
+        "snapshot"  | "patch"
+        "preflight" | "minor"
+        "rc"        | "minor"
+        "final"     | "major"
+    }
+
+    @Unroll("sets up WDK for #releaseType-#releaseScope release ")
+    def "sets up WDK with given release data"() {
+        given: "needed credentials"
+        credentials.addUsernamePassword("artifactory_read", "key", "pwd")
+        and: "build plugin with publish parameters"
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_STAGE = releaseType
+            params.RELEASE_SCOPE = releaseScope
+        }
+
+        when: "running buildWDKAutoSwitch pipeline"
+        inSandbox {
+            buildWDK(unityVersions: ["2018"], logLevel: "level", forceRefreshDependencies: forceRefreshDependencies)
+        }
+
+        then: "runs gradle with parameters"
+        assertShCallWith("gradlew",
+                "-Prelease.stage=${releaseType}",
+                "-Prelease.scope=${releaseScope}",
+                "setup")
+        and: "refresh dependencies if flagged to"
+        if (forceRefreshDependencies) {
+            calls.has["sh"] { MethodCall call ->
+                String args = call.args[0]["script"]
+                args.contains("gradlew") &&
+                        args.contains(" --refresh-dependencies")
+            }
+        }
+        Map env = binding.env
+        hasBaseEnvironment(env, "level")
+
+        where:
+        releaseType | releaseScope | forceRefreshDependencies
+        "snapshot"  | "patch"      | false
+        "preflight" | "patch"      | false
+        "rc"        | "minor"      | false
+        "final"     | "major"      | false
+        "snapshot"  | "patch"      | true
+        "preflight" | "patch"      | true
+        "rc"        | "minor"      | true
+        "final"     | "major"      | true
+    }
+
+    @Unroll("#description workspace steps when clearWs is #clearWs")
+    def "clears steps if clearWs is set"() {
+        given: "loaded check in a running jenkins build"
+        def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
+            params.RELEASE_STAGE = "any"
+            params.RELEASE_SCOPE = "any"
+        }
+
+        when: "running pipeline"
+        inSandbox {
+            buildWDK(unityVersions: ["2019"], clearWs: clearWs)
+        }
+
+        then: "all workspaces are clean"
+        calls["cleanWs"].length == (clearWs? 4 : 0) //setup, build, hash, and publish steps
+
+        where:
+        clearWs << [true, false]
+        description = clearWs? "clears" : "doesn't clear"
+    }
+
+    def hasBaseEnvironment(Map env, String logLevel) {
+        env.with {
+            UVM_AUTO_SWITCH_UNITY_EDITOR == "YES" &&
+                    UVM_AUTO_INSTALL_UNITY_EDITOR == "YES" &&
+                    LOG_LEVEL == logLevel &&
+                    ATLAS_READ == this.credentials["artifactory_read"]
+        }
+    }
+
+    def assertShCallWith(String... elements) {
+        def callArgs = calls["sh"].collect { it.args[0]["script"] as String }
+        def found = callArgs.any { args ->
+            elements.every { args.contains(it) }
+        }
+        assert found, "No sh call with arguments [${elements.join(", ")}] found in:\n [${pprintList(callArgs)}]"
+        return found
+    }
+
+    def pprintList(List<?> list) {
+        return list.collect { it.toString() }.join("\n")
+    }
+
+}

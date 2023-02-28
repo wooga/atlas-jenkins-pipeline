@@ -13,18 +13,19 @@ def call(Map configMap = [unityVersions: []]) {
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL ?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
-  configMap.testWrapper = { Closure testOperation, Platform plat ->
+  configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
+  configMap.testWrapper = { def testOperationCls, Platform plat ->
     if(env."UNITY_PACKAGE_MANAGER" == "upm") {
       withCredentials([file(credentialsId: 'atlas-upm-credentials', variable: "UPM_USER_CONFIG_FILE")]) {
-        testOperation(plat)
+        testOperationCls(plat)
       }
     } else {
-      testOperation(plat)
+      testOperationCls(plat)
     }
 
   }
 
-  def config = WDKConfig.fromConfigMap("macos", configMap, this)
+  def config = WDKConfig.fromConfigMap(configMap, this)
   def packageManagerEnvVar = "UNITY_PACKAGE_MANAGER"
 
   // We can only configure static pipelines atm.
@@ -50,6 +51,7 @@ def call(Map configMap = [unityVersions: []]) {
       choice(name: 'UPM_RESOLUTION_STRATEGY', choices: ["", "lowest", "highestPatch", "highestMinor", "highest"], description: 'Override the resolution strategy for indirect dependencies')
       booleanParam(name: 'STACK_TRACE', defaultValue: false, description: 'Whether to log truncated stacktraces')
       booleanParam(name: 'REFRESH_DEPENDENCIES', defaultValue: false, description: 'Whether to refresh dependencies')
+      booleanParam(name: 'CLEAR_WS', defaultValue: false, description: 'Whether to clear workspaces after build')
     }
 
     stages {
@@ -58,7 +60,7 @@ def call(Map configMap = [unityVersions: []]) {
         parallel {
           stage("setup paket") {
             agent {
-              label "atlas && $config.buildLabel"
+              label "atlas && macos"
             }
             environment {
               UNITY_PACKAGE_MANAGER = 'paket'
@@ -79,14 +81,18 @@ def call(Map configMap = [unityVersions: []]) {
               }
 
               cleanup {
-                cleanWs()
+                script {
+                  if(config.mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
 
           stage("setup upm") {
             agent {
-              label "atlas && $config.buildLabel"
+              label "atlas && macos"
             }
             environment {
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
@@ -110,7 +116,11 @@ def call(Map configMap = [unityVersions: []]) {
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
-                cleanWs()
+                script {
+                  if(config.mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
@@ -119,7 +129,7 @@ def call(Map configMap = [unityVersions: []]) {
 
       stage("Validate package resolution") {
         agent {
-          label "atlas && $config.buildLabel"
+          label "atlas && macos"
         }
         steps {
           unstash 'upm_setup_w'
@@ -148,7 +158,7 @@ def call(Map configMap = [unityVersions: []]) {
 
           stage('assemble package') {
             agent {
-              label "atlas && $config.buildLabel"
+              label "atlas && macos"
             }
             environment {
               UNITY_PACKAGE_MANAGER = 'upm'
@@ -171,7 +181,11 @@ def call(Map configMap = [unityVersions: []]) {
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
-                cleanWs()
+                script {
+                  if(config.mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
@@ -186,12 +200,12 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                parallel paket:{
+                parallel paket: {
                   withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
                     parallel checkSteps(config, "paket check unity ", "paket_setup_w")
                   }
                 },
-                upm:{
+                upm: {
                   withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
@@ -205,7 +219,7 @@ def call(Map configMap = [unityVersions: []]) {
 
       stage('publish') {
         agent {
-          label "atlas && $config.buildLabel"
+          label "atlas && macos"
         }
 
         environment {
@@ -232,7 +246,11 @@ def call(Map configMap = [unityVersions: []]) {
             archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
           }
           cleanup {
-            cleanWs()
+            script {
+              if(config.mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
           }
         }
       }

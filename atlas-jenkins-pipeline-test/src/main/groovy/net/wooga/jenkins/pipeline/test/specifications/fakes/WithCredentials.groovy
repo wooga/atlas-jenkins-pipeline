@@ -1,5 +1,9 @@
 package net.wooga.jenkins.pipeline.test.specifications.fakes
 
+import sun.security.krb5.internal.ccache.FileCredentialsCache
+
+import java.nio.file.Files
+
 class WithCredentials {
 
     final FakeCredentialStorage credStorage
@@ -13,6 +17,14 @@ class WithCredentials {
         this.credStorage = credStorage
         this.environment =  environment
 
+    }
+
+    static FileCredentials file(Map contents) {
+        return new FileCredentials().with {
+            key = contents.credentialsId
+            filePathVariable = contents.variable
+            return it
+        }
     }
 
     static StringCredentials string(Map contents) {
@@ -40,6 +52,11 @@ class WithCredentials {
     def bindCredentials(List creds, Closure operation) {
         Map clsDelegate = [:]
         creds.each {
+            if(it instanceof FileCredentials) {
+                def fileCreds = it as FileCredentials
+                def secret = credStorage.getFile(fileCreds.key)
+                clsDelegate[fileCreds.filePathVariable] = secret.absolutePath
+            }
             if(it instanceof StringCredentials) {
                 def strCreds = it as StringCredentials
                 clsDelegate[strCreds.variable] = credStorage.getSecretValueAsString(strCreds.key)
@@ -64,6 +81,11 @@ class WithCredentials {
         String key
         String usernameVariable
         String passwordVariable
+    }
+
+    static class FileCredentials {
+        String key
+        String filePathVariable
     }
 
 
