@@ -27,5 +27,5 @@ gradlePlugin {
 
 dependencies {
     implementation 'org.ajoberstar.grgit:grgit-core:[4,5)'
-    testImplementation 'com.wooga.spock.extensions:spock-github-extension:0.2.0'
+    testImplementation 'com.wooga.spock.extensions:spock-github-extension:0.4.0'
 }
