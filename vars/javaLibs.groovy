@@ -10,6 +10,8 @@ import net.wooga.jenkins.pipeline.config.JavaConfig
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [:], Closure stepsConfigCls) {
+  def defaultReleaseType = "snapshot"
+  def defaultReleaseScope = ""
   //organize configs inside neat object. Defaults are defined there as well
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
@@ -27,8 +29,8 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
     }
 
     parameters {
-      choice(choices: ["snapshot", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
-      choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+      choice(choices: [defaultReleaseType, "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+      choice(choices: [defaultReleaseScope, "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
@@ -39,6 +41,10 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
       stage('Preparation') {
         agent any
         steps {
+          script {
+            env.RELEASE_TYPE = params.RELEASE_TYPE?: defaultReleaseType
+            env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
+          }
           sendSlackNotification "STARTED", true
         }
 
@@ -57,7 +63,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         agent none
         when {
           beforeAgent true
-          expression { return actions.check.runWhenOrElse { params.RELEASE_TYPE == "snapshot" } }
+          expression { return actions.check.runWhenOrElse { env.RELEASE_TYPE == "snapshot" } }
         }
 
         steps {
@@ -86,7 +92,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         when {
           beforeAgent true
           //TODO this should be variable, as private libs publishes on snapshot
-          expression { return actions.publish.runWhenOrElse { params.RELEASE_TYPE != "snapshot" }  }
+          expression { return actions.publish.runWhenOrElse { env.RELEASE_TYPE != "snapshot" }  }
         }
         agent {
           label "$mainPlatform && atlas"

@@ -13,6 +13,9 @@ import net.wooga.jenkins.pipeline.setup.Setups
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [ unityVersions:[] ]) {
+  def defaultReleaseType = "snapshot"
+  def defaultReleaseScope = ""
+
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
@@ -38,8 +41,8 @@ def call(Map configMap = [ unityVersions:[] ]) {
 
     parameters {
       // TODO: Rename RELEASE_TYPE to RELEASE_STAGE
-      choice(choices: ["snapshot", "preflight", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
-      choice(choices: ["", "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
+      choice(choices: [defaultReleaseType, "preflight", "rc", "final"], description: 'Choose the distribution type', name: 'RELEASE_TYPE')
+      choice(choices: [defaultReleaseScope, "patch", "minor", "major"], description: 'Choose the change scope', name: 'RELEASE_SCOPE')
       choice(choices: ["", "quiet", "info", "warn", "debug"], description: 'Choose the log level', name: 'LOG_LEVEL')
       booleanParam(defaultValue: false, description: 'Whether to log truncated stacktraces', name: 'STACK_TRACE')
       booleanParam(defaultValue: false, description: 'Whether to refresh dependencies', name: 'REFRESH_DEPENDENCIES')
@@ -57,8 +60,10 @@ def call(Map configMap = [ unityVersions:[] ]) {
         steps {
           sendSlackNotification "STARTED", true
           script {
+            env.RELEASE_TYPE = params.RELEASE_TYPE?: defaultReleaseType
+            env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
             def setup = config.pipelineTools.setups
-            setup.wdk(params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+            setup.wdk(env.RELEASE_TYPE as String, env.RELEASE_SCOPE as String)
           }
         }
 
@@ -93,7 +98,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
               unstash 'setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
-                def nupkgFile = assembler.unityWDK("build", params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String)
+                def nupkgFile = assembler.unityWDK("build", env.RELEASE_TYPE as String, env.RELEASE_SCOPE as String)
                 sh script: "cp ${nupkgFile?.path} nupkg-macos.nupkg"
                 stash(name: "macos_wdk_nupkg", includes: "nupkg-macos.nupkg")
               }
@@ -148,7 +153,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
             when {
               beforeAgent true
               expression {
-                return params.RELEASE_TYPE == "snapshot"
+                return env.RELEASE_TYPE == "snapshot"
               }
             }
 
@@ -156,7 +161,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
               script {
                 def checks = config.pipelineTools.checks.forWDKPipelines()
                 def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-                        params.RELEASE_TYPE as String, params.RELEASE_SCOPE as String,
+                        env.RELEASE_TYPE as String, env.RELEASE_SCOPE as String,
                         config.checkArgs, config.conventions)
                   parallel stepsForParallel
               }
@@ -215,7 +220,7 @@ def call(Map configMap = [ unityVersions:[] ]) {
             def unityExecPackagePath = env.UNITY_EXEC_PACKAGE_PATH?: ""
             def unityPath = "${applicationsHome}/${config.unityVersions[0].stepDescription}/${unityExecPackagePath}"
 
-            def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
+            def publisher = config.pipelineTools.createPublishers(env.RELEASE_TYPE, env.RELEASE_SCOPE)
             publisher.unityArtifactoryPaket(unityPath, 'artifactory_publish')
           }
         }

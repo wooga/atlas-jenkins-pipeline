@@ -3,6 +3,7 @@ package scripts
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
+import tools.GradleInvocation
 
 class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildJavaLibraryOSSRH.groovy"
@@ -12,7 +13,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         binding.setVariable("BRANCH_NAME", "any")
     }
 
-    def "posts coveralls results to coveralls server" () {
+    def "posts coveralls results to coveralls server"() {
         given: "loaded buildJavaLibrary in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
@@ -26,7 +27,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         inSandbox { buildJavaLibrary(coverallsToken: coverallsToken) }
 
         then: "request is sent to coveralls webhook"
-        calls.has["httpRequest"]{ MethodCall call ->
+        calls.has["httpRequest"] { MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -54,13 +55,15 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         then: "runs gradle with parameters"
         def gradleCall = getShGradleCalls().first()
         skipsRelease || (gradleCall != null)
-        skipsRelease ^ gradleCall.contains(releaseType)
-        skipsRelease ^ gradleCall.contains("-Prelease.stage=${releaseType}")
-        skipsRelease ^ gradleCall.contains("-Prelease.scope=${releaseScope}")
-        skipsRelease ^ gradleCall.contains("-x check")
+        def publishCall = GradleInvocation.parseCommandLine(gradleCall)
+        skipsRelease ^ publishCall.tasks.contains(releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.stage"] == (releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.scope"] == (releaseScope?: "")
+        skipsRelease ^ publishCall.containsRaw("-x check")
 
         where:
         releaseType | releaseScope | skipsRelease
+        null        | null         | true
         "snapshot"  | "patch"      | true
         "rc"        | "minor"      | false
         "final"     | "major"      | false

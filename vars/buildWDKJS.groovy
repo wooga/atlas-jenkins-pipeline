@@ -51,6 +51,10 @@ def call(Map configMap = [:]) {
             stage('Preparation') {
                 agent any
                 steps {
+                    script {
+                        env.RELEASE_TYPE = params.RELEASE_TYPE?: "snapshot"
+                        env.RELEASE_SCOPE = params.RELEASE_SCOPE?: ""
+                    }
                     sendSlackNotification "STARTED", true
                 }
             }
@@ -59,7 +63,7 @@ def call(Map configMap = [:]) {
                 when {
                     beforeAgent true
                     expression {
-                        return params.RELEASE_TYPE == "snapshot"
+                        return env.RELEASE_TYPE == "snapshot"
                     }
                 }
 
@@ -87,7 +91,7 @@ def call(Map configMap = [:]) {
                 when {
                     beforeAgent true
                     expression {
-                        return params.RELEASE_TYPE != "snapshot" || params.BUILD_ARTIFACTS
+                        return env.RELEASE_TYPE != "snapshot" || params.BUILD_ARTIFACTS
                     }
                 }
 
@@ -97,7 +101,7 @@ def call(Map configMap = [:]) {
 
                 steps {
                     script {
-                        def publisher = config.pipelineTools.createPublishers(params.RELEASE_TYPE, params.RELEASE_SCOPE)
+                        def publisher = config.pipelineTools.createPublishers(env.RELEASE_TYPE, env.RELEASE_SCOPE)
                         publisher.npm('atlas_npm_credentials')
                     }
                 }

@@ -3,6 +3,7 @@ package scripts
 import com.lesfurets.jenkins.unit.MethodCall
 import spock.lang.Unroll
 import tools.DeclarativeJenkinsSpec
+import tools.GradleInvocation
 
 class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/buildPrivateJavaLibrary.groovy"
@@ -12,7 +13,7 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         binding.setVariable("BRANCH_NAME", "any")
     }
 
-    def "posts coveralls results to coveralls server" () {
+    def "posts coveralls results to coveralls server"() {
         given: "loaded buildJavaLibrary in a successful build"
         helper.registerAllowedMethod("httpRequest", [LinkedHashMap]) {}
         def buildJavaLibrary = loadSandboxedScript(SCRIPT_PATH) {
@@ -26,7 +27,7 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         inSandbox { buildJavaLibrary(coverallsToken: coverallsToken) }
 
         then: "request is sent to coveralls webhook"
-        calls.has["httpRequest"]{ MethodCall call ->
+        calls.has["httpRequest"] { MethodCall call ->
             Map params = call.args[0] as Map
             return params["httpMode"] == "POST" &&
                     params["ignoreSslErrors"] == true &&
@@ -52,17 +53,20 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
         then: "runs gradle with parameters"
         def gradleCalls = getShGradleCalls()
-        def publishCall = gradleCalls.find { it.contains(releaseType) }
-        skipsRelease || (publishCall != null)
-        skipsRelease ^ publishCall.contains(releaseType)
-        skipsRelease ^ publishCall.contains("-Partifactory.user=user")
-        skipsRelease ^ publishCall.contains("-Partifactory.password=key")
-        skipsRelease ^ publishCall.contains("-Prelease.stage=${releaseType}")
-        skipsRelease ^ publishCall.contains("-Prelease.scope=${releaseScope}")
-        skipsRelease ^ publishCall.contains("-x check")
+        def publishCallStr = gradleCalls.find { it.contains( releaseType?: "snapshot") }
+        skipsRelease || (publishCallStr != null)
+
+        def publishCall = GradleInvocation.parseCommandLine(publishCallStr)
+        skipsRelease ^ publishCall.tasks.contains(releaseType?: "snapshot")
+        skipsRelease ^ publishCall["artifactory.user"] == "user"
+        skipsRelease ^ publishCall["artifactory.password"] == "key"
+        skipsRelease ^ publishCall["release.stage"] == (releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.scope"] == releaseScope
+        skipsRelease ^ publishCall.containsRaw("-x check")
 
         where:
         releaseType | releaseScope | skipsRelease
+        null        | null         | false
         "snapshot"  | "patch"      | false
         "rc"        | "minor"      | false
         "final"     | "major"      | false
@@ -101,4 +105,7 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         publishEnv["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
         publishEnv["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
     }
+
+
 }
+
