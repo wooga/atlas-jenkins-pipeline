@@ -21,6 +21,7 @@ class EnclosureCreator {
             def nodeLabels = platformLabels && !platformLabels.empty ?
                     "atlas && ${platform.generateTestLabelsString()}" : "atlas"
             jenkins.node(nodeLabels) {
+                jenkins.echo("Running on: ${jenkins.env.NODE_NAME}")
                 jenkins.withEnv(testEnvironment) {
                     try {
                         mainCls.call()
