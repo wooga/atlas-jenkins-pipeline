@@ -24,7 +24,7 @@ repositories {
 
 dependencies {
     // Use the latest Groovy version for building this library
-    api "com.lesfurets:jenkins-pipeline-unit:1.9"
+    api "com.lesfurets:jenkins-pipeline-unit:1.19"
     implementation 'org.codehaus.groovy:groovy-all:2.4.+'
     implementation "org.spockframework:spock-core:1.3-groovy-2.4"
     implementation  group: "org.jenkins-ci.plugins", name: "script-security", version:"1158.v7c1b_73a_69a_08", ext: "jar"
