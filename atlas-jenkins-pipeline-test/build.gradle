@@ -18,7 +18,7 @@ repositories {
         url = uri('https://repo.jenkins-ci.org/releases/')
     }
     maven {
-        url = uri("http://repo.jenkins-ci.org/public")
+        url = uri("https://repo.jenkins-ci.org/public")
     }
 }
 
