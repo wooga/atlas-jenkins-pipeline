@@ -43,7 +43,6 @@ def call(Map configMap = [unityVersions: []]) {
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
       LOG_LEVEL = "${config.gradleArgs.logLevel}"
       ATLAS_READ = credentials('artifactory_read') //needed for gradle sto read private packages
-      JAVA_HOME = "$JAVA_11_HOME"
     }
 
     parameters {
@@ -66,6 +65,7 @@ def call(Map configMap = [unityVersions: []]) {
             }
             environment {
               UNITY_PACKAGE_MANAGER = 'paket'
+              JAVA_HOME = "${JAVA_11_HOME}"
             }
             steps {
               script {
@@ -99,6 +99,7 @@ def call(Map configMap = [unityVersions: []]) {
             environment {
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
               UNITY_PACKAGE_MANAGER = 'upm'
+              JAVA_HOME = "${JAVA_11_HOME}"
             }
             steps {
               script {
@@ -133,6 +134,9 @@ def call(Map configMap = [unityVersions: []]) {
         agent {
           label "atlas && macos"
         }
+        environment {
+          JAVA_HOME = "${JAVA_11_HOME}"
+        }
         steps {
           unstash 'upm_setup_w'
           unstash 'paket_setup_w'
@@ -165,6 +169,7 @@ def call(Map configMap = [unityVersions: []]) {
             environment {
               UNITY_PACKAGE_MANAGER = 'upm'
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+              JAVA_HOME = "${JAVA_11_HOME}"
             }
             steps {
               unstash 'upm_setup_w'
@@ -203,12 +208,12 @@ def call(Map configMap = [unityVersions: []]) {
             steps {
               script {
                 parallel paket: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
+                  withEnv(["UNITY_PACKAGE_MANAGER=paket", "JAVA_HOME=${env.JAVA_11_HOME}"]) {
                     parallel checkSteps(config, "paket check unity ", "paket_setup_w")
                   }
                 },
                 upm: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+                  withEnv(["UNITY_PACKAGE_MANAGER=upm", "JAVA_HOME=${env.JAVA_11_HOME}"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
                 },
@@ -231,6 +236,7 @@ def call(Map configMap = [unityVersions: []]) {
           GRGIT_PASS = "${GRGIT_PSW}"
           GITHUB_LOGIN = "${GRGIT_USR}"
           GITHUB_PASSWORD = "${GRGIT_PSW}"
+          JAVA_HOME = "${JAVA_11_HOME}"
         }
 
         steps {
