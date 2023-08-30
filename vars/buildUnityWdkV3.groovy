@@ -208,12 +208,12 @@ def call(Map configMap = [unityVersions: []]) {
             steps {
               script {
                 parallel paket: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket", "JAVA_HOME=${env.JAVA_11_HOME}"]) {
+                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
                     parallel checkSteps(config, "paket check unity ", "paket_setup_w")
                   }
                 },
                 upm: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm", "JAVA_HOME=${env.JAVA_11_HOME}"]) {
+                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
                 },
