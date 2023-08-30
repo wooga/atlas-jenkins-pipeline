@@ -236,7 +236,6 @@ def call(Map configMap = [unityVersions: []]) {
           GRGIT_PASS = "${GRGIT_PSW}"
           GITHUB_LOGIN = "${GRGIT_USR}"
           GITHUB_PASSWORD = "${GRGIT_PSW}"
-          JAVA_HOME = "${JAVA_11_HOME}"
         }
 
         steps {
