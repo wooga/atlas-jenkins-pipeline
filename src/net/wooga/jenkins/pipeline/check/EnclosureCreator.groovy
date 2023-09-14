@@ -14,14 +14,14 @@ class EnclosureCreator {
     }
 
     Closure withNodeAndEnv(Platform platform, PackedStep mainCls, Closure catchCls, PackedStep finallyCls) {
-        def testEnvironment = platform.testEnvironment +
-                ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
         return {
             def platformLabels = platform.generateTestLabelsString()
             def nodeLabels = platformLabels && !platformLabels.empty ?
                     "atlas && ${platform.generateTestLabelsString()}" : "atlas"
             jenkins.node(nodeLabels) {
                 jenkins.echo("Running on: ${jenkins.env.NODE_NAME}")
+                def testEnvironment = platform.testEnvironment +
+                        ["TRAVIS_JOB_NUMBER=${buildNumber}.${platform.name.toUpperCase()}"]
                 jenkins.withEnv(testEnvironment) {
                     try {
                         mainCls.call()
