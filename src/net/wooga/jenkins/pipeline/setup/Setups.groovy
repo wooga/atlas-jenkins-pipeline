@@ -18,9 +18,14 @@ class Setups {
         return new Setups(jenkinsScript, gradle)
     }
 
-    def wdk(String releaseType, String releaseScope, String setupTask = PipelineConventions.standard.setupTask) {
-        gradle.wrapper("-Prelease.stage=${releaseType.trim()} " +
-                        "-Prelease.scope=${releaseScope.trim()} ${setupTask}")
+    def wdk(String releaseType, String releaseScope, PipelineConventions conventions = PipelineConventions.standard) {
+        String setupTask = conventions.setupTask
+        String workingDir = conventions.workingDir
+        jenkins.dir(workingDir) {
+            gradle.wrapper("-Prelease.stage=${releaseType.trim()} " +
+                    "-Prelease.scope=${releaseScope.trim()} ${setupTask}")
+        }
+
     }
 
 }

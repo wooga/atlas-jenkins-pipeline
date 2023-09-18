@@ -17,7 +17,7 @@ def call(Map configMap = [:]) {
                 publisher.artifactoryOSSRH('artifactory_publish',
                             'ossrh.signing.key',
                             'ossrh.signing.key_id',
-                        'ossrh.signing.passphrase')
+                        'ossrh.signing.passphrase', config.conventions)
             }
         }
     }

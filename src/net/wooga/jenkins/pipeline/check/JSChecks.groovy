@@ -24,8 +24,9 @@ class JSChecks {
                 baseAnalysisStep.wrappedBy(checkArgs.analysisWrapper), conventions)
     }
 
-    Closure check(Platform platform, Step testStep, Step analysisStep) {
-        return checkCreator.junitCheck(platform, testStep, analysisStep)
+    Closure check(Platform platform, Step testStep, Step analysisStep,
+                  PipelineConventions conventions = PipelineConventions.standard) {
+        return checkCreator.junitCheck(conventions.workingDir, platform, testStep, analysisStep)
     }
 
     Map<String, Closure> parallel(Platform[] platforms, Closure checkStep,
@@ -47,7 +48,7 @@ class JSChecks {
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return platforms.collectEntries { platform ->
             String parallelStepName = "${conventions.javaParallelPrefix}${platform.name}"
-            return [(parallelStepName): check(platform, testStep, analysisStep)]
+            return [(parallelStepName): check(platform, testStep, analysisStep, conventions)]
         }
     }
 }

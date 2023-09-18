@@ -15,7 +15,7 @@ def call(Map configMap = [:]) {
             stage.action = {
                 def publisher = config.pipelineTools.createPublishers(env.RELEASE_TYPE, env.RELEASE_SCOPE)
                 publisher.ossrh('ossrh.publish', 'ossrh.signing.key',
-                            'ossrh.signing.key_id', 'ossrh.signing.passphrase')
+                            'ossrh.signing.key_id', 'ossrh.signing.passphrase', config.conventions)
             }
         }
     }

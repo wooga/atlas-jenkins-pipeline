@@ -13,7 +13,7 @@ def call(Map configMap = [:]) {
         stages.publish = { stage, params, JavaConfig config ->
             stage.action = {
                 def publisher = config.pipelineTools.createPublishers(env.RELEASE_TYPE, env.RELEASE_SCOPE)
-                publisher.bintray('bintray.publish')
+                publisher.bintray('bintray.publish', config.conventions)
             }
         }
     }

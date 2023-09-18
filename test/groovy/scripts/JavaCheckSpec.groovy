@@ -236,11 +236,11 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         given: "loaded check in a running jenkins build"
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms"
-        def configMap = [platforms: ["linux"],
-                        sonarToken: "token", coverallsToken: "token",
-                        checkTask: convCheck, sonarqubeTask: convSonarqubeTask,
-                        jacocoTask: convJacocoTask, javaParallelPrefix: convJavaParallelPrefix,
-                        coverallsTask: convCoverallsTask]
+        def configMap = [platforms    : ["linux"],
+                         sonarToken   : "token", coverallsToken: "token",
+                         checkTask    : convCheck, sonarqubeTask: convSonarqubeTask,
+                         jacocoTask   : convJacocoTask, javaParallelPrefix: convJavaParallelPrefix,
+                         coverallsTask: convCoverallsTask]
 
         when: "running check"
         Map<String, ?> checkSteps = inSandbox {
@@ -285,16 +285,16 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         and: "configuration object with any platforms and desired wrappers"
 
         def configMap = [
-            platforms: ["linux", "windows"],
-            sonarToken: "token", coverallsToken: "token",
-            testWrapper: { testOp, platform ->
-                testCount.incrementAndGet()
-                testOp(platform)
-            },
-            analysisWrapper: { analysisOp, platform ->
-                analysisCount.incrementAndGet()
-                analysisOp(platform)
-            }
+                platforms      : ["linux", "windows"],
+                sonarToken     : "token", coverallsToken: "token",
+                testWrapper    : { testOp, platform ->
+                    testCount.incrementAndGet()
+                    testOp(platform)
+                },
+                analysisWrapper: { analysisOp, platform ->
+                    analysisCount.incrementAndGet()
+                    analysisOp(platform)
+                }
         ]
 
         when: "running check"
@@ -352,17 +352,19 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test result capture"
         def stepsDirs = []
-        def checkoutDir = "."
-        def configMap = [platforms: ["linux"], checkDir: checkDir,
-            checkoutDir: checkoutDir,
-            testWrapper: { testOp, platform ->
-                stepsDirs.add(this.currentDir)
-                testOp(platform)
+        def configMap = [
+                platforms      : ["linux"],
+                checkoutDir    : checkoutDir,
+                checkDir       : checkDir,
+                workingDir     : workingDir,
+                testWrapper    : { testOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    testOp(platform)
                 },
-            analysisWrapper: { analysisOp, platform ->
-                stepsDirs.add(this.currentDir)
-                analysisOp(platform)
-            }]
+                analysisWrapper: { analysisOp, platform ->
+                    stepsDirs.add(this.currentDir)
+                    analysisOp(platform)
+                }]
 
         when: "running check"
         inSandbox {
@@ -373,10 +375,16 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == configMap.platforms.size() + 1
-        stepsDirs.every {it == "${checkoutDir}/${checkDir}"}
+        stepsDirs.every { it == "${checkoutDir}/${checkDir}/${workingDir}" }
 
         where:
-        checkDir << [".", "dir", "dir/subdir"]
+        checkoutDir | checkDir     | workingDir
+        "."         | "."          | "."
+        "."         | "dir"        | "."
+        "."         | "dir/subdir" | "."
+        "checkout"  | "dir/subdir" | "."
+        "checkout"  | "dir/subdir" | "working"
+        "."         | "."          | "working"
     }
 
     @Unroll("#description all check workspaces when clearWs is #clearWs")
@@ -391,15 +399,15 @@ class JavaCheckSpec extends DeclarativeJenkinsSpec {
         }
 
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs? platforms.size() : 0)
+        calls["cleanWs"].length == (clearWs ? platforms.size() : 0)
 
         where:
-        platforms | clearWs
-        ["linux"] | true
-        ["linux"] | false
+        platforms            | clearWs
+        ["linux"]            | true
+        ["linux"]            | false
         ["linux", "windows"] | true
         ["linux", "windows"] | false
-        description = clearWs? "clears" : "doesn't clear"
+        description = clearWs ? "clears" : "doesn't clear"
     }
 
     static def createTmpFile(String dir = ".", String file) {

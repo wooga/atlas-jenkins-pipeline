@@ -142,7 +142,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
     }
 
 
-
     @Unroll("runs check step for unity versions #versions")
     def "runs check step for all given versions"() {
         given: "loaded check in a running jenkins build"
@@ -169,7 +168,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             def (stepName, folderName) = generateStepName(it)
             def (linuxStepName, linuxFolderName) = generateStepName(it, [label: "linux", optional: true])
             return [stepName, linuxStepName, folderName, linuxFolderName]
-        }.split {it.startsWith("check") }
+        }.split { it.startsWith("check") }
         expectedSteps.toSorted() == stepNames.toSorted()
 
         and: "code checkouted in the right dir"
@@ -448,9 +447,10 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         def check = loadSandboxedScript(TEST_SCRIPT_PATH)
         and: "configuration object with any platforms and wrappers for test assertion"
         def stepsDirs = []
-        def checkoutDir = "."
-        def configMap = [unityVersions  : ["2019"], checkDir: checkDir,
+        def configMap = [unityVersions  : ["2019"],
                          checkoutDir    : checkoutDir,
+                         checkDir       : checkDir,
+                         workingDir     : workingDir,
                          testWrapper    : { testOp, platform ->
                              stepsDirs.add(this.currentDir)
                              testOp(platform)
@@ -472,10 +472,16 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         then: "steps ran on given directory"
         //checks steps + 1 analysis step
         stepsDirs.size() == (configMap.unityVersions.size() * 2) + 1 //times 2 because of generated linux checks
-        stepsDirs.every { it == "${checkoutDir}/${checkDir}" }
+        stepsDirs.every { it == "${checkoutDir}/${checkDir}/${workingDir}" }
 
         where:
-        checkDir << [".", "dir", "dir/subdir"]
+        checkoutDir | checkDir     | workingDir
+        "."         | "."          | "."
+        "."         | "dir"        | "."
+        "."         | "dir/subdir" | "."
+        "checkout"  | "dir/subdir" | "."
+        "checkout"  | "dir/subdir" | "working"
+        "."         | "."          | "working"
     }
 
     @Unroll("#description all check workspaces when clearWs is #clearWs")
@@ -498,7 +504,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             }
         }
         then: "all platforms workspaces are clean"
-        calls["cleanWs"].length == (clearWs ? versions.size() *2 : 0) //times 2 because of generated linux versions
+        calls["cleanWs"].length == (clearWs ? versions.size() * 2 : 0) //times 2 because of generated linux versions
 
         where:
         versions         | clearWs
@@ -511,7 +517,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
 
     def generateStepName(Object it, Map force = [:]) {
         def versionsMap = [version: it]
-        if(it instanceof Map) {
+        if (it instanceof Map) {
             versionsMap = it as Map
         }
         versionsMap.putAll(force)
@@ -526,7 +532,7 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             stepName += " (${versionsMap.apiCompatibilityLevel})"
             folderName += "_${versionsMap.apiCompatibilityLevel}"
         }
-        folderName = folderName.replaceAll("\\.","_")
+        folderName = folderName.replaceAll("\\.", "_")
         return ["$stepName".toString(), folderName.toString()]
     }
 }

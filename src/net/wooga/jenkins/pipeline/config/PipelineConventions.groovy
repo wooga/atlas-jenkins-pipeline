@@ -20,6 +20,7 @@ class PipelineConventions implements Cloneable {
         this.javaParallelPrefix = other.javaParallelPrefix
         this.wdkParallelPrefix = other.wdkParallelPrefix
         this.wdkCoberturaFile = other.wdkCoberturaFile
+        this.workingDir = other.workingDir
     }
 
     PipelineConventions mergeWithConfigMap(Map configMap) {
@@ -33,6 +34,7 @@ class PipelineConventions implements Cloneable {
             it.wdkParallelPrefix = configMap.wdkParallelPrefix?: it.wdkParallelPrefix
             it.wdkCoberturaFile = configMap.wdkCoberturaFile?: it.wdkCoberturaFile
             it.wdkSetupStashId = configMap.wdkSetupStashId?: it.wdkSetupStashId
+            it.workingDir = configMap.workingDir?: it.workingDir
             return it
         }
     }
@@ -47,6 +49,8 @@ class PipelineConventions implements Cloneable {
     String wdkParallelPrefix = "check "
     String wdkCoberturaFile = '**/codeCoverage/Cobertura.xml'
     String wdkSetupStashId = 'setup_w'
+
+    String workingDir = '.'
 }
 
 class ImmutablePipelineConventions extends PipelineConventions {

@@ -33,12 +33,12 @@ class JavaChecks {
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return platforms.collectEntries { platform ->
             String parallelStepName = "${conventions.javaParallelPrefix}${platform.name}"
-            return [(parallelStepName): check(platform, testStep, analysisStep)]
+            return [(parallelStepName): check(platform, testStep, analysisStep, conventions)]
         }
     }
 
-    Closure check(Platform platform, Step testStep, Step analysisStep) {
-        return checkCreator.junitCheck(platform, testStep, analysisStep)
+    Closure check(Platform platform, Step testStep, Step analysisStep, PipelineConventions conventions = PipelineConventions.standard) {
+        return checkCreator.junitCheck(conventions.workingDir, platform, testStep, analysisStep)
     }
 
     Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {

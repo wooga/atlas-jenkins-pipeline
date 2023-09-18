@@ -26,8 +26,9 @@ class WDKChecks {
                         conventions)
     }
 
-    Closure check(UnityVersionPlatform platform, Step testStep, Step analysisStep) {
-        return checkCreator.csWDKChecks(platform, testStep, analysisStep)
+    Closure check(UnityVersionPlatform platform, Step testStep, Step analysisStep,
+                  PipelineConventions conventions = PipelineConventions.standard) {
+        return checkCreator.csWDKChecks(conventions.workingDir, platform, testStep, analysisStep)
     }
 
     Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Closure checkStep,
@@ -50,7 +51,7 @@ class WDKChecks {
     Map<String, Closure> parallel(UnityVersionPlatform[] wdkPlatforms, Step testStep, Step analysisStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
-            def checkStep = checkCreator.csWDKChecks(wdkPlatform, testStep, analysisStep)
+            def checkStep = checkCreator.csWDKChecks(conventions.workingDir, wdkPlatform, testStep, analysisStep)
             return [("${conventions.wdkParallelPrefix}${wdkPlatform.stepDescription}".toString()): checkStep]
         }
     }
