@@ -56,29 +56,41 @@ def call(Map configMap = [unityVersions: []]) {
     }
 
     stages {
-      stage("Validate package resolution") {
+
+      stage("Setup") {
         failFast true
         agent {
           label "atlas && macos"
         }
         environment {
-          JAVA_HOME = "${JAVA_11_HOME}"
+          UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+          UNITY_PACKAGE_MANAGER = 'upm'
         }
         steps {
-          catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
-            gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
+          script {
+            env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
+            env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
+            def setup = config.pipelineTools.setups
+            setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
           }
         }
         post {
+          success {
+            archiveArtifacts artifacts: '**/Packages/packages-lock.json'
+            stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/packages-lock.json, " +
+                "**/PackageCache/**, " +
+                "**/build/**")
+          }
+
           always {
-            publishHTML([allowMissing         : false,
-                         alwaysLinkToLastBuild: true,
-                         keepAll              : true,
-                         reportDir            : 'build/reports/packages/html',
-                         reportFiles          : 'index.html',
-                         reportName           : 'Package Resolution',
-                         reportTitles         : ''])
-            archiveArtifacts artifacts: 'build/reports/packages/**/*'
+            archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+          }
+          cleanup {
+            script {
+              if(config.mainPlatform.clearWs) {
+                cleanWs()
+              }
+            }
           }
         }
       }
@@ -96,6 +108,7 @@ def call(Map configMap = [unityVersions: []]) {
               JAVA_HOME = "${JAVA_11_HOME}"
             }
             steps {
+              unstash 'upm_setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
                 assembler.unityWDK("build", params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
@@ -105,7 +118,6 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-                archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
@@ -131,7 +143,7 @@ def call(Map configMap = [unityVersions: []]) {
             steps {
               script {
                 withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                  parallel checkSteps(config, "upm check unity")
+                  parallel checkSteps(config, "upm check unity", "upm_setup_w")
                 }
                 failFast : true
               }
@@ -155,6 +167,7 @@ def call(Map configMap = [unityVersions: []]) {
         }
 
         steps {
+          unstash 'upm_setup_w'
           unstash 'wdk_output'
           script {
             def publisher = config.pipelineTools.createPublishers(params.RELEASE_STAGE, params.RELEASE_SCOPE)
@@ -184,9 +197,10 @@ def call(Map configMap = [unityVersions: []]) {
   }
 }
 
-def checkSteps(WDKConfig config, String parallelChecksPrefix) {
+def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashId) {
   def conventions = new PipelineConventions(config.conventions)
   conventions.wdkParallelPrefix = parallelChecksPrefix
+  conventions.wdkSetupStashId = setupStashId
   def checks = config.pipelineTools.checks.forWDKPipelines()
   def stepsForParallel = checks.wdkCoverage(config.unityVersions,
           params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String,
