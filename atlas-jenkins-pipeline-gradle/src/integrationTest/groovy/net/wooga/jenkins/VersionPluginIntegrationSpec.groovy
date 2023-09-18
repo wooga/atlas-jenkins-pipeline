@@ -33,15 +33,7 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
 
     @Unroll("creates/updates remote branches and tags when updating from #latestVersion to #newVersion")
     def "should create generic branches and tags with updated version remotely"(String newVersion, String latestVersion, String[] branches, String updateType) {
-        given: "a initialized git repository and latest version with its branches and tag"
-        def git = initializeGrGit("origin")
-        createRemoteBranchesIfNotExists(branches)
-        def latestTag = createTagIfNotExists(git, latestVersion)
-        latestTag.ifPresent { git.push(remote: "origin", tags: true) }
-        git.fetch()
-
-
-        and: "loaded version plugin"
+        given: "loaded version plugin"
         buildFile << """
             ${applyPlugin(VersionPlugin)}
         """
@@ -52,6 +44,15 @@ class VersionPluginIntegrationSpec extends IntegrationSpec {
             remote = "origin"
             updateType = "${updateType}"
         }"""
+
+        and: "a initialized git repository and latest version with its branches and tag"
+        def git = initializeGrGit("origin")
+        createRemoteBranchesIfNotExists(branches)
+        def latestTag = createTagIfNotExists(git, latestVersion)
+        latestTag.ifPresent { git.push(remote: "origin", tags: true) }
+        git.fetch()
+
+
 
         and: "credentials in the environment"
         environment.set("GRGIT_USER", this.githubRepo.userName)
