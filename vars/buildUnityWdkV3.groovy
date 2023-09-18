@@ -56,31 +56,29 @@ def call(Map configMap = [unityVersions: []]) {
     }
 
     stages {
-      stage("Setup") {
+      stage("Validate package resolution") {
         failFast true
-        stage("Validate package resolution") {
-          agent {
-            label "atlas && macos"
+        agent {
+          label "atlas && macos"
+        }
+        environment {
+          JAVA_HOME = "${JAVA_11_HOME}"
+        }
+        steps {
+          catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
+            gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
           }
-          environment {
-            JAVA_HOME = "${JAVA_11_HOME}"
-          }
-          steps {
-            catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
-              gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
-            }
-          }
-          post {
-            always {
-              publishHTML([allowMissing         : false,
-                           alwaysLinkToLastBuild: true,
-                           keepAll              : true,
-                           reportDir            : 'build/reports/packages/html',
-                           reportFiles          : 'index.html',
-                           reportName           : 'Package Resolution',
-                           reportTitles         : ''])
-              archiveArtifacts artifacts: 'build/reports/packages/**/*'
-            }
+        }
+        post {
+          always {
+            publishHTML([allowMissing         : false,
+                         alwaysLinkToLastBuild: true,
+                         keepAll              : true,
+                         reportDir            : 'build/reports/packages/html',
+                         reportFiles          : 'index.html',
+                         reportName           : 'Package Resolution',
+                         reportTitles         : ''])
+            archiveArtifacts artifacts: 'build/reports/packages/**/*'
           }
         }
       }
