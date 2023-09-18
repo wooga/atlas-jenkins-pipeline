@@ -13,8 +13,8 @@ class CheckCreator {
         this.enclosures = enclosures
     }
 
-    Closure junitCheck(Platform platform, Step testStep, Step analysisStep) {
-        def mainClosure = createCheck(testStep, analysisStep).pack(platform)
+    Closure junitCheck(String workingDir, Platform platform, Step testStep, Step analysisStep) {
+        def mainClosure = createCheck(workingDir, testStep, analysisStep).pack(platform)
         def catchClosure = {throw it}
         def finallyClosure = {
             jenkins.junit allowEmptyResults: true, testResults: "**/build/test-results/**/*.xml"
@@ -26,8 +26,8 @@ class CheckCreator {
         return checkStep
     }
 
-    Closure csWDKChecks(UnityVersionPlatform versionBuild, Step testStep, Step analysisStep) {
-        def mainClosure = createCheck(testStep, analysisStep).pack(versionBuild.platform)
+    Closure csWDKChecks(String workingDir, UnityVersionPlatform versionBuild, Step testStep, Step analysisStep) {
+        def mainClosure = createCheck(workingDir, testStep, analysisStep).pack(versionBuild.platform)
         def catchClosure = { Throwable e ->
             if (versionBuild.optional) {
                 jenkins.unstable(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
@@ -44,13 +44,15 @@ class CheckCreator {
         return checkStep
     }
 
-    protected Step createCheck(Step testStep, Step analysisStep) {
+    protected Step createCheck(String workingDir, Step testStep, Step analysisStep) {
         return new Step({ Platform platform ->
             jenkins.dir(platform.checkoutDirectory) {
                 jenkins.dir(platform.checkDirectory) {
-                    testStep(platform)
-                    if (platform.isMain()) {
-                        analysisStep(platform)
+                    jenkins.dir(workingDir) {
+                        testStep(platform)
+                        if (platform.isMain()) {
+                            analysisStep(platform)
+                        }
                     }
                 }
             }
