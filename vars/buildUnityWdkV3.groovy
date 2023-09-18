@@ -58,102 +58,29 @@ def call(Map configMap = [unityVersions: []]) {
     stages {
       stage("Setup") {
         failFast true
-        parallel {
-          stage("setup paket") {
-            agent {
-              label "atlas && macos"
-            }
-            environment {
-              UNITY_PACKAGE_MANAGER = 'paket'
-              JAVA_HOME = "${JAVA_11_HOME}"
-            }
-            steps {
-              script {
-                def setup = config.pipelineTools.setups
-                setup.wdk(params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
-              }
-            }
-            post {
-              success {
-                stash(name: 'paket_setup_w', useDefaultExcludes: true, includes: "paket.lock, .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**")
-              }
-
-              always {
-                archiveArtifacts artifacts: 'paket.lock, **/build/logs/*.log', allowEmptyArchive: true
-              }
-
-              cleanup {
-                script {
-                  if(config.mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
-              }
+        stage("Validate package resolution") {
+          agent {
+            label "atlas && macos"
+          }
+          environment {
+            JAVA_HOME = "${JAVA_11_HOME}"
+          }
+          steps {
+            catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
+              gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
             }
           }
-
-          stage("setup upm") {
-            agent {
-              label "atlas && macos"
+          post {
+            always {
+              publishHTML([allowMissing         : false,
+                           alwaysLinkToLastBuild: true,
+                           keepAll              : true,
+                           reportDir            : 'build/reports/packages/html',
+                           reportFiles          : 'index.html',
+                           reportName           : 'Package Resolution',
+                           reportTitles         : ''])
+              archiveArtifacts artifacts: 'build/reports/packages/**/*'
             }
-            environment {
-              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-              UNITY_PACKAGE_MANAGER = 'upm'
-              JAVA_HOME = "${JAVA_11_HOME}"
-            }
-            steps {
-              script {
-                def setup = config.pipelineTools.setups
-                setup.wdk(params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
-              }
-            }
-            post {
-              success {
-                archiveArtifacts artifacts: '**/Packages/packages-lock.json'
-                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/packages-lock.json, " +
-                        "**/PackageCache/**, " +
-                        "**/build/**")
-              }
-
-              always {
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-              }
-              cleanup {
-                script {
-                  if(config.mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      stage("Validate package resolution") {
-        agent {
-          label "atlas && macos"
-        }
-        environment {
-          JAVA_HOME = "${JAVA_11_HOME}"
-        }
-        steps {
-          unstash 'upm_setup_w'
-          unstash 'paket_setup_w'
-          catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
-            gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
-          }
-        }
-        post {
-          always {
-            publishHTML([allowMissing: false,
-                         alwaysLinkToLastBuild: true,
-                         keepAll: true,
-                         reportDir: 'build/reports/packages/html',
-                         reportFiles: 'index.html',
-                         reportName: 'Package Resolution',
-                         reportTitles: ''])
-            archiveArtifacts artifacts: 'build/reports/packages/**/*'
           }
         }
       }
@@ -161,7 +88,6 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Build") {
         failFast true
         parallel {
-
           stage('assemble package') {
             agent {
               label "atlas && macos"
@@ -172,7 +98,6 @@ def call(Map configMap = [unityVersions: []]) {
               JAVA_HOME = "${JAVA_11_HOME}"
             }
             steps {
-              unstash 'upm_setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
                 assembler.unityWDK("build", params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String)
@@ -207,16 +132,9 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                parallel paket: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-                  }
-                },
-                upm: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-                  }
-                },
+                withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+                  parallel checkSteps(config, "upm check unity")
+                }
                 failFast : true
               }
             }
@@ -239,7 +157,6 @@ def call(Map configMap = [unityVersions: []]) {
         }
 
         steps {
-          unstash 'upm_setup_w'
           unstash 'wdk_output'
           script {
             def publisher = config.pipelineTools.createPublishers(params.RELEASE_STAGE, params.RELEASE_SCOPE)
@@ -269,10 +186,9 @@ def call(Map configMap = [unityVersions: []]) {
   }
 }
 
-def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashId) {
+def checkSteps(WDKConfig config, String parallelChecksPrefix) {
   def conventions = new PipelineConventions(config.conventions)
   conventions.wdkParallelPrefix = parallelChecksPrefix
-  conventions.wdkSetupStashId = setupStashId
   def checks = config.pipelineTools.checks.forWDKPipelines()
   def stepsForParallel = checks.wdkCoverage(config.unityVersions,
           params.RELEASE_STAGE as String, params.RELEASE_SCOPE as String,
