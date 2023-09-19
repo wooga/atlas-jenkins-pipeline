@@ -104,6 +104,21 @@ class Platform {
         }
     }
 
+    Platform copy(Map properties) {
+        return new Platform(
+                (String) (properties.checkoutDirectory?: this.checkoutDirectory),
+                (String) (properties.checkDirectory?: this.checkDirectory),
+                (String) (properties.name?: this.name),
+                (String) (properties.os?: this.os),
+                (boolean) (properties.runOnDocker?: this.runsOnDocker),
+                (String) (properties.labels?: this.labels),
+                (Collection<?>) (properties.testEnv?: this.testEnv),
+                (Collection<?>) (properties.testLabels?: this.testLabels?.split(" && ")),
+                (boolean) (properties.main?: this.main),
+                (boolean) (properties.clearWs?: this.clearWs)
+        )
+    }
+
     boolean equals(o) {
         if (this.is(o)) return true
         if (o == null || getClass() != o.class) return false

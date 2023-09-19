@@ -28,6 +28,13 @@ class UnityVersionPlatform {
         return buildVersion.toDescription()
     }
 
+    UnityVersionPlatform copy(Map properties) {
+        return new UnityVersionPlatform(
+                this.platform.copy((Map) properties.platform?: [:]),
+                this.buildVersion.copy((Map) properties.buildVersion?: [:])
+        )
+    }
+
     boolean equals(o) {
         if (this.is(o)) return true
         if (getClass() != o.class) return false

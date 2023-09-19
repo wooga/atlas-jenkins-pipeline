@@ -2,7 +2,9 @@
 import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.config.Platform
+import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
 import net.wooga.jenkins.pipeline.config.WDKConfig
+import sun.tools.jconsole.Plotter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
@@ -26,7 +28,6 @@ def call(Map configMap = [unityVersions: []]) {
     } else {
       testOperation(plat)
     }
-
   }
 
   def config = WDKConfig.fromConfigMap(configMap, this)
@@ -115,7 +116,8 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               success {
                 archiveArtifacts artifacts: '**/Packages/packages-lock.json'
-                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/packages-lock.json, " +
+                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes:"**/Packages/manifest.json," +
+                        "**/Packages/packages-lock.json, " +
                         "**/PackageCache/**, " +
                         "**/build/**")
               }
@@ -163,7 +165,6 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Build") {
         failFast true
         parallel {
-
           stage('assemble package') {
             agent {
               label "atlas && macos"
@@ -173,20 +174,23 @@ def call(Map configMap = [unityVersions: []]) {
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
             }
             steps {
-              unstash 'upm_setup_w'
-              script {
-                def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
+              dir("assemble") {
+                checkout scm
+                unstash 'upm_setup_w'
+                script {
+                    def assembler = config.pipelineTools.assemblers
+                    assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
+                }
               }
             }
 
             post {
               always {
-                stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-                archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+                stash(name: 'wdk_output', includes: "assemble/.gradle/**, assemble/**/build/outputs/**/*")
+                archiveArtifacts artifacts: 'assemble/build/outputs/*.nupkg', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'assemble/**/build/distributions/*.tgz', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'assemble/build/outputs/*.unitypackage', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'assemble/**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
                 script {
@@ -270,12 +274,26 @@ def call(Map configMap = [unityVersions: []]) {
   }
 }
 
+def generatePrefixedVersions(String prefix, UnityVersionPlatform[] unityPlatforms) {
+  def result = new UnityVersionPlatform[unityPlatforms.length]
+  for(UnityVersionPlatform unityPlat: unityPlatforms) {
+    def copy = unityPlat.copy([
+      platform: [ checkoutDirectory: "${prefix}-${unityPlat.platform.checkoutDirectory}" ]
+    ])
+    result += [copy]
+  }
+  return result
+}
+
+
 def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashId) {
   def conventions = new PipelineConventions(config.conventions)
   conventions.wdkParallelPrefix = parallelChecksPrefix
   conventions.wdkSetupStashId = setupStashId
   def checks = config.pipelineTools.checks.forWDKPipelines()
-  def stepsForParallel = checks.wdkCoverage(config.unityVersions,
+  def prefixedUnityVersions = generatePrefixedVersions(parallelChecksPrefix, config.unityVersions)
+
+  def stepsForParallel = checks.wdkCoverage(prefixedUnityVersions,
           env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String,
           config.checkArgs, conventions)
   return stepsForParallel

@@ -30,7 +30,7 @@ class BuildVersion {
             return parse(unityVerObj())
         }
         if (unityVerObj instanceof BuildVersion) {
-            return new BuildVersion(unityVerObj.label, unityVerObj.version, unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
+            return new BuildVersion(unityVerObj.prefix, unityVerObj.label, unityVerObj.version, unityVerObj.optional, unityVerObj.apiCompatibilityLevel)
         }
         else if (unityVerObj instanceof Map) {
             return fromBuildVersionMap(unityVerObj as Map)
@@ -42,13 +42,15 @@ class BuildVersion {
         if(unityVerMap["version"] == null) {
             throw new Exception("Entry ${unityVerMap} does not contain version")
         }
+        String prefix = unityVerMap["prefix"]?: ""
         String label = unityVerMap["label"]?: "macos"
         String version = unityVerMap["version"]
         boolean optional = unityVerMap["optional"]?: false
         String apiCompatibilityLevel = unityVerMap["apiCompatibilityLevel"]?: null
-        return new BuildVersion(label, version, optional, apiCompatibilityLevel)
+        return new BuildVersion(prefix, label, version, optional, apiCompatibilityLevel)
     }
 
+    String prefix
     final String label
     final String version
     final Boolean optional
@@ -64,10 +66,11 @@ class BuildVersion {
      */
     @Deprecated
     BuildVersion(String version, boolean optional, String apiCompatibilityLevel = null) {
-        this("macos", version, optional, apiCompatibilityLevel)
+        this("", "macos", version, optional, apiCompatibilityLevel)
     }
 
-    BuildVersion(String label, String version, boolean optional, String apiCompatibilityLevel = null) {
+    BuildVersion(String prefix, String label, String version, boolean optional, String apiCompatibilityLevel = null) {
+        this.prefix = prefix
         this.label = label
         this.version = version
         this.optional = optional
@@ -106,7 +109,7 @@ class BuildVersion {
 
     @NonCPS
     String toDirectoryName() {
-        def result = "${label}_Unity_${version.replaceAll("\\.", "_")}"
+        def result = "${prefix}${label}_Unity_${version.replaceAll("\\.", "_")}"
         if (optional){
             result += "_optional"
         }
@@ -118,6 +121,7 @@ class BuildVersion {
 
     BuildVersion copy(Map properties) {
         new BuildVersion(
+                (String) (properties.prefix?: prefix),
                 (String) (properties.label?: label),
                 (String) (properties.version?: version),
                 (boolean) (properties.optional?: optional),
