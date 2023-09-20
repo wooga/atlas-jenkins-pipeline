@@ -10,6 +10,7 @@ import net.wooga.jenkins.pipeline.config.WDKConfig
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def call(Map configMap = [unityVersions: []]) {
+  configMap.testLabels = ["macOS-agent-14"]
   configMap.logLevel = configMap.get("logLevel", params.LOG_LEVEL ?: env.LOG_LEVEL as String)
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
@@ -24,7 +25,7 @@ def call(Map configMap = [unityVersions: []]) {
 
   }
 
-  def config = WDKConfig.fromConfigMap("macos", configMap, this)
+  def config = WDKConfig.fromConfigMap("macOS-agent-14", configMap, this)
   def packageManagerEnvVar = "UNITY_PACKAGE_MANAGER"
 
   // We can only configure static pipelines atm.
