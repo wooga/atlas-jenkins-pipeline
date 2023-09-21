@@ -9,6 +9,26 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/gradleWrapper.groovy"
 
     @Unroll
+    def "gradle wrapper is called with the environment variables #expectedEnv"() {
+        given: "loaded gradleWrapper script"
+        def gradleWrapper = loadSandboxedScript(SCRIPT_PATH)
+        when:
+        inSandbox {
+            gradleWrapper command: "any", environment: givenEnv
+        }
+
+        then:
+        usedEnvironments.last() == expectedEnv
+
+        where:
+        givenEnv                            | expectedEnv
+        [:]                                 | [:]
+        [ENV: "eager", EAGER: "eager"]      | ["ENV": "eager", "EAGER": "eager"]
+        [EAGER: "eager", LAZY: { "lazy" }]  | ["EAGER": "eager", "LAZY": "lazy"]
+        [ENV: { "lazy" }, LAZY: { "lazy" }] | ["ENV": "lazy", "LAZY": "lazy"]
+    }
+
+    @Unroll
     @Issue("Tried to cover No signature of method: java.lang.Class.fromJenkins() is applicable for argument types: (gradleWrapper, java.lang.String, null) values: [gradleWrapper@7274fcad, info, null]")
     def "gradle wrapper can be called with loglevel value #logLevel, stacktrace value #stackTrace and refreshDependencies value #refreshDependencies"() {
         given: "loaded gradleWrapper script"
@@ -16,7 +36,7 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
 
         and: "set variables in params"
         binding.setVariable("params", [LOG_LEVEL: logLevel, STACK_TRACE: stackTrace, REFRESH_DEPENDENCIES: refreshDependencies])
-        if(umask) {
+        if (umask) {
             environment["UMASK"] = umask
         }
 
