@@ -1,21 +1,26 @@
 package net.wooga.jenkins.pipeline.config
 
+import net.wooga.jenkins.pipeline.model.EnvVars
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class GradleArgs {
 
+    final EnvVars environment
     final String logLevel
     final boolean stackTrace
     final boolean refreshDependencies
 
 
     static GradleArgs fromConfigMap(Map config) {
-        def showStackTraces = (config.showStackTrace?:false) as boolean
-        def refreshDependencies = (config.refreshDependencies?:false) as boolean
-        return new GradleArgs(config.logLevel as String, showStackTraces, refreshDependencies)
+        def environment = new EnvVars((config.gradleEnvironment ?: [:]) as Map<String, ?>)
+        def showStackTraces = (config.showStackTrace ?: false) as boolean
+        def refreshDependencies = (config.refreshDependencies ?: false) as boolean
+        return new GradleArgs(environment, config.logLevel as String, showStackTraces, refreshDependencies)
     }
 
-    GradleArgs(String logLevel, boolean stackTrace, boolean refreshDependencies) {
+
+    GradleArgs(EnvVars environment, String logLevel, boolean stackTrace, boolean refreshDependencies) {
+        this.environment = environment
         this.logLevel = logLevel
         this.stackTrace = stackTrace
         this.refreshDependencies = refreshDependencies
