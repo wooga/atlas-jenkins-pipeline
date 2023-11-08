@@ -10,8 +10,10 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
     @Unroll("publishes UPM/Paket WDK #releaseType-#releaseScope release")
     def "publishes UPM/Paket WDK with #release release type"() {
         given: "credentials holder with publish keys"
-        credentials.addUsernamePassword("artifactory_publish", "usr", "pwd")
-        credentials.addUsernamePassword('github_access', "usr", "pwd")
+        credentials.addUsernamePassword("artifactory_publish", "artifactory_publish_usr", "artifactory_publish_pwd")
+        credentials.addUsernamePassword("artifactory_deploy", "artifactory_deploy_usr", "artifactory_deploy_pwd")
+
+        credentials.addUsernamePassword('github_access', "github_access_usr", "github_access_pwd")
         and: "build plugin with publish parameters"
         def buildWDK = loadSandboxedScript(SCRIPT_PATH) {
             params.RELEASE_STAGE = releaseType
@@ -41,9 +43,9 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         env.GITHUB_PASSWORD == "pwd" //"${GRGIT_PSW}"
         env.UNITY_PACKAGE_MANAGER == "upm"
         env.UNITY_LOG_CATEGORY == "build"
-        env.UPM_USERNAME == "usr" //artifactory_publish user
-        env.UPM_PASSWORD == "pwd" //artifactory_publish password
-        env.NUGET_KEY == this.credentials['artifactory_publish']
+        env.UPM_USERNAME == artifactory_user //artifactory_publish user
+        env.UPM_PASSWORD == artifactory_password //artifactory_publish password
+        env.NUGET_KEY == this.credentials[artifactory_credentials]
 
         where:
         releaseType | releaseScope
@@ -52,6 +54,18 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
         "preflight" | "minor"
         "rc"        | "minor"
         "final"     | "major"
+
+        github_user = "github_access_usr"
+        github_password = "github_access_pwd"
+        artifactory_deploy_user = "artifactory_deploy_usr"
+        artifactory_deploy_password = "artifactory_deploy_pwd"
+        artifactory_publish_user = "artifactory_publish_usr"
+        artifactory_publish_password = "artifactory_publish_pwd"
+
+        artifactory_user = releaseType == "snapshot" || releaseType == null ? artifactory_publish_user : artifactory_deploy_user
+        artifactory_password = releaseType == "snapshot" || releaseType == null ? artifactory_publish_password : artifactory_deploy_password
+
+        artifactory_credentials = releaseType == "snapshot" || releaseType == null ? "artifactory_publish" : "artifactory_deploy"
     }
 
 
