@@ -244,7 +244,7 @@ def call(Map configMap = [unityVersions: []]) {
           unstash 'wdk_output'
           script {
             def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-            publisher.unityArtifactoryUpm('artifactory_publish')
+            publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
           }
         }
 

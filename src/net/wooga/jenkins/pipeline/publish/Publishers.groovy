@@ -116,7 +116,9 @@ class Publishers {
                         "-Ppaket.publish.repository='${releaseType}' " +
                         "-Ppublish.repository='${releaseType}' " +
                         "-PversionBuilder.stage=${releaseType} " +
-                        "-PversionBuilder.scope=${releaseScope}")
+                        "-PversionBuilder.scope=${releaseScope}"+
+                        "-Prelease.stage=${releaseType} " +
+                        "-Prelease.scope=${releaseScope}")
             }
         }
     }
