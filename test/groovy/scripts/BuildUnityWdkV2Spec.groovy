@@ -31,7 +31,7 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
                 "-Ppaket.publish.repository='${releaseType?:"snapshot"}'",
                 "-Ppublish.repository='${releaseType?:"snapshot"}'",
                 "-PversionBuilder.stage=${releaseType?:"snapshot"}",
-                "-PversionBuilder.scope=${releaseScope?:""}"
+                "${releaseScope? "-PversionBuilder.scope=${releaseScope}": ''}"
         )
         and: "has set up environment"
         def env = usedEnvironments[usedEnvironments.size() - 2]
