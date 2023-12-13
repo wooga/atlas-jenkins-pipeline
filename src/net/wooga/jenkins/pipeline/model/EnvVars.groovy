@@ -2,39 +2,34 @@ package net.wooga.jenkins.pipeline.model
 
 class EnvVars {
 
-    final Map<String, Closure<String>> environment
+    final List<?> environment
 
-    EnvVars(Map<String, ?> environment) {
-        this.environment = lazifyMap(environment)
+    static EnvVars fromList(List<?> env) {
+        return new EnvVars(env)
     }
 
-    static Map<String, Closure<String>> lazifyMap(Map<String, ?> env) {
-        Map<String, Closure<String>> lazyMap = [:]
-        for(String key : env.keySet()) {
-            if(env[key] instanceof Closure) {
-                lazyMap.put(key, env[key])
-            } else {
-                def value = env.get(key)
-                lazyMap.put(key, { -> value })
-            }
-        }
-        return lazyMap
+    EnvVars(List<?> environment) {
+        this.environment = environment
     }
+
 
     List<String> resolveAsStrings() {
-        List<String> result = []
-        for(String key : environment.keySet()) {
-            Closure<String> lazyValue = environment[key]
-            def value = lazyValue?.call()
-            if(value != null) {
-                result += ["$key=$value"]
-            }
+        return environment.collect {
+            resolveString(it)
         }
-        return result
     }
 
-    Closure<String> getAt(String key) {
-        environment[key]
+    def resolveString(Object obj) {
+        if(obj instanceof Closure) {
+            return obj.call().toString()
+        }
+        return obj.toString()
+    }
+
+    Object getAt(String key) {
+        environment.collect{resolveString(it).split("=")}.find{
+            it[0] == key
+        }
     }
 
 }

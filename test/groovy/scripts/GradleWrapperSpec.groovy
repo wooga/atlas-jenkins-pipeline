@@ -21,11 +21,11 @@ class GradleWrapperSpec extends DeclarativeJenkinsSpec {
         usedEnvironments.last() == expectedEnv
 
         where:
-        givenEnv                            | expectedEnv
-        [:]                                 | [:]
-        [ENV: "eager", EAGER: "eager"]      | ["ENV": "eager", "EAGER": "eager"]
-        [EAGER: "eager", LAZY: { "lazy" }]  | ["EAGER": "eager", "LAZY": "lazy"]
-        [ENV: { "lazy" }, LAZY: { "lazy" }] | ["ENV": "lazy", "LAZY": "lazy"]
+        givenEnv                          | expectedEnv
+        [:]                               | [:]
+        ["ENV=eager", "EAGER=eager"]      | ["ENV": "eager", "EAGER": "eager"]
+        ["EAGER=eager", { "LAZY=lazy" }]  | ["EAGER": "eager", "LAZY": "lazy"]
+        [{ "ENV=lazy" }, { "LAZY=lazy" }] | ["ENV": "lazy", "LAZY": "lazy"]
     }
 
     @Unroll

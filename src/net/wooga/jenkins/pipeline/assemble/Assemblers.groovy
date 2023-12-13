@@ -25,7 +25,8 @@ class Assemblers {
                 gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} assemble")
             }
         }
-        return jenkins.findFiles(glob: "$workingDir/build/outputs/*.nupkg")[0]
+        def artifacts = jenkins.findFiles(glob: "$workingDir/build/outputs/*.nupkg")
+        return artifacts? artifacts[0]: null
     }
 
 }
