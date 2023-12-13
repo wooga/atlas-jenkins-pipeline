@@ -89,7 +89,7 @@ class BuildUnityWdkV2Spec extends DeclarativeJenkinsSpec {
                 "assemble")
 
         and: "has set up environment"
-        def env = usedEnvironments.first()
+        def env = usedEnvironments[2]
         hasBaseEnvironment(env, "level")
         env.UNITY_LOG_CATEGORY == "build"
         env.UNITY_PACKAGE_MANAGER == "upm"

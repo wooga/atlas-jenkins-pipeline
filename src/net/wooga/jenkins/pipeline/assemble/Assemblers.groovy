@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.assemble
 
+import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.model.Gradle
 
 class Assemblers {
@@ -16,11 +17,16 @@ class Assemblers {
         this.gradle = gradle
     }
 
-    def unityWDK(String unityLogCategory, String releaseType, String releaseScope) {
-        jenkins.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
-            gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} assemble")
+    def unityWDK(String unityLogCategory, String releaseType, String releaseScope,
+                 PipelineConventions conventions = PipelineConventions.standard) {
+        String workingDir = conventions.workingDir
+        jenkins.dir(workingDir) {
+            jenkins.withEnv(["UNITY_LOG_CATEGORY = ${unityLogCategory}"]) {
+                gradle.wrapper("-Prelease.stage=${releaseType.trim()} -Prelease.scope=${releaseScope.trim()} assemble")
+            }
         }
-        return jenkins.findFiles(glob: 'build/outputs/*.nupkg')[0]
+        def artifacts = jenkins.findFiles(glob: "$workingDir/build/outputs/*.nupkg")
+        return artifacts? artifacts[0]: null
     }
 
 }

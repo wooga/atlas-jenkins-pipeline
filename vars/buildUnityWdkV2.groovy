@@ -30,7 +30,6 @@ def call(Map configMap = [unityVersions: []]) {
   }
 
   def config = WDKConfig.fromConfigMap(configMap, this)
-  def packageManagerEnvVar = "UNITY_PACKAGE_MANAGER"
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -74,7 +73,7 @@ def call(Map configMap = [unityVersions: []]) {
                 env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
                 env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
-                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
+                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String, config.conventions)
               }
             }
             post {
@@ -109,7 +108,7 @@ def call(Map configMap = [unityVersions: []]) {
                 env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
                 env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
-                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
+                setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String, config.conventions)
               }
             }
             post {
@@ -176,7 +175,7 @@ def call(Map configMap = [unityVersions: []]) {
               unstash 'upm_setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
+                assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String, config.conventions)
               }
             }
 
@@ -244,7 +243,7 @@ def call(Map configMap = [unityVersions: []]) {
           unstash 'wdk_output'
           script {
             def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-            publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
+            publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy", config.conventions)
           }
         }
 
