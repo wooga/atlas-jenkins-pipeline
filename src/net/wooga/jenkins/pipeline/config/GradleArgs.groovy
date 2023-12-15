@@ -12,7 +12,7 @@ class GradleArgs {
 
 
     static GradleArgs fromConfigMap(Map config) {
-        def environment = new EnvVars((config.gradleEnvironment ?: [:]) as Map<String, ?>)
+        def environment = EnvVars.fromList((config.gradleEnvironment ?: []) as List<?>)
         def showStackTraces = (config.showStackTrace ?: false) as boolean
         def refreshDependencies = (config.refreshDependencies ?: false) as boolean
         return new GradleArgs(environment, config.logLevel as String, showStackTraces, refreshDependencies)

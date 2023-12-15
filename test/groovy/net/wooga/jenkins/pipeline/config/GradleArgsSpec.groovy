@@ -26,13 +26,12 @@ class GradleArgsSpec extends Specification {
 
         where:
         env            | logLevel | stackTrace | refreshDeps | expected
-        [:]            | null     | null       | null        | new GradleArgs(new EnvVars([:]), null, false, false)
-        [:]            | "info"   | false      | false       | new GradleArgs(new EnvVars([:]), "info", false, false)
-        [:]            | "quiet"  | true       | false       | new GradleArgs(new EnvVars([:]), "quiet", true, false)
-        [:]            | "quiet"  | false      | true        | new GradleArgs(new EnvVars([:]), "quiet", false, true)
-        [:]            | "quiet"  | false      | true        | new GradleArgs(new EnvVars([:]), "quiet", false, true)
-        [:]            | "quiet"  | false      | true        | new GradleArgs(new EnvVars([:]), "quiet", false, true)
-        [env: "value"] | "quiet"  | false      | true        | new GradleArgs(new EnvVars([env: "value"]), "quiet", false, true)
+        [:]            | null     | null       | null        | new GradleArgs(EnvVars.fromList([]), null, false, false)
+        [:]            | "info"   | false      | false       | new GradleArgs(EnvVars.fromList([]), "info", false, false)
+        [:]            | "quiet"  | true       | false       | new GradleArgs(EnvVars.fromList([]), "quiet", true, false)
+        [:]            | "quiet"  | false      | true        | new GradleArgs(EnvVars.fromList([]), "quiet", false, true)
+        [:]            | "quiet"  | false      | true        | new GradleArgs(EnvVars.fromList([]), "quiet", false, true)
+        [:]            | "quiet"  | false      | true        | new GradleArgs(EnvVars.fromList([]), "quiet", false, true)
+        [env: "value"] | "quiet"  | false      | true        | new GradleArgs(EnvVars.fromList(["env=value"]), "quiet", false, true)
     }
-
 }
