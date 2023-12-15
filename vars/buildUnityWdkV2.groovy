@@ -216,8 +216,7 @@ def call(Map configMap = [unityVersions: []]) {
                   withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
-                },
-                failFast : true
+                }
               }
             }
           }
