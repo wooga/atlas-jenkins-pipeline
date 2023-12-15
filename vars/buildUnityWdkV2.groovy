@@ -30,7 +30,6 @@ def call(Map configMap = [unityVersions: []]) {
   }
 
   def config = WDKConfig.fromConfigMap(configMap, this)
-  def packageManagerEnvVar = "UNITY_PACKAGE_MANAGER"
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -217,8 +216,7 @@ def call(Map configMap = [unityVersions: []]) {
                   withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
                     parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
-                },
-                failFast : true
+                }
               }
             }
           }
