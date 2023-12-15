@@ -27,9 +27,10 @@ class EnvVars {
     }
 
     Object getAt(String key) {
-        environment.collect{resolveString(it).split("=")}.find{
+        environment.collect{envEntry ->
+            resolveString(envEntry).split("=")}.find{
             it[0] == key
-        }
+        }?.getAt(1)
     }
 
 }

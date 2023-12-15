@@ -10,7 +10,7 @@ class GradleArgsSpec extends Specification {
     def "creates gradle args from config map"() {
         given: "a gradle args configuration map field"
         def gradleArgs = [
-                gradleEnvironment  : env,
+                gradleEnvironment  : env.collect { "${it.key}=${it.value}"},
                 logLevel           : logLevel,
                 showStackTrace     : stackTrace,
                 refreshDependencies: refreshDeps]
@@ -21,7 +21,7 @@ class GradleArgsSpec extends Specification {
         then: "generated config object is valid and matches map values"
         config == expected
         env.keySet().forEach {key ->
-            assert config.environment.environment[key].call() == env[key]
+            assert config.environment[key] == env[key]
         }
 
         where:
