@@ -4,6 +4,7 @@ target
 build/
 out/
 .idea/
+*bin/
 
 # Ignore Gradle GUI config
 gradle-app.setting
