@@ -29,7 +29,7 @@ class WDKConfig implements PipelineConfig {
 
     static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, Map configMap) {
         def index = 0
-        def extraLabels = ["linux"]
+        def extraLabels = []
         def platforms = []
 
         def buildVersions = BuildVersion.parseMany(unityVerObjs)
