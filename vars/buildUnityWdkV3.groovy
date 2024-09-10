@@ -230,24 +230,20 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                parallel paket: {
-                  when {
-                    expression{
-                      hasToBuildPaket
+                script {
+                  parallel paket: {
+                    if (hasToBuildPaket) {
+                      withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
+                        parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+                      }
                     }
-                  }
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-                  }
-                },
-                upm: {
-                  when {
-                    expression{
-                      hasToBuildUpm
+                  },
+                  upm: {
+                    if (hasToBuildUpm) {
+                      withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+                        parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+                      }
                     }
-                  }
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
                   }
                 }
               }
