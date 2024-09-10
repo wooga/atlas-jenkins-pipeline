@@ -29,9 +29,9 @@ def call(Map configMap = [unityVersions: []]) {
     }
   }
   def config = WDKConfig.fromConfigMap(configMap, this)
-  def hasToBuildUpm = config.unityVersions.any({ version
+  config.hasToBuildUpm = config.unityVersions.any({ version
     -> version.packageType == "any" || version.packageType == "upm" })
-  def hasToBuildPaket = config.unityVersions.any({ version
+  config.hasToBuildPaket = config.unityVersions.any({ version
     -> version.packageType == "any" || version.packageType == "paket" })
 
   // We can only configure static pipelines atm.
@@ -106,7 +106,7 @@ def call(Map configMap = [unityVersions: []]) {
           stage("setup upm") {
             when{
               expression{
-                hasToBuildUpm
+                config.hasToBuildUpm
               }
             }
             agent {
@@ -153,10 +153,10 @@ def call(Map configMap = [unityVersions: []]) {
         }
         steps {
           script {
-            if (hasToBuildUpm) {
+            if (config.hasToBuildUpm) {
               unstash 'upm_setup_w'
             }
-            if (hasToBuildPaket) {
+            if (config.hasToBuildPaket) {
               unstash 'paket_setup_w'
             }
           }
@@ -184,7 +184,7 @@ def call(Map configMap = [unityVersions: []]) {
           stage('assemble package') {
             when{
               expression{
-                hasToBuildUpm
+                config.hasToBuildUpm
               }
             }
             agent {
@@ -231,20 +231,7 @@ def call(Map configMap = [unityVersions: []]) {
             steps {
               script {
                 script {
-                  parallel paket: {
-                    if (hasToBuildPaket) {
-                      withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-                        parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-                      }
-                    }
-                  },
-                  upm: {
-                    if (hasToBuildUpm) {
-                      withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                        parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-                      }
-                    }
-                  }
+                  parallel checkSteps (config)
                 }
               }
             }
@@ -268,10 +255,10 @@ def call(Map configMap = [unityVersions: []]) {
 
         steps {
           script {
-            if (hasToBuildUpm) {
+            if (config.hasToBuildUpm) {
               unstash 'upm_setup_w'
             }
-            if (hasToBuildPaket) {
+            if (config.hasToBuildPaket) {
               unstash 'paket_setup_w'
             }
             // Some packages are shipped with the paket.template, because of it, paket plugin tries to publish those packages.
@@ -302,6 +289,28 @@ def call(Map configMap = [unityVersions: []]) {
       }
     }
   }
+}
+
+def collectSteps(WDKConfig config) {
+  def stepsForParallel = [:]
+
+  if (config.hasToBuildPaket) {
+    stepsForParallel['paket'] = {
+      withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
+        parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+      }
+    }
+  }
+
+  if (config.hasToBuildUpm) {
+    stepsForParallel['upm'] = {
+      withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+        parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+      }
+    }
+  }
+
+  return stepsForParallel
 }
 
 def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashId) {
