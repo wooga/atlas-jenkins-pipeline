@@ -5,10 +5,12 @@ import net.wooga.jenkins.pipeline.BuildVersion
 class UnityVersionPlatform {
     final Platform platform
     final BuildVersion buildVersion
+    final String packageType
 
-    UnityVersionPlatform(Platform platform, BuildVersion buildVersion) {
+    UnityVersionPlatform(Platform platform, BuildVersion buildVersion, String packageType) {
         this.platform = platform
         this.buildVersion = buildVersion
+        this.packageType = packageType
     }
 
     String getVersion() {
@@ -25,7 +27,7 @@ class UnityVersionPlatform {
 
     @Override
     String toString() {
-        return buildVersion.toDescription()
+        return buildVersion.toDescription() + " : " + packageType
     }
 
     boolean equals(o) {
@@ -36,6 +38,7 @@ class UnityVersionPlatform {
 
         if (buildVersion != that.buildVersion) return false
         if (platform != that.platform) return false
+        if (packageType != that.packageType) return false
 
         return true
     }
@@ -44,6 +47,7 @@ class UnityVersionPlatform {
         int result
         result = (platform != null ? platform.hashCode() : 0)
         result = 31 * result + (buildVersion != null ? buildVersion.hashCode() : 0)
+        result = 31 * result + (packageType != null ? packageType.hashCode() : 0)
         return result
     }
 }

@@ -29,16 +29,18 @@ class WDKConfig implements PipelineConfig {
 
     static List<UnityVersionPlatform> collectUnityVersions(List unityVerObjs, Map configMap) {
         def index = 0
-        def extraLabels = ["linux"]
         def platforms = []
 
-        def buildVersions = BuildVersion.parseMany(unityVerObjs)
-        buildVersions.addAll(copyBuildVersionsWithLabels(extraLabels, buildVersions))
-
-        for (BuildVersion buildVersion : buildVersions) {
+        for (unityVerObj in unityVerObjs)
+        {
+            def buildVersion = BuildVersion.parse(unityVerObj)
+            def packageType = "any";
+            if (unityVerObj instanceof Map && unityVerObj.containsKey("packageType")) {
+                packageType = unityVerObj["packageType"]
+            }
             def platform = Platform.forWDK(buildVersion, configMap, index == 0)
             index++
-            platforms.add(new UnityVersionPlatform(platform, buildVersion))
+            platforms.add(new UnityVersionPlatform(platform, buildVersion, packageType))
         }
         return platforms
     }

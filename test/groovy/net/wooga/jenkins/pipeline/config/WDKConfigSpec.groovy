@@ -11,6 +11,52 @@ class WDKConfigSpec extends Specification {
     @Shared
     def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
 
+    @Unroll("creates valid Unity Platform Versions object from #configMap")
+    def "creates valid WDKConfig object from config map"() {
+        given: "a configuration map"
+        and: "a jenkins build label"
+        when:
+        def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
+        then:
+        wdkConf.unityVersions.first().buildVersion.label == expected
+
+        where:
+        configMap                                                                                       | expected
+        [unityVersions: [[version :"2019"]]]                                                            | 'macos'
+        [unityVersions: [[version :"2019", label: "macos"]]]                                            | 'macos'
+        [unityVersions: [[version :"2019", label: "linux"]]]                                            | 'linux'
+    }
+
+    @Unroll("creates valid Unity Platform Versions object from #configMap")
+    def "creates valid WDKConfig object from config map"() {
+        given: "a configuration map"
+        and: "a jenkins build label"
+        when:
+        def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
+        then:
+        wdkConf.unityVersions.first().packageType == expected
+
+        where:
+        configMap                                                                                       | expected
+        [unityVersions: [[version :"2019", packageType: "paket"]]]                                     | 'packet'
+        [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'
+        [unityVersions: [[version :"2019"]]]                                                            | 'any'
+    }
+
+    @Unroll("creates valid Unity Platform Versions object from #configMap")
+    def "creates valid WDKConfig object from config map"() {
+        given: "a configuration map"
+        and: "a jenkins build label"
+        when:
+        def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
+        then:
+        wdkConf.unityVersions.toSorted() == expected.unityVersions.toSorted()
+
+        where:
+        configMap                                                                                       | expected
+        [unityVersions: ["2019", "2020"]]                                                               | configFor(["2019", "2020"], null, false, false, null)
+        [unityVersions: [[version :"2019"], [version :"2020"]]]                                         | configFor(["2019", "2020"], null, false, false, null)
+    }
 
     @Unroll("creates valid WDKConfig object from #configMap")
     def "creates valid WDKConfig object from config map"() {
@@ -63,14 +109,10 @@ class WDKConfigSpec extends Specification {
 
 
     def platsFor(List<?> unityVersionObj) {
-        return unityVersionObj.withIndex().collectMany { Object it, int index ->
+        return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
-            def linuxBuildVersion = buildVersion.copy([label: "linux", optional: true])
-
             def platform = Platform.forWDK(buildVersion, [:], index == 0)
-            def linuxPlatform = Platform.forWDK(linuxBuildVersion, [:], false)
-            return [new UnityVersionPlatform(platform, buildVersion),
-                    new UnityVersionPlatform(linuxPlatform, linuxBuildVersion)]
+            return new UnityVersionPlatform(platform, buildVersion, "any")
         }
     }
 }
