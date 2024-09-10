@@ -32,7 +32,7 @@ class CheckCreator {
             if (versionBuild.optional) {
                 jenkins.unstable(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
             } else {
-                throw e
+                jenkins.failure(message: "Unity build for optional version ${versionBuild.version} is found to be unstable\n${e.toString()}")
             }
         }
         def finallyClosure = {

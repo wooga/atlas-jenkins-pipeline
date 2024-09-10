@@ -230,7 +230,7 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE'){
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE'){Z
                   parallel paket: {
                     if (hasToBuildPaket) {
                       withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
