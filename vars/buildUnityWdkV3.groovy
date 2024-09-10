@@ -152,11 +152,13 @@ def call(Map configMap = [unityVersions: []]) {
           label "atlas && macos"
         }
         steps {
-          if (hasToBuildUpm){
-            unstash 'upm_setup_w'
-          }
-          if (hasToBuildPaket){
-            unstash 'paket_setup_w'
+          script {
+            if (hasToBuildUpm) {
+              unstash 'upm_setup_w'
+            }
+            if (hasToBuildPaket) {
+              unstash 'paket_setup_w'
+            }
           }
           catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
             gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
@@ -269,13 +271,13 @@ def call(Map configMap = [unityVersions: []]) {
         }
 
         steps {
-          if(hasToBuildUpm) {
-            unstash 'upm_setup_w'
-          }
-          if(hasToBuildPaket){
-            unstash 'paket_setup_w'
-          }
           script {
+            if (hasToBuildUpm) {
+              unstash 'upm_setup_w'
+            }
+            if (hasToBuildPaket) {
+              unstash 'paket_setup_w'
+            }
             // Some packages are shipped with the paket.template, because of it, paket plugin tries to publish those packages.
             // This is a hack until we implement a better solution (ex: remove the paket.template files when doing paketUnityInstall)
             sh script: "find Packages -type f -iname \"paket.template\" | xargs rm"
