@@ -230,8 +230,19 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                script {
-                  parallel collectStepsForRequestedPackageTypes(config, hasToBuildUpm, hasToBuildPaket)
+                parallel paket: {
+                  if (hasToBuildPaket) {
+                    withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
+                      parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+                    }
+                  }
+                },
+                upm: {
+                  if (hasToBuildUpm){
+                    withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+                      parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+                    }
+                  }
                 }
               }
             }
@@ -289,28 +300,6 @@ def call(Map configMap = [unityVersions: []]) {
       }
     }
   }
-}
-
-def collectStepsForRequestedPackageTypes(WDKConfig config, boolean hasToBuildUpm, boolean hasToBuildPaket) {
-  def stepsForParallel = [:]
-
-  if (hasToBuildUpm) {
-    stepsForParallel['upm'] = {
-      withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-        parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-      }
-    }
-  }
-
-  if (hasToBuildPaket) {
-    stepsForParallel['paket'] = {
-      withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-        parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-      }
-    }
-  }
-
-  return stepsForParallel
 }
 
 def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashId) {
