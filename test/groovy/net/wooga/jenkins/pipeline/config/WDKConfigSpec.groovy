@@ -18,7 +18,7 @@ class WDKConfigSpec extends Specification {
         when:
         def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
         then:
-        wdkConf.unityVersions.first().buildVersion.label == expected
+        wdkConf.unityVersions.first().unityBuildVersion.label == expected
 
         where:
         configMap                                                                                       | expected
@@ -38,7 +38,7 @@ class WDKConfigSpec extends Specification {
 
         where:
         configMap                                                                                       | expected
-        [unityVersions: [[version :"2019", packageType: "paket"]]]                                     | 'packet'
+        [unityVersions: [[version :"2019", packageType: "paket"]]]                                      | 'paket'
         [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'
         [unityVersions: [[version :"2019"]]]                                                            | 'any'
     }
@@ -112,7 +112,7 @@ class WDKConfigSpec extends Specification {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
             def platform = Platform.forWDK(buildVersion, [:], index == 0)
-            return new UnityVersionPlatform(platform, buildVersion, "any")
+            return new WDKUnityBuildVersion(platform, buildVersion, "any")
         }
     }
 }

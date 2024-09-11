@@ -18,7 +18,6 @@ def call(Map configMap = [unityVersions: []]) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-  configMap.packageType = configMap.get("packageType", 'any')
   configMap.testWrapper = { Step testOperation, Platform plat ->
     if(env."UNITY_PACKAGE_MANAGER" == "upm") {
       withCredentials([file(credentialsId: 'atlas-upm-credentials', variable: "UPM_USER_CONFIG_FILE")]) {
