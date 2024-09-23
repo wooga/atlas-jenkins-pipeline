@@ -1,25 +1,36 @@
 package net.wooga.jenkins.pipeline.config
 
-
 import net.wooga.jenkins.pipeline.PipelineTools
 
 class WDKConfig implements PipelineConfig {
 
-    final WDKUnityBuildVersion[] unityVersions
+    final WdkUnityBuildVersion[] unityVersions
     final BaseConfig baseConfig
 
-    static List<WDKUnityBuildVersion> collectWDKUnityBuildVersions(List unityVerObjs, Map configMap) {
-        def index = 0
-        def platforms = unityVerObjs.collect { unityVerObj ->
-            WDKUnityBuildVersion.Parse(unityVerObj, configMap, index++ == 0)
+    static List<WdkUnityBuildVersion> copyBuildVersionsWithLabels(Map configMap,
+                                                                  List<String> labels,
+                                                                  List<WdkUnityBuildVersion> baseBuildVersions) {
+        return labels.collectMany { label ->
+            baseBuildVersions.findAll{ wdkUnityBuildVersion -> wdkUnityBuildVersion.unityBuildVersion.label != label}
+                    .collect{baseWdkUnityBuildVersion -> baseWdkUnityBuildVersion.copy(configMap, label)}
         }
-        return platforms
     }
 
-    static WDKConfig fromConfigMap(Map configMap, Object jenkinsScript) {
+    static List<WdkUnityBuildVersion> collectWdkUnityBuildVersions(Map configMap, List<String> extraLabels = []) {
+        def index = 0
+        def unityVerObjs = configMap.unityVersions as List
+        def wdkUnityBuildVersions = unityVerObjs.collect { unityVerObj ->
+            WdkUnityBuildVersion.Parse(unityVerObj, configMap, index++ == 0)
+        }
+        def extraBuildVersions = copyBuildVersionsWithLabels(configMap, extraLabels, wdkUnityBuildVersions)
+        wdkUnityBuildVersions.addAll(extraBuildVersions)
+        return wdkUnityBuildVersions
+    }
+
+    static WDKConfig fromConfigMap(Map configMap, Object jenkinsScript, List<String> extraLabels = []) {
         configMap.unityVersions = configMap.unityVersions ?: []
 
-        def unityVersions = collectWDKUnityBuildVersions(configMap.unityVersions as List, configMap)
+        def unityVersions = collectWdkUnityBuildVersions(configMap, extraLabels)
 
         if (unityVersions.isEmpty()) throw new Exception("Please provide at least one unity version.")
 
@@ -28,7 +39,7 @@ class WDKConfig implements PipelineConfig {
         return new WDKConfig(unityVersions, baseConfig)
     }
 
-    WDKConfig(List<WDKUnityBuildVersion> unityVersions, BaseConfig baseConfig) {
+    WDKConfig(List<WdkUnityBuildVersion> unityVersions, BaseConfig baseConfig) {
         this.unityVersions = unityVersions
         this.baseConfig = baseConfig
     }

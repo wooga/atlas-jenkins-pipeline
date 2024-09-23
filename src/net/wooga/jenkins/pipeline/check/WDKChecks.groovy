@@ -15,7 +15,7 @@ class WDKChecks {
         this.steps = steps
     }
 
-    Map<String, Closure> wdkCoverage(WDKUnityBuildVersion[] unityVersions, String releaseType, String releaseScope,
+    Map<String, Closure> wdkCoverage(WdkUnityBuildVersion[] unityVersions, String releaseType, String releaseScope,
                                      CheckArgs checkArgs, PipelineConventions conventions) {
         def baseTestStep = steps.wdkTestStep(releaseType, releaseScope, conventions.wdkSetupStashId, conventions.checkTask)
         def baseAnalysisStep = steps.wdkAnalysisStep(conventions, checkArgs.metadata, checkArgs.sonarqube)
@@ -26,28 +26,29 @@ class WDKChecks {
                         conventions)
     }
 
-    Closure check(WDKUnityBuildVersion platform, Step testStep, Step analysisStep) {
+
+    Closure check(WdkUnityBuildVersion platform, Step testStep, Step analysisStep) {
         return checkCreator.csWDKChecks(platform, testStep, analysisStep)
     }
 
-    Map<String, Closure> parallel(WDKUnityBuildVersion[] wdkPlatforms, Closure checkStep,
+    Map<String, Closure> parallel(WdkUnityBuildVersion[] wdkPlatforms, Closure checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return parallel(wdkPlatforms, new Step(checkStep), conventions)
     }
 
-    Map<String, Closure> parallel(WDKUnityBuildVersion[] wdkPlatforms, Step checkStep,
+    Map<String, Closure> parallel(WdkUnityBuildVersion[] wdkPlatforms, Step checkStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
             [("${conventions.wdkParallelPrefix}${wdkPlatform.stepDescription}".toString()): checkStep.pack(wdkPlatform.platform)]
         }
     }
 
-    Map<String, Closure> parallel(WDKUnityBuildVersion[] wdkPlatforms, Closure testStep, Closure analysisStep,
+    Map<String, Closure> parallel(WdkUnityBuildVersion[] wdkPlatforms, Closure testStep, Closure analysisStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return parallel(wdkPlatforms, new Step(testStep), new Step(analysisStep), conventions)
     }
 
-    Map<String, Closure> parallel(WDKUnityBuildVersion[] wdkPlatforms, Step testStep, Step analysisStep,
+    Map<String, Closure> parallel(WdkUnityBuildVersion[] wdkPlatforms, Step testStep, Step analysisStep,
                                   PipelineConventions conventions = PipelineConventions.standard) {
         return wdkPlatforms.collectEntries { wdkPlatform ->
             def checkStep = checkCreator.csWDKChecks(wdkPlatform, testStep, analysisStep)

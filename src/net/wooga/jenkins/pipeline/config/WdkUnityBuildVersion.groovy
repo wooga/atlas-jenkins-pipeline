@@ -2,12 +2,12 @@ package net.wooga.jenkins.pipeline.config
 
 import net.wooga.jenkins.pipeline.BuildVersion
 
-class WDKUnityBuildVersion {
+class WdkUnityBuildVersion {
     final Platform platform
     final BuildVersion unityBuildVersion
     final String packageType
 
-    WDKUnityBuildVersion(Platform platform, BuildVersion unityBuildVersion, String packageType) {
+    WdkUnityBuildVersion(Platform platform, BuildVersion unityBuildVersion, String packageType) {
         this.platform = platform
         this.unityBuildVersion = unityBuildVersion
         this.packageType = packageType
@@ -34,7 +34,7 @@ class WDKUnityBuildVersion {
         if (this.is(o)) return true
         if (getClass() != o.class) return false
 
-        WDKUnityBuildVersion that = (WDKUnityBuildVersion) o
+        WdkUnityBuildVersion that = (WdkUnityBuildVersion) o
 
         if (unityBuildVersion != that.unityBuildVersion) return false
         if (platform != that.platform) return false
@@ -51,7 +51,7 @@ class WDKUnityBuildVersion {
         return result
     }
 
-    static WDKUnityBuildVersion Parse(Object unityVerObj, Map configMap, boolean isMain)
+    static WdkUnityBuildVersion Parse(Object unityVerObj, Map configMap, boolean isMain)
     {
         def buildVersion = BuildVersion.parse(unityVerObj)
         def packageType = "any";
@@ -59,6 +59,14 @@ class WDKUnityBuildVersion {
             packageType = unityVerObj["packageType"] as String
         }
         def platform = Platform.forWDK(buildVersion, configMap, isMain)
-        return new WDKUnityBuildVersion(platform, buildVersion, packageType)
+        return new WdkUnityBuildVersion(platform, buildVersion, packageType)
+    }
+
+    WdkUnityBuildVersion copy(Map configMap, String label) {
+        def buildVersion = unityBuildVersion.copy(label: label, optional: true)
+        new WdkUnityBuildVersion(
+                Platform.forWDK(buildVersion, configMap, false),
+                buildVersion,
+                packageType)
     }
 }

@@ -95,6 +95,25 @@ class WDKConfigSpec extends Specification {
         unityVersions << [[], null]
     }
 
+    @Unroll("creates valid WDKConfig from #configMap with versions for all extraLabels or none")
+    def "creates valid WDKConfig object from config map with versions for all extraLabels"() {
+        given: "a configuration map"
+        and: "a jenkins build label"
+        when:
+        def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript, extraVesrions)
+        then:
+        wdkConf.unityVersions.collect {it.unityBuildVersion.label} == expected
+        wdkConf.unityVersions.collect {it.platform.os} == expected
+
+        where:
+        configMap                                                                                       | extraVesrions         | expected
+        [unityVersions: ["2019", "2020"]]                                                               | []                    | ["macos", "macos"]
+        [unityVersions: ["2019", "2020"]]                                                               | ["macos"]             | ["macos", "macos"]
+        [unityVersions: ["2019"]]                                                                       | ["linux"]             | ["macos", "linux"]
+        [unityVersions: ["2019", "2020"]]                                                               | ["linux"]             | ["macos", "macos", "linux", "linux"]
+        [unityVersions: ["2019"]]                                                                       | ["linux", "windows"]  | ["macos", "linux", "windows"]
+    }
+
     def configFor(List<String> unityVersionObj, String sonarToken, boolean refreshDependencies, boolean showStackTrace, String logLevel) {
         def metadata = JenkinsMetadata.fromScript(jenkinsScript)
         def unityVersions = platsFor(unityVersionObj)
@@ -112,7 +131,7 @@ class WDKConfigSpec extends Specification {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
             def platform = Platform.forWDK(buildVersion, [:], index == 0)
-            return new WDKUnityBuildVersion(platform, buildVersion, "any")
+            return new WdkUnityBuildVersion(platform, buildVersion, "any")
         }
     }
 }
