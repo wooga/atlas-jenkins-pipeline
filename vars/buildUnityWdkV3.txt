@@ -1,0 +1,28 @@
+Custom step to build, test and deploy Wooga's Unity projects.
+
+Arguments:
+
+- unityVersions: []
+    - $VERSION: ""
+    - $OPTIONAL: [true, false]
+    - $API_COMPAT_LEVEL: [net4_6, net2_0_subset]
+    - $LABEL: [macos, linux]
+    - $PACKAGE_TYPE: [upm, paket]
+- refreshDependencies: [true, false]
+- logLevel: [quiet, warning, info, debug]
+- testLabels: []
+- labels: []
+
+Usage:
+
+"def args = 
+[
+    refreshDependencies : true,
+    unityVersions : 
+    [
+        '$VERSION1', 
+        '$VERSION2', 
+        [version : '$VERSION3', optional : $BOOLEAN, apiCompatibilityLevel: '$API_COMPAT_LEVEL', label: '$PLATFORM', packageType: '$PACKAGE_TYPE']
+    ],
+]
+buildWDKAutoSwitch args"

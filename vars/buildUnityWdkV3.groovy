@@ -6,7 +6,7 @@ import net.wooga.jenkins.pipeline.config.WDKConfig
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
-// Step buildUnityWdkV2                                                                                            //
+// Step buildUnityWdkV3                                                                                            //
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -26,10 +26,12 @@ def call(Map configMap = [unityVersions: []]) {
     } else {
       testOperation(plat)
     }
-
   }
-
-  def config = WDKConfig.fromConfigMap(configMap, this, ["linux"])
+  def config = WDKConfig.fromConfigMap(configMap, this)
+  def hasToBuildUpm = config.unityVersions.any({ version
+    -> version.packageType == "any" || version.packageType == "upm" })
+  def hasToBuildPaket = config.unityVersions.any({ version
+    -> version.packageType == "any" || version.packageType == "paket" })
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -62,6 +64,11 @@ def call(Map configMap = [unityVersions: []]) {
         failFast true
         parallel {
           stage("setup paket") {
+            when {
+              expression {
+                hasToBuildPaket
+              }
+            }
             agent {
               label "atlas && macos"
             }
@@ -96,6 +103,11 @@ def call(Map configMap = [unityVersions: []]) {
           }
 
           stage("setup upm") {
+            when{
+              expression{
+                hasToBuildUpm
+              }
+            }
             agent {
               label "atlas && macos"
             }
@@ -139,8 +151,14 @@ def call(Map configMap = [unityVersions: []]) {
           label "atlas && macos"
         }
         steps {
-          unstash 'upm_setup_w'
-          unstash 'paket_setup_w'
+          script {
+            if (hasToBuildUpm) {
+              unstash 'upm_setup_w'
+            }
+            if (hasToBuildPaket) {
+              unstash 'paket_setup_w'
+            }
+          }
           catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
             gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
           }
@@ -162,8 +180,12 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Build") {
         failFast true
         parallel {
-
           stage('assemble package') {
+            when{
+              expression{
+                hasToBuildUpm
+              }
+            }
             agent {
               label "atlas && macos"
             }
@@ -208,13 +230,17 @@ def call(Map configMap = [unityVersions: []]) {
             steps {
               script {
                 parallel paket: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+                  if (hasToBuildPaket) {
+                    withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
+                      parallel checkSteps(config, "paket check unity ", "paket_setup_w")
+                    }
                   }
                 },
                 upm: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+                  if (hasToBuildUpm) {
+                    withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
+                      parallel checkSteps(config, "upm check unity ", "upm_setup_w")
+                    }
                   }
                 }
               }
@@ -238,9 +264,13 @@ def call(Map configMap = [unityVersions: []]) {
         }
 
         steps {
-          unstash 'upm_setup_w'
-          unstash 'wdk_output'
           script {
+            if (hasToBuildUpm) {
+              unstash 'upm_setup_w'
+            }
+            if (hasToBuildPaket) {
+              unstash 'paket_setup_w'
+            }
             // Some packages are shipped with the paket.template, because of it, paket plugin tries to publish those packages.
             // This is a hack until we implement a better solution (ex: remove the paket.template files when doing paketUnityInstall)
             sh script: "find Packages -type f -iname \"paket.template\" | xargs rm"

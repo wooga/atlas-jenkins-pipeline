@@ -2,7 +2,7 @@ package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.check.steps.Step
 import net.wooga.jenkins.pipeline.config.Platform
-import net.wooga.jenkins.pipeline.config.UnityVersionPlatform
+import net.wooga.jenkins.pipeline.config. WdkUnityBuildVersion
 
 class CheckCreator {
     final Object jenkins
@@ -26,7 +26,7 @@ class CheckCreator {
         return checkStep
     }
 
-    Closure csWDKChecks(UnityVersionPlatform versionBuild, Step testStep, Step analysisStep) {
+    Closure csWDKChecks(WdkUnityBuildVersion versionBuild, Step testStep, Step analysisStep) {
         def mainClosure = createCheck(testStep, analysisStep).pack(versionBuild.platform)
         def catchClosure = { Throwable e ->
             if (versionBuild.optional) {
