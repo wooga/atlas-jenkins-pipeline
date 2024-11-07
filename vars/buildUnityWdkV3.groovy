@@ -274,6 +274,7 @@ def call(Map configMap = [unityVersions: []]) {
             // Some packages are shipped with the paket.template, because of it, paket plugin tries to publish those packages.
             // This is a hack until we implement a better solution (ex: remove the paket.template files when doing paketUnityInstall)
             sh script: "find Packages -type f -iname \"paket.template\" -o -iname \"paket.template.meta\" | xargs rm"
+            sh script: "find Library/PackageCache -type f -iname \"paket.template\" -o -iname \"paket.template.meta\" | xargs rm"
             def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
             publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
           }
