@@ -271,10 +271,10 @@ def call(Map configMap = [unityVersions: []]) {
           }
         }
       }
-      post {
-        always {
-          sendSlackNotification currentBuild.result, true
-        }
+    }
+    post {
+      always {
+        sendSlackNotification currentBuild.result, true
       }
     }
   }
