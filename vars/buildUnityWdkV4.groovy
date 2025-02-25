@@ -147,12 +147,11 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Build") {
         failFast true
         parallel {
-          stage('assemble default') {
+          stage('Assemble') {
             agent {
               label "atlas && macos"
             }
             environment {
-              UNITY_PACKAGE_MANAGER = 'upm'
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
             }
             steps {
@@ -166,43 +165,6 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-              }
-              cleanup {
-                script {
-                  if (config.mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
-              }
-            }
-          }
-
-          stage('assemble autoref') {
-            when {
-              expression {
-                hasToPublishAutoref
-              }
-            }
-            agent {
-              label "atlas && macos"
-            }
-            environment {
-              UNITY_PACKAGE_MANAGER = 'upm'
-              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-            }
-            steps {
-              unstash 'autoref_setup_w'
-              script {
-                def assembler = config.pipelineTools.assemblers
-                assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
-              }
-            }
-
-            post {
-              always {
                 archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
