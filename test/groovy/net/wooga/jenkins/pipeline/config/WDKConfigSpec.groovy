@@ -131,7 +131,7 @@ class WDKConfigSpec extends Specification {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
             def platform = Platform.forWDK(buildVersion, [:], index == 0)
-            return new WdkUnityBuildVersion(platform, buildVersion, "any")
+            return new WdkUnityBuildVersion(platform, buildVersion, true)
         }
     }
 }

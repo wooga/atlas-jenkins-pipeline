@@ -24,7 +24,7 @@ def call(Map configMap = [unityVersions: []]) {
     }
   }
   def config = WDKConfig.fromConfigMap(configMap, this)
-  def hasToPublishAutoref = config.unityVersions.any({ version -> version.autoref == "any" || version.autoref == "true" })
+  def hasToPublishAutoref = config.unityVersions.any({ version -> version.autoref })
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -237,7 +237,11 @@ def call(Map configMap = [unityVersions: []]) {
             agent {
               label "atlas && macos"
             }
-
+            when {
+              expression {
+                hasToPublishAutoref
+              }
+            }
             environment {
               GRGIT = credentials('github_access')
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')

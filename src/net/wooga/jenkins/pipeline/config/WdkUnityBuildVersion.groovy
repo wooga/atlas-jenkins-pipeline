@@ -6,9 +6,9 @@ class WdkUnityBuildVersion {
     final Platform platform
     final BuildVersion unityBuildVersion
     final String packageType
-    final String autoref
+    final boolean autoref
 
-    WdkUnityBuildVersion(Platform platform, BuildVersion unityBuildVersion, String packageType, String autoref) {
+    WdkUnityBuildVersion(Platform platform, BuildVersion unityBuildVersion, String packageType, boolean autoref) {
         this.platform = platform
         this.unityBuildVersion = unityBuildVersion
         this.packageType = packageType
@@ -60,9 +60,9 @@ class WdkUnityBuildVersion {
         if (unityVerObj instanceof Map && unityVerObj.containsKey("packageType")) {
             packageType = unityVerObj["packageType"] as String
         }
-        def autoreferenced = "any"
+        def autoreferenced = true
         if (unityVerObj instanceof Map && unityVerObj.containsKey("autoref")) {
-            autoreferenced = unityVerObj["autoref"]
+            autoreferenced = unityVerObj["autoref"] as boolean
         }
         def platform = Platform.forWDK(buildVersion, configMap, isMain)
         return new WdkUnityBuildVersion(platform, buildVersion, packageType, autoreferenced)
