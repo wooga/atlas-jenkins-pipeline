@@ -34,13 +34,16 @@ class WDKConfigSpec extends Specification {
         when:
         def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
         then:
-        wdkConf.unityVersions.first().packageType == expected
+        wdkConf.unityVersions.first().packageType == packageType
+        wdkConf.unityVersions.first().autoref == autoref
 
         where:
-        configMap                                                                                       | expected
-        [unityVersions: [[version :"2019", packageType: "paket"]]]                                      | 'paket'
-        [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'
-        [unityVersions: [[version :"2019"]]]                                                            | 'any'
+        configMap                                                                                       | packageType  | autoref
+        [unityVersions: [[version :"2019", packageType: "paket"]]]                                      | 'paket'      | true
+        [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'        | true
+        [unityVersions: [[version :"2019"]]]                                                            | 'any'        | true
+        [unityVersions: [[version :"2019", autoref: false]]]                                            | 'any'        | false
+        [unityVersions: [[version :"2019", autoref: true]]]                                             | 'any'        | true
     }
 
     @Unroll("creates valid Unity Platform Versions object from #configMap")
@@ -131,7 +134,7 @@ class WDKConfigSpec extends Specification {
         return unityVersionObj.withIndex().collect { Object it, int index ->
             def buildVersion = BuildVersion.parse(it)
             def platform = Platform.forWDK(buildVersion, [:], index == 0)
-            return new WdkUnityBuildVersion(platform, buildVersion, true)
+            return new WdkUnityBuildVersion(platform, buildVersion, "any", true)
         }
     }
 }
