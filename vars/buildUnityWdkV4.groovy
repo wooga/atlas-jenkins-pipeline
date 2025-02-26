@@ -165,8 +165,6 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
@@ -223,6 +221,7 @@ def call(Map configMap = [unityVersions: []]) {
 
             post {
               always {
+                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
@@ -258,6 +257,7 @@ def call(Map configMap = [unityVersions: []]) {
 
             post {
               always {
+                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
