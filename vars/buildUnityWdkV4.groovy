@@ -72,7 +72,7 @@ def call(Map configMap = [unityVersions: []]) {
               GRGIT_PASS = "${GRGIT_PSW}"
               GITHUB_LOGIN = "${GRGIT_USR}"
               GITHUB_PASSWORD = "${GRGIT_PSW}"
-              SETUP_UNITY_AUTOREF = "true"
+              WDK_SETUP_AUTOREF = "true"
             }
             steps {
               script {
@@ -112,7 +112,7 @@ def call(Map configMap = [unityVersions: []]) {
               GRGIT_PASS = "${GRGIT_PSW}"
               GITHUB_LOGIN = "${GRGIT_USR}"
               GITHUB_PASSWORD = "${GRGIT_PSW}"
-              SETUP_UNITY_AUTOREF = "false"
+              WDK_SETUP_AUTOREF = "false"
             }
             steps {
               script {
