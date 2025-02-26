@@ -37,6 +37,10 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
       booleanParam(defaultValue: false, description: 'Whether to clear workspaces after build', name: 'CLEAR_WS')
     }
 
+    environment {
+      ATLAS_READ = credentials('artifactory_read') //needed to read private packages
+    }
+
     stages {
       stage('Preparation') {
         agent any
