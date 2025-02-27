@@ -24,7 +24,7 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
 
         when: "running buildWDKAutoSwitch pipeline"
         println packageSetupStash
-        inSandbox { buildWDK(unityVersions: [[version :"2019", autoref: autoref]], clearWs: true) }
+        inSandbox { buildWDK(unityVersions: [[version :"2019"]], clearWs: true, autoref: autoref) }
 
         then: "stashes #stashName setup"
         stash.containsKey(packageSetupStash)
