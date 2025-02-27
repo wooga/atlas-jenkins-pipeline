@@ -35,8 +35,7 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
         then: "runs gradle with parameters"
         assertShCallsWith(autoref ? 2 : 1, "gradlew",
                 "publish",
-                "-Ppaket.publish.repository='any'",
-                "-Ppublish.repository='any'",
+                "-Pupm.repository='any'",
                 "-PversionBuilder.stage=any",
                 "-PversionBuilder.scope=any"
         ) //2 calls when also building autoref, 1 when not
@@ -70,8 +69,7 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
         then: "runs gradle with parameters"
         assertShCallsWith(2, "gradlew",
                 "publish",
-                "-Ppaket.publish.repository='${releaseType?:"snapshot"}'",
-                "-Ppublish.repository='${releaseType?:"snapshot"}'",
+                "-Pupm.repository='${releaseType?:"snapshot"}'",
                 "-PversionBuilder.stage=${releaseType?:"snapshot"}",
                 "${releaseScope? "-PversionBuilder.scope=${releaseScope}": ''}"
         ) //2 calls 1 for autoref, 1 for default
