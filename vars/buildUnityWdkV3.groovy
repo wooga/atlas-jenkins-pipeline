@@ -275,7 +275,7 @@ def call(Map configMap = [unityVersions: []]) {
             // This is a hack until we implement a better solution (ex: remove the paket.template files when doing paketUnityInstall)
             sh script: "find Packages -type f -iname \"paket.template\" | xargs rm"
             def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-            publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
+            publisher.unityArtifactoryUpmAndPaket(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
           }
         }
 

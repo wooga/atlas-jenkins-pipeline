@@ -34,13 +34,16 @@ class WDKConfigSpec extends Specification {
         when:
         def wdkConf = WDKConfig.fromConfigMap(configMap, jenkinsScript)
         then:
-        wdkConf.unityVersions.first().packageType == expected
+        wdkConf.unityVersions.first().packageType == packageType
+        wdkConf.autoref == autoref
 
         where:
-        configMap                                                                                       | expected
-        [unityVersions: [[version :"2019", packageType: "paket"]]]                                      | 'paket'
-        [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'
-        [unityVersions: [[version :"2019"]]]                                                            | 'any'
+        configMap                                                                                       | packageType  | autoref
+        [unityVersions: [[version :"2019", packageType: "paket"]]]                                      | 'paket'      | true
+        [unityVersions: [[version :"2019", packageType: "upm"]]]                                        | 'upm'        | true
+        [unityVersions: [[version :"2019"]]]                                                            | 'any'        | true
+        [unityVersions: [[version :"2019"]], autoref: false]                                            | 'any'        | false
+        [unityVersions: [[version :"2019"]], autoref: true]                                             | 'any'        | true
     }
 
     @Unroll("creates valid Unity Platform Versions object from #configMap")
@@ -123,7 +126,7 @@ class WDKConfigSpec extends Specification {
                 GradleArgs.fromConfigMap([refreshDependencies: refreshDependencies, showStackTrace: showStackTrace, logLevel: logLevel]),
                 DockerArgs.fromConfigMap([:]),
                 CheckArgs.fromConfigMap(jenkinsScript, metadata, [sonarToken: sonarToken]))
-        return new WDKConfig(unityVersions, baseConfig)
+        return new WDKConfig(unityVersions, baseConfig, true)
     }
 
 

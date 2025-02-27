@@ -6,7 +6,7 @@ import net.wooga.jenkins.pipeline.config.WDKConfig
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                    //
-// Step buildUnityWdkV2                                                                                            //
+// Step buildUnityWdkV4                                                                                               //
 //                                                                                                                    //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -19,17 +19,11 @@ def call(Map configMap = [unityVersions: []]) {
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
   configMap.testWrapper = { Step testOperation, Platform plat ->
-    if(env."UNITY_PACKAGE_MANAGER" == "upm") {
-      withCredentials([file(credentialsId: 'atlas-upm-credentials', variable: "UPM_USER_CONFIG_FILE")]) {
-        testOperation(plat)
-      }
-    } else {
+    withCredentials([file(credentialsId: 'atlas-upm-credentials', variable: "UPM_USER_CONFIG_FILE")]) {
       testOperation(plat)
     }
-
   }
-
-  def config = WDKConfig.fromConfigMap(configMap, this, ["linux"])
+  def config = WDKConfig.fromConfigMap(configMap, this)
 
   // We can only configure static pipelines atm.
   // To test multiple unity versions we use a script block with a parallel stages inside.
@@ -61,33 +55,44 @@ def call(Map configMap = [unityVersions: []]) {
       stage("Setup") {
         failFast true
         parallel {
-          stage("setup paket") {
+          stage("setup autoref") {
+            when {
+              expression {
+                config.autoref
+              }
+            }
             agent {
               label "atlas && macos"
             }
             environment {
-              UNITY_PACKAGE_MANAGER = 'paket'
+              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+              GRGIT = credentials('github_access')
+              GRGIT_USER = "${GRGIT_USR}"
+              GRGIT_PASS = "${GRGIT_PSW}"
+              GITHUB_LOGIN = "${GRGIT_USR}"
+              GITHUB_PASSWORD = "${GRGIT_PSW}"
+              WDK_SETUP_AUTOREF = "true"
             }
             steps {
               script {
-                env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
-                env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
+                env.RELEASE_STAGE = params.RELEASE_STAGE ?: defaultReleaseType
+                env.RELEASE_SCOPE = params.RELEASE_SCOPE ?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
                 setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
               }
             }
             post {
               success {
-                stash(name: 'paket_setup_w', useDefaultExcludes: true, includes: "paket.lock, .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**")
+                stash(name: 'autoref_setup_w', useDefaultExcludes: true, includes: ".gradle/**, **/build/**, Packages/**, **/PackageCache/**")
               }
 
               always {
-                archiveArtifacts artifacts: 'paket.lock, **/build/logs/*.log', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/Packages/**/package.json, **/Packages/manifest.json, **/Packages/packages-lock.json, **/build/logs/*.log', allowEmptyArchive: true
               }
 
               cleanup {
                 script {
-                  if(config.mainPlatform.clearWs) {
+                  if (config.mainPlatform.clearWs) {
                     cleanWs()
                   }
                 }
@@ -95,18 +100,23 @@ def call(Map configMap = [unityVersions: []]) {
             }
           }
 
-          stage("setup upm") {
+          stage("setup default") {
             agent {
               label "atlas && macos"
             }
             environment {
+              GRGIT = credentials('github_access')
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-              UNITY_PACKAGE_MANAGER = 'upm'
+              GRGIT_USER = "${GRGIT_USR}"
+              GRGIT_PASS = "${GRGIT_PSW}"
+              GITHUB_LOGIN = "${GRGIT_USR}"
+              GITHUB_PASSWORD = "${GRGIT_PSW}"
+              WDK_SETUP_AUTOREF = "false"
             }
             steps {
               script {
-                env.RELEASE_STAGE = params.RELEASE_STAGE?: defaultReleaseType
-                env.RELEASE_SCOPE = params.RELEASE_SCOPE?: defaultReleaseScope
+                env.RELEASE_STAGE = params.RELEASE_STAGE ?: defaultReleaseType
+                env.RELEASE_SCOPE = params.RELEASE_SCOPE ?: defaultReleaseScope
                 def setup = config.pipelineTools.setups
                 setup.wdk(env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
               }
@@ -114,17 +124,16 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               success {
                 archiveArtifacts artifacts: '**/Packages/packages-lock.json'
-                stash(name: 'upm_setup_w', useDefaultExcludes: true, includes: "**/Packages/packages-lock.json, " +
-                        "**/PackageCache/**, " +
-                        "**/build/**")
+                stash(name: 'default_setup_w', useDefaultExcludes: true, includes: ".gradle/**, **/build/**, Packages/**, **/PackageCache/**")
+
               }
 
               always {
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/Packages/**/package.json, **/Packages/manifest.json, **/Packages/packages-lock.json, **/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
                 script {
-                  if(config.mainPlatform.clearWs) {
+                  if (config.mainPlatform.clearWs) {
                     cleanWs()
                   }
                 }
@@ -134,45 +143,18 @@ def call(Map configMap = [unityVersions: []]) {
         }
       }
 
-      stage("Validate package resolution") {
-        agent {
-          label "atlas && macos"
-        }
-        steps {
-          unstash 'upm_setup_w'
-          unstash 'paket_setup_w'
-          catchError(buildResult: "SUCCESS", stageResult: "UNSTABLE", message: "Some creative text") {
-            gradleWrapper "validatePackages -PunityPackages.reportsDirectory=$WORKSPACE/build/reports/packages"
-          }
-        }
-        post {
-          always {
-            publishHTML([allowMissing: false,
-                         alwaysLinkToLastBuild: true,
-                         keepAll: true,
-                         reportDir: 'build/reports/packages/html',
-                         reportFiles: 'index.html',
-                         reportName: 'Package Resolution',
-                         reportTitles: ''])
-            archiveArtifacts artifacts: 'build/reports/packages/**/*'
-          }
-        }
-      }
-
       stage("Build") {
         failFast true
         parallel {
-
-          stage('assemble package') {
+          stage('Assemble') {
             agent {
               label "atlas && macos"
             }
             environment {
-              UNITY_PACKAGE_MANAGER = 'upm'
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
             }
             steps {
-              unstash 'upm_setup_w'
+              unstash 'default_setup_w'
               script {
                 def assembler = config.pipelineTools.assemblers
                 assembler.unityWDK("build", env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String)
@@ -182,14 +164,11 @@ def call(Map configMap = [unityVersions: []]) {
             post {
               always {
                 stash(name: 'wdk_output', includes: ".gradle/**, **/build/outputs/**/*")
-                archiveArtifacts artifacts: 'build/outputs/*.nupkg', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'build/outputs/*.unitypackage', allowEmptyArchive: true
                 archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
               }
               cleanup {
                 script {
-                  if(config.mainPlatform.clearWs) {
+                  if (config.mainPlatform.clearWs) {
                     cleanWs()
                   }
                 }
@@ -207,56 +186,89 @@ def call(Map configMap = [unityVersions: []]) {
             }
             steps {
               script {
-                parallel paket: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=paket"]) {
-                    parallel checkSteps(config, "paket check unity ", "paket_setup_w")
-                  }
-                },
-                upm: {
-                  withEnv(["UNITY_PACKAGE_MANAGER=upm"]) {
-                    parallel checkSteps(config, "upm check unity ", "upm_setup_w")
-                  }
-                }
+                parallel checkSteps(config, "check unity ", "default_setup_w")
               }
             }
           }
         }
       }
 
-      stage('publish') {
-        agent {
-          label "atlas && macos"
-        }
+      stage("Publish") {
+        failFast true
+        parallel {
+          stage('Default') {
+            agent {
+              label "atlas && macos"
+            }
 
-        environment {
-          GRGIT = credentials('github_access')
-          UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-          GRGIT_USER = "${GRGIT_USR}"
-          GRGIT_PASS = "${GRGIT_PSW}"
-          GITHUB_LOGIN = "${GRGIT_USR}"
-          GITHUB_PASSWORD = "${GRGIT_PSW}"
-        }
+            environment {
+              GRGIT = credentials('github_access')
+              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+              GRGIT_USER = "${GRGIT_USR}"
+              GRGIT_PASS = "${GRGIT_PSW}"
+              GITHUB_LOGIN = "${GRGIT_USR}"
+              GITHUB_PASSWORD = "${GRGIT_PSW}"
+            }
 
-        steps {
-          unstash 'upm_setup_w'
-          unstash 'wdk_output'
-          script {
-            // Some packages are shipped with the paket.template, because of it, paket plugin tries to publish those packages.
-            // This is a hack until we implement a better solution (ex: remove the paket.template files when doing paketUnityInstall)
-            sh script: "find Packages -type f -iname \"paket.template\" | xargs rm"
-            def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-            publisher.unityArtifactoryUpmAndPaket(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish": "artifactory_deploy")
+            steps {
+              script {
+                unstash 'default_setup_w'
+                def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
+                publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
+              }
+            }
+
+            post {
+              always {
+                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+              }
+              cleanup {
+                script {
+                  if (config.mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
+              }
+            }
           }
-        }
+          stage('Autoref') {
+            agent {
+              label "atlas && macos"
+            }
+            when {
+              expression {
+                config.autoref
+              }
+            }
+            environment {
+              GRGIT = credentials('github_access')
+              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+              GRGIT_USER = "${GRGIT_USR}"
+              GRGIT_PASS = "${GRGIT_PSW}"
+              GITHUB_LOGIN = "${GRGIT_USR}"
+              GITHUB_PASSWORD = "${GRGIT_PSW}"
+            }
 
-        post {
-          always {
-            archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-          }
-          cleanup {
-            script {
-              if(config.mainPlatform.clearWs) {
-                cleanWs()
+            steps {
+              script {
+                unstash 'autoref_setup_w'
+                def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
+                publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
+              }
+            }
+
+            post {
+              always {
+                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
+                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+              }
+              cleanup {
+                script {
+                  if (config.mainPlatform.clearWs) {
+                    cleanWs()
+                  }
+                }
               }
             }
           }
@@ -277,7 +289,7 @@ def checkSteps(WDKConfig config, String parallelChecksPrefix, String setupStashI
   conventions.wdkSetupStashId = setupStashId
   def checks = config.pipelineTools.checks.forWDKPipelines()
   def stepsForParallel = checks.wdkCoverage(config.unityVersions,
-          env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String,
-          config.checkArgs, conventions)
+      env.RELEASE_STAGE as String, env.RELEASE_SCOPE as String,
+      config.checkArgs, conventions)
   return stepsForParallel
 }

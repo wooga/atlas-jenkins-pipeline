@@ -6,6 +6,7 @@ class WDKConfig implements PipelineConfig {
 
     final WdkUnityBuildVersion[] unityVersions
     final BaseConfig baseConfig
+    final Boolean autoref
 
     static List<WdkUnityBuildVersion> copyBuildVersionsWithLabels(Map configMap,
                                                                   List<String> labels,
@@ -36,12 +37,15 @@ class WDKConfig implements PipelineConfig {
 
         def baseConfig = BaseConfig.fromConfigMap(configMap, jenkinsScript)
 
-        return new WDKConfig(unityVersions, baseConfig)
+        def autoref = (!configMap.containsKey("autoref")) ? true : configMap.autoref as Boolean
+
+        return new WDKConfig(unityVersions, baseConfig, autoref)
     }
 
-    WDKConfig(List<WdkUnityBuildVersion> unityVersions, BaseConfig baseConfig) {
+    WDKConfig(List<WdkUnityBuildVersion> unityVersions, BaseConfig baseConfig, Boolean autoref) {
         this.unityVersions = unityVersions
         this.baseConfig = baseConfig
+        this.autoref = autoref
     }
 
     @Override

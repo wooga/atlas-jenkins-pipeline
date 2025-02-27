@@ -105,7 +105,7 @@ class Publishers {
         }
     }
 
-    def unityArtifactoryUpm(String artifactorySecret) {
+    def unityArtifactoryUpmAndPaket(String artifactorySecret) {
         jenkins.withEnv(["UNITY_PACKAGE_MANAGER = upm", "UNITY_LOG_CATEGORY=build"]) {
             jenkins.withCredentials([jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"UPM_USERNAME", passwordVariable: "UPM_PASSWORD"),
                                      jenkins.usernameColonPassword(credentialsId: artifactorySecret, variable: "NUGET_KEY"),
@@ -122,4 +122,18 @@ class Publishers {
             }
         }
     }
+
+    def unityArtifactoryUpm(String artifactorySecret) {
+        jenkins.withEnv(["UNITY_PACKAGE_MANAGER = upm", "UNITY_LOG_CATEGORY=build"]) {
+            jenkins.withCredentials([jenkins.usernamePassword(credentialsId: artifactorySecret, usernameVariable:"UPM_USERNAME", passwordVariable: "UPM_PASSWORD")]) {
+                gradle.wrapper("publish " +
+                        "-Pupm.repository='${releaseType}' " +
+                        "-PversionBuilder.stage=${releaseType} " +
+                        "-PversionBuilder.scope=${releaseScope} "+
+                        "-Prelease.stage=${releaseType} " +
+                        "-Prelease.scope=${releaseScope}")
+            }
+        }
+    }
+
 }
