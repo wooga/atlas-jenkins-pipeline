@@ -151,7 +151,12 @@ def call(Map configMap = [unityVersions: []]) {
               label "atlas && macos"
             }
             environment {
+              GRGIT = credentials('github_access')
               UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+              GRGIT_USER = "${GRGIT_USR}"
+              GRGIT_PASS = "${GRGIT_PSW}"
+              GITHUB_LOGIN = "${GRGIT_USR}"
+              GITHUB_PASSWORD = "${GRGIT_PSW}"
             }
             steps {
               unstash 'default_setup_w'
