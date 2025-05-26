@@ -253,6 +253,7 @@ def call(Map configMap = [unityVersions: []]) {
               GRGIT_PASS = "${GRGIT_PSW}"
               GITHUB_LOGIN = "${GRGIT_USR}"
               GITHUB_PASSWORD = "${GRGIT_PSW}"
+              WDK_SETUP_AUTOREF = "true"
             }
 
             steps {
