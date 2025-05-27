@@ -1,12 +1,23 @@
 package net.wooga.jenkins.pipeline.check
 
 import net.wooga.jenkins.pipeline.check.steps.Step
+import net.wooga.jenkins.pipeline.config.DockerArgs
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.config. WdkUnityBuildVersion
+import net.wooga.jenkins.pipeline.model.Docker
 
 class CheckCreator {
     final Object jenkins
     final Enclosures enclosures
+
+    static CheckCreator basicCheckCreator(Object jenkins,
+                                          int buildNumber = jenkins.BUILD_NUMBER,
+                                          DockerArgs dockerArgs = DockerArgs.fromConfigMap([:])) {
+        def docker = Docker.fromJenkins(this, dockerArgs)
+        def enclosureCreator = new EnclosureCreator(this, buildNumber)
+        def enclosures = new Enclosures(jenkins, docker, enclosureCreator)
+        return new CheckCreator(jenkins, enclosures)
+    }
 
     public CheckCreator(Object jenkinsScript, Enclosures enclosures) {
         this.jenkins = jenkinsScript
@@ -42,6 +53,17 @@ class CheckCreator {
         }
         def checkStep = enclosures.simple(versionBuild.platform, mainClosure, catchClosure, finallyClosure)
         return checkStep
+    }
+
+    Closure simpleCheck(Platform platform, Closure mainCls, Closure catchCls, Closure finallyCls) {
+        enclosures.simple(platform, mainCls, catchCls, finallyCls)
+    }
+
+    Map<String, Closure> simpleParallel(String prefix="", Platform[] platforms, Closure checkStep, Closure catchCls, Closure finallyCls) {
+        return platforms.collectEntries { platform ->
+            String parallelStepName = "${prefix}${platform.name}"
+            return [(parallelStepName): this.simpleCheck(platform, checkStep, catchCls, finallyCls)]
+        }
     }
 
     protected Step createCheck(Step testStep, Step analysisStep) {

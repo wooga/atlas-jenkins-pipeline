@@ -68,6 +68,21 @@ class Platform {
         )
     }
 
+    static Platform simple(String name, String os, String labels) {
+        return new Platform(
+                ".",
+                ".",
+                name,
+                os,
+                false,
+                labels,
+                [],
+                [],
+                false,
+                false
+        )
+    }
+
     Platform(String checkoutDirectory, String checkDirectory, String name, String os, boolean runsOnDocker,
              String labels, Collection<?> testEnvironment, Collection<?> testLabels, boolean main, boolean clearWs) {
         this.checkoutDirectory = checkoutDirectory
