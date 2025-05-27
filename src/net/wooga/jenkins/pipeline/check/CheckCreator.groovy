@@ -11,10 +11,10 @@ class CheckCreator {
     final Enclosures enclosures
 
     static CheckCreator basicCheckCreator(Object jenkins,
-                                          int buildNumber = jenkins.BUILD_NUMBER,
+                                          int buildNumber,
                                           DockerArgs dockerArgs = DockerArgs.fromConfigMap([:])) {
-        def docker = Docker.fromJenkins(this, dockerArgs)
-        def enclosureCreator = new EnclosureCreator(this, buildNumber)
+        def docker = Docker.fromJenkins(jenkins, dockerArgs)
+        def enclosureCreator = new EnclosureCreator(jenkins, buildNumber)
         def enclosures = new Enclosures(jenkins, docker, enclosureCreator)
         return new CheckCreator(jenkins, enclosures)
     }
@@ -55,14 +55,15 @@ class CheckCreator {
         return checkStep
     }
 
-    Closure simpleCheck(Platform platform, Closure mainCls, Closure catchCls, Closure finallyCls) {
-        enclosures.simple(platform, mainCls, catchCls, finallyCls)
+    Closure simpleCheck(Platform platform, Step mainStep, Closure catchCls, Closure finallyCls) {
+        def packedMain = createCheck(mainStep, new Step({p -> })).pack(platform)
+        enclosures.simple(platform, packedMain, catchCls, finallyCls)
     }
 
-    Map<String, Closure> simpleParallel(String prefix="", Platform[] platforms, Closure checkStep, Closure catchCls, Closure finallyCls) {
+    Map<String, Closure> simpleParallel(String prefix, List<Platform> platforms, Closure checkStep, Closure catchCls, Closure finallyCls) {
         return platforms.collectEntries { platform ->
-            String parallelStepName = "${prefix}${platform.name}"
-            return [(parallelStepName): this.simpleCheck(platform, checkStep, catchCls, finallyCls)]
+            String parallelStepName = "${prefix}${platform.name}".toString()
+            return [(parallelStepName): this.simpleCheck(platform, new Step(checkStep), catchCls, finallyCls)]
         }
     }
 

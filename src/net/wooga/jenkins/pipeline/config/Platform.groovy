@@ -68,9 +68,9 @@ class Platform {
         )
     }
 
-    static Platform simple(String name, String os, String labels) {
+    static Platform simple(String name, String os, String labels, String checkoutDir = ".") {
         return new Platform(
-                ".",
+                checkoutDir,
                 ".",
                 name,
                 os,
