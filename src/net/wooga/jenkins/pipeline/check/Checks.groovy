@@ -6,11 +6,7 @@ import net.wooga.jenkins.pipeline.model.Gradle
 
 class Checks {
 
-    Docker docker
-    Gradle gradle
     GradleSteps steps
-    EnclosureCreator enclosureCreator
-    Enclosures enclosures
     CheckCreator checkCreator
 
     //jenkins CPS-transformations doesn't work inside constructors, so we have to keep these as simple as possible.
@@ -21,16 +17,11 @@ class Checks {
         def checkCreator = new CheckCreator(jenkinsScript, enclosures)
         def steps = new GradleSteps(jenkinsScript, gradle)
 
-        return new Checks(docker, gradle, steps, enclosureCreator, enclosures, checkCreator)
+        return new Checks(steps, checkCreator)
     }
 
-    private Checks(Docker docker, Gradle gradle, GradleSteps steps, EnclosureCreator enclosureCreator,
-           Enclosures enclosures, CheckCreator checkCreator) {
-        this.docker = docker
-        this.gradle = gradle
+    private Checks(GradleSteps steps, CheckCreator checkCreator) {
         this.steps = steps
-        this.enclosureCreator = enclosureCreator
-        this.enclosures = enclosures
         this.checkCreator = checkCreator
     }
 
