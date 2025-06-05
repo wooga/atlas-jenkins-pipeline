@@ -57,7 +57,8 @@ class CheckCreator {
 
     Closure simpleCheck(Platform platform, Step mainStep, Closure catchCls, Closure finallyCls) {
         def packedMain = createCheck(mainStep, new Step({p -> })).pack(platform)
-        enclosures.simple(platform, packedMain, catchCls, finallyCls)
+        def packedFinally = new Step(finallyCls).pack(platform)
+        enclosures.simple(platform, packedMain, catchCls, packedFinally)
     }
 
     Map<String, Closure> simpleParallel(String prefix, List<Platform> platforms, Closure checkStep, Closure catchCls, Closure finallyCls) {
