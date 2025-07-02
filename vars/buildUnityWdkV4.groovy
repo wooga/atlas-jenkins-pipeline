@@ -198,83 +198,47 @@ def call(Map configMap = [unityVersions: []]) {
         }
       }
 
-      stage("Publish") {
-        failFast true
-        parallel {
-          stage('Default') {
-            agent {
-              label "atlas && macos"
+      stage('Publish') {
+        agent {
+          label "atlas && macos"
+        }
+
+        environment {
+          GRGIT = credentials('github_access')
+          UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
+          GRGIT_USER = "${GRGIT_USR}"
+          GRGIT_PASS = "${GRGIT_PSW}"
+          GITHUB_LOGIN = "${GRGIT_USR}"
+          GITHUB_PASSWORD = "${GRGIT_PSW}"
+        }
+
+        steps {
+          script {
+            def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
+
+            withEnv(["WDK_SETUP_AUTOREF=false"]) {
+              unstash 'default_setup_w'
+              publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
             }
 
-            environment {
-              GRGIT = credentials('github_access')
-              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-              GRGIT_USER = "${GRGIT_USR}"
-              GRGIT_PASS = "${GRGIT_PSW}"
-              GITHUB_LOGIN = "${GRGIT_USR}"
-              GITHUB_PASSWORD = "${GRGIT_PSW}"
-            }
-
-            steps {
-              script {
-                unstash 'default_setup_w'
-                def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-                publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
-              }
-            }
-
-            post {
-              always {
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-              }
-              cleanup {
-                script {
-                  if (config.mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
-              }
+            withEnv(["WDK_SETUP_AUTOREF=true"]) {
+              sh("git reset --hard HEAD")
+              sh("git clean -fdx")
+              unstash 'autoref_setup_w'
+              publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
             }
           }
-          stage('Autoref') {
-            agent {
-              label "atlas && macos"
-            }
-            when {
-              expression {
-                config.autoref
-              }
-            }
-            environment {
-              GRGIT = credentials('github_access')
-              UPM_USER_CONFIG_FILE = credentials('atlas-upm-credentials')
-              GRGIT_USER = "${GRGIT_USR}"
-              GRGIT_PASS = "${GRGIT_PSW}"
-              GITHUB_LOGIN = "${GRGIT_USR}"
-              GITHUB_PASSWORD = "${GRGIT_PSW}"
-              WDK_SETUP_AUTOREF = "true"
-            }
+        }
 
-            steps {
-              script {
-                unstash 'autoref_setup_w'
-                def publisher = config.pipelineTools.createPublishers(env.RELEASE_STAGE, env.RELEASE_SCOPE)
-                publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
-              }
-            }
-
-            post {
-              always {
-                archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
-              }
-              cleanup {
-                script {
-                  if (config.mainPlatform.clearWs) {
-                    cleanWs()
-                  }
-                }
+        post {
+          always {
+            archiveArtifacts artifacts: '**/build/distributions/*.tgz', allowEmptyArchive: true
+            archiveArtifacts artifacts: '**/build/logs/*.log', allowEmptyArchive: true
+          }
+          cleanup {
+            script {
+              if (config.mainPlatform.clearWs) {
+                cleanWs()
               }
             }
           }
