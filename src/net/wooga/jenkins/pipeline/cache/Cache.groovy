@@ -36,10 +36,10 @@ class Cache {
         def pathInCache = "$cacheLocation/$relativePathFolderToBeCached"
         if(!jenkins.fileExists(pathInCache)) {
             jenkins.sh "umask 002 && mkdir -p $pathInCache || true"
-            return tarCopy(jenkins, ".", "$relativePathFolderToBeCached/", cacheLocation)
         } else {
-            return rsync(jenkins, "$relativePathFolderToBeCached/", "$cacheLocation/$relativePathFolderToBeCached")
+            jenkins.sh "rm -rf $pathInCache/* || true"
         }
+        return tarCopy(jenkins, ".", "$relativePathFolderToBeCached/", cacheLocation)
     }
 
     def hasFiles(List<String> files) {
