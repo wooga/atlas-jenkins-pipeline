@@ -2,8 +2,8 @@ import net.wooga.jenkins.pipeline.cache.Cache
 
 def call(String projectName, String unityProjectFolder=null, boolean cachePerBranch = true) {
     unityProjectFolder = unityProjectFolder ?: projectName
-
-    def cache = new Cache(this, projectName, cachePerBranch)
+    def basePath = "/unity-cache/unity-assets-cache"
+    def cache = new Cache(this, basePath, projectName, cachePerBranch)
     def libraryFolder = "$unityProjectFolder/Library"
     def assetArtifacts = "$libraryFolder/Artifacts"
     def artifactDB = "$libraryFolder/ArtifactDB"
@@ -11,7 +11,7 @@ def call(String projectName, String unityProjectFolder=null, boolean cachePerBra
 
     return [
             renewUnityLibraryCache   : { long cacheMaxAgeMs, Closure generateAssets ->
-                cache.renewProjectCache(libraryFolder, cacheMaxAgeMs, artifactDB, generateAssets)
+                cache.renewProjectCache(libraryFolder, cacheMaxAgeMs, generateAssets)
             },
             getCacheLocation         : { ->
                 cache.getCacheLocation()
