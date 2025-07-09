@@ -1,27 +1,50 @@
 package net.wooga.jenkins.pipeline.cache
 
+import com.cloudbees.groovy.cps.NonCPS
+
 class Cache {
 
-    final String basePath = "/unity-cache/unity-assets-cache"
-    String cacheProjectName
+    String basePath = "/unity-cache/unity-assets-cache"
     Object jenkins
+    String cacheProjectName
     boolean perBranch = true
 
-    Cache(Object jenkins, String cacheProjectName, boolean perBranch) {
-        this.cacheProjectName = cacheProjectName
+    Lockfile renewLock
+    LastModifiedFile lastModified
+
+
+    Cache(Object jenkins, String basePath, String cacheProjectName, boolean perBranch) {
         this.jenkins = jenkins
+        this.basePath = basePath
+        this.cacheProjectName = cacheProjectName
         this.perBranch = perBranch
+        //cant call getCacheLocation due to CPS-transformation limitations
+        def cacheLocation = "$basePath/$cacheProjectName".toString()
+        if (perBranch) {
+             cacheLocation = "$basePath/$cacheProjectName/$jenkins.env.BRANCH_NAME"
+        }
+        this.renewLock = new Lockfile(jenkins, "$cacheLocation/.renew_lock")
+        this.lastModified = new LastModifiedFile(jenkins, "$cacheLocation/.last_renew")
     }
 
-    def renewProjectCache(String relativePathFolderToBeCached, long cacheMaxAgeMs, String ageTestFile=null, Closure generateAssets) {
-        ageTestFile = ageTestFile ?: cacheLocation
-        def cacheAge = testCacheAgeMs(ageTestFile)
-        if(cacheAge < cacheMaxAgeMs) {
-            jenkins.echo "Unity Assets already cached ${cacheAge/1000/60/60} hours ago skipping cache stage."
-            return
+    boolean renewProjectCache(String relativePathFolderToBeCached, long cacheMaxAgeMs, Closure generateAssets) {
+        def success = false
+        def timeout = renewLock.withLock(10) {
+            def cacheAge = lastModified.ageMs
+            if (lastModified.ageMs < cacheMaxAgeMs) {
+                jenkins.echo "Unity Assets already cached ${cacheAge / 1000 / 60 / 60} hours ago skipping cache stage."
+                return
+            }
+            generateAssets()
+            success = updateCache(relativePathFolderToBeCached)
+            if(success) {
+                lastModified.update()
+            }
         }
-        generateAssets()
-        updateCache(relativePathFolderToBeCached)
+        if(timeout) {
+            jenkins.echo "Timeout while waiting for cache lock (${renewLock.lockFile}), skipping cache update."
+        }
+        return success
     }
 
     def isFolder(String path) {
@@ -29,17 +52,14 @@ class Cache {
     }
 
     boolean updateCache(String relativePathFolderToBeCached) {
-        if(!isFolder(relativePathFolderToBeCached)) {
+        if (!isFolder(relativePathFolderToBeCached)) {
             jenkins.echo "The path '$relativePathFolderToBeCached' is not a folder. Please provide a valid folder path to cache."
             return false
         }
         def pathInCache = "$cacheLocation/$relativePathFolderToBeCached"
-        if(!jenkins.fileExists(pathInCache)) {
-            jenkins.sh "umask 002 && mkdir -p $pathInCache || true"
-            return tarCopy(jenkins, ".", "$relativePathFolderToBeCached/", cacheLocation)
-        } else {
-            return rsync(jenkins, "$relativePathFolderToBeCached/", "$cacheLocation/$relativePathFolderToBeCached")
-        }
+        jenkins.sh "rm -rf $pathInCache || true"
+        jenkins.sh "umask 002 && mkdir -p $pathInCache || true"
+        return tarCopy(jenkins, ".", "$relativePathFolderToBeCached/", cacheLocation)
     }
 
     def hasFiles(List<String> files) {
@@ -52,12 +72,12 @@ class Cache {
     }
 
     boolean loadFromCache(String relativePathFolderToBeLoaded) {
-        if(!jenkins.fileExists(cacheLocation)) {
-            jenkins.echo "No cache location found: ${cacheLocation}, skiping cache load"
+        if (!lastModified.fileExists()) {
+            jenkins.echo "No cache location found: ${cacheLocation}(${lastModified.lastModifiedFile}), skiping cache load"
             return false
         }
         def pathInCache = "$cacheLocation/$relativePathFolderToBeLoaded"
-        if(isFolder(pathInCache)) {
+        if (isFolder(pathInCache)) {
             return loadFolderFromCache(relativePathFolderToBeLoaded)
         } else {
             return loadFileFromCache(relativePathFolderToBeLoaded)
@@ -65,7 +85,7 @@ class Cache {
     }
 
     boolean loadFolderFromCache(String relativePathFolder) {
-        if(!jenkins.fileExists(relativePathFolder)) {
+        if (!jenkins.fileExists(relativePathFolder)) {
             return tarCopy(jenkins, cacheLocation, "$relativePathFolder/", ".")
         } else {
             return rsync(jenkins, "$cacheLocation/$relativePathFolder/", "$relativePathFolder")
@@ -88,28 +108,16 @@ class Cache {
         return "$basePath/$cachePath".toString()
     }
 
-    long testCacheAgeMs(String ageTestFile) {
-        def ageFile = "$cacheLocation/$ageTestFile".toString()
-        if(jenkins.fileExists(ageFile)) {
-            def lastModified = (jenkins.sh(
-                    script: """
-        if [[ \$(uname) == "Darwin" ]]; then
-            stat -f %m '${ageFile}'
-        else
-            stat -c %Y '${ageFile}'
-        fi
-    """, returnStdout: true
-            ).trim() as Long) * 1000
-            return System.currentTimeMillis() - lastModified
-        }
-        return 0x7fffffffffffffffL //Long.MAX_VALUE
-    }
-
     static def tarCopy(Object j, String baseDir, String source, String destination) {
         //as unintuitive as it may sound, using gtar is __much__ faster than rsync to sync directories with a large amount of files.
         if (j.fileExists("$baseDir/$source")) {
-            j.sh "umask 002 && gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --directory $baseDir -c $source | " +
-                    "gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --group=nfs_share -xf - -C $destination"
+            def status = j.sh script: "umask 002 && gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --directory $baseDir -c $source | " +
+                    "gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --group=nfs_share -xf - -C $destination", returnStatus: true
+            if (status != 0) {
+                j.echo "Failed (exit code $status) to copy files from $source to $destination with gtar, removing copied files"
+                j.sh "rm -rf $destination || true"
+                return false
+            }
             return true
         }
         return false
@@ -117,7 +125,7 @@ class Cache {
 
     static def rsync(Object j, String source, String destination) {
         if (j.fileExists(source)) {
-            if(destination.contains("/unity-cache/")) {
+            if (destination.contains("/unity-cache/")) {
                 j.sh "rsync --archive --delete --chmod u+rwxs,g+rwxs,o+r --groupmap *:nfs_share $source $destination"
             } else {
                 j.sh "rsync --archive --delete --chmod u+rwx,g+rx,o+rx --chown jenkins_agent:staff $source $destination"
@@ -126,5 +134,4 @@ class Cache {
         }
         return false
     }
-
 }
