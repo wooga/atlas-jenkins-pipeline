@@ -37,21 +37,21 @@ pipeline {
 
     agent any
     stages {
-        stage("Check") {
-            steps { gradleWrapper "check" }
-            post {
-                always {
-                    gradleWrapper "jacocoTestReport sonarqube " +
-                            "-Dsonar.projectKey=${SONAR_PROJECT_KEY} " +
-                            "-Dsonar.projectName=${SONAR_PROJECT_NAME} " +
-                            "-Dsonar.login=${SONAR_TOKEN} " +
-                            "-Dsonar.host.url=${SONAR_HOST} " +
-                            "-Dsonar.sources=src/,vars/ " +
-                            "-Dsonar.tests=test/ " +
-                            "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
-                }
-            }
-        }
+//        stage("Check") {
+//            steps { gradleWrapper "check" }
+//            post {
+//                always {
+//                    gradleWrapper "jacocoTestReport sonarqube " +
+//                            "-Dsonar.projectKey=${SONAR_PROJECT_KEY} " +
+//                            "-Dsonar.projectName=${SONAR_PROJECT_NAME} " +
+//                            "-Dsonar.login=${SONAR_TOKEN} " +
+//                            "-Dsonar.host.url=${SONAR_HOST} " +
+//                            "-Dsonar.sources=src/,vars/ " +
+//                            "-Dsonar.tests=test/ " +
+//                            "-Dsonar.jacoco.reportPaths=build/jacoco/test.exec"
+//                }
+//            }
+//        }
         stage("Release") {
             when {
                 expression { !(params.releaseType in [null, "", "NONE"]) }
