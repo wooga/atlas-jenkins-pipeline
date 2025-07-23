@@ -88,7 +88,7 @@ class CacheSpec extends Specification {
         }
 
         then:
-        cache.lastModified.ageMs < 1000 // Ensure the cache was updated
+        cache.lastModified.ageMs > 0 && cache.lastModified.ageMs < 1000 // Ensure the cache was updated
         assert Files.walk(cacheRoot.toPath()).anyMatch {
             it.toString().endsWith("/project/$jenkins.BRANCH_NAME/testFolder/Subfolder/file1.txt")
         }

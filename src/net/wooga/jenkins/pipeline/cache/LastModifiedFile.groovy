@@ -12,7 +12,7 @@ class LastModifiedFile {
 
     def update() {
         jenkins.sh "rm $lastModifiedFile || true"
-        jenkins.sh "umask 002 && echo -n '${System.currentTimeMillis()}' >> $lastModifiedFile || true"
+        jenkins.sh "umask 002 && echo '${System.currentTimeMillis()}' >> $lastModifiedFile || true"
         jenkins.sh "chmod g+rw $lastModifiedFile || true"
     }
 
@@ -24,8 +24,14 @@ class LastModifiedFile {
         if (!jenkins.fileExists(lastModifiedFile)) {
             return 0
         }
-        String lastModified = jenkins.readFile(lastModifiedFile)
-        return lastModified.isNumber() ? lastModified.toLong() : 0
+        def lastModifiedLines = jenkins.readFile(lastModifiedFile).readLines()
+        def lastModified = lastModifiedLines.find { line -> line.isNumber() || line.split(" ").any { token -> token.isNumber() }} ?: "0"
+        if(lastModified.isNumber()) {
+            return lastModified.toLong()
+        } else {
+            def numberToken = lastModified.split(" ").find { token -> token.isNumber() }
+            return numberToken ? numberToken.toLong() : 0
+        }
     }
 
     long getAgeMs() {
