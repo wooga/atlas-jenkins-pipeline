@@ -109,7 +109,7 @@ abstract class DeclarativeJenkinsSpec extends Specification {
         }
         def methodCall = { Object... args ->
             args = args == null? [null] : args
-            args = IntStream.range(0, args.size()).mapToObj { int index ->
+            args = (0..args.size()-1).collect { int index ->
                 if(args[index] instanceof GString) {
                     return args[index].toString()
                 }

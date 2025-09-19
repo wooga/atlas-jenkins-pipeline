@@ -7,7 +7,9 @@ import spock.lang.Unroll
 class JavaConfigSpec extends Specification {
 
     @Shared
-    def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
+    def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch",
+                         fileExists: { String path -> false },
+                         readFile  : { String path -> "" }]
 
     @Unroll
     def "reads java version to config"() {
@@ -73,6 +75,6 @@ class JavaConfigSpec extends Specification {
         def platformObjs = platforms.withIndex().collect { String platName, int index ->
             Platform.forJava(platName, cfgMap, index == 0)
         }
-        return new JavaConfig(baseConfig, platformObjs, null)
+        return new JavaConfig(baseConfig, platformObjs, 11)
     }
 }

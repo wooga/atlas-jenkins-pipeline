@@ -21,7 +21,7 @@ class JavaConfig implements PipelineConfig {
         config.platforms = config.platforms ?: ['macos','windows']
         def platforms = collectPlatform(config, config.platforms as List<String>)
         def baseConfig = BaseConfig.fromConfigMap(config, jenkinsScript)
-        def javaVersion = (config.javaVersion?.toString() ?: readJavaVersionFile(jenkinsScript, ".java-version")?: "11") as Integer
+        def javaVersion = (config.javaVersion ?: readJavaVersionFile(jenkinsScript, ".java-version")?: 11) as Integer
 
         return new JavaConfig(baseConfig, platforms, javaVersion)
     }
