@@ -6,7 +6,6 @@ class JavaConfig implements PipelineConfig {
 
     final BaseConfig baseConfig
     final Platform[] platforms
-    final int javaVersion
 
     static List<Platform> collectPlatform(Map configMap, List<String> platformNames) {
         def index = 0
@@ -21,32 +20,17 @@ class JavaConfig implements PipelineConfig {
         config.platforms = config.platforms ?: ['macos','windows']
         def platforms = collectPlatform(config, config.platforms as List<String>)
         def baseConfig = BaseConfig.fromConfigMap(config, jenkinsScript)
-        def javaVersion = (config.javaVersion ?: readJavaVersionFile(jenkinsScript, ".java-version")?: 11) as Integer
 
-        return new JavaConfig(baseConfig, platforms, javaVersion)
+        return new JavaConfig(baseConfig, platforms)
     }
 
-    static String readJavaVersionFile(Object jenkins, String... versionFiles) {
-        for (String filePath : versionFiles) {
-            if(jenkins.fileExists(filePath)) {
-                return jenkins.readFile(filePath)?.trim()
-            }
-        }
-        return null
-    }
-
-    JavaConfig(BaseConfig baseConfig, List<Platform> platforms, int javaVersion) {
+    JavaConfig(BaseConfig baseConfig, List<Platform> platforms) {
         this.baseConfig = baseConfig
         this.platforms = platforms
-        this.javaVersion = javaVersion
     }
 
     Platform getMainPlatform() {
         return platforms.find {it.main }
-    }
-
-    String getJavaHome() {
-        return "\$JAVA_${javaVersion}_HOME"
     }
 
     @Override

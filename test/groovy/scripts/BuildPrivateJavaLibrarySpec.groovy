@@ -53,14 +53,14 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
 
         then: "runs gradle with parameters"
         def gradleCalls = getShGradleCalls()
-        def publishCallStr = gradleCalls.find { it.contains( releaseType?: "snapshot") }
+        def publishCallStr = gradleCalls.find { it.contains(releaseType ?: "snapshot") }
         skipsRelease || (publishCallStr != null)
 
         def publishCall = GradleInvocation.parseCommandLine(publishCallStr)
-        skipsRelease ^ publishCall.tasks.contains(releaseType?: "snapshot")
+        skipsRelease ^ publishCall.tasks.contains(releaseType ?: "snapshot")
         skipsRelease ^ publishCall["artifactory.user"] == "user"
         skipsRelease ^ publishCall["artifactory.password"] == "key"
-        skipsRelease ^ publishCall["release.stage"] == (releaseType?: "snapshot")
+        skipsRelease ^ publishCall["release.stage"] == (releaseType ?: "snapshot")
         skipsRelease ^ publishCall["release.scope"] == releaseScope
         skipsRelease ^ publishCall.containsRaw("-x check")
 
@@ -84,6 +84,7 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
             currentBuild["result"] = null
             env.GRGIT_USR = "usr"
             env.GRGIT_PSW = "pwd"
+            env.JAVA_11_HOME = "java_home" //default java is 11
         }
 
         when: "running buildJavaLibrary pipeline"
@@ -98,12 +99,13 @@ class BuildPrivateJavaLibrarySpec extends DeclarativeJenkinsSpec {
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up ossrh keys"
-        def publishEnv = usedEnvironments.last()
+        def publishEnv = usedEnvironments.find { it.containsKey("ARTIFACTORY_USER") }
         publishEnv["ARTIFACTORY_USER"] == "user"
         publishEnv["ARTIFACTORY_PASS"] == "key"
         publishEnv["OSSRH_SIGNING_KEY"] == "signing_key"
         publishEnv["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
         publishEnv["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
+        publishEnv["JAVA_HOME"] == "java_home"
     }
 
 

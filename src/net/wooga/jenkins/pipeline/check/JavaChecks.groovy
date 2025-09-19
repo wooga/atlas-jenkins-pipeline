@@ -42,8 +42,9 @@ class JavaChecks {
     }
 
     Map<String, Closure> gradleCheckWithCoverage(Platform[] platforms, CheckArgs checkArgs, PipelineConventions conventions) {
-        def baseTestStep = steps.defaultGradleTestStep(conventions.checkTask)
-        def baseAnalysisStep = steps.jacocoAnalysis(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls)
+        def javaVersionWrapper = steps.javaVersionStepWrapper(conventions.javaVersion, conventions.javaVersionFile)
+        def baseTestStep = steps.defaultGradleTestStep(conventions.checkTask).wrappedBy(javaVersionWrapper)
+        def baseAnalysisStep = steps.jacocoAnalysis(conventions, checkArgs.metadata, checkArgs.sonarqube, checkArgs.coveralls).wrappedBy(javaVersionWrapper)
 
         return parallel(platforms,
                 baseTestStep.wrappedBy(checkArgs.testWrapper),

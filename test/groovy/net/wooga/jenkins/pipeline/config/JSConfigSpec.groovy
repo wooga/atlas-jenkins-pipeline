@@ -45,6 +45,6 @@ class JSConfigSpec extends Specification {
         def platformObjs = platforms.withIndex().collect { String platName, int index ->
             Platform.forJava(platName, cfgMap, index == 0)
         }
-        return new JavaConfig(baseConfig, platformObjs, 11)
+        return new JavaConfig(baseConfig, platformObjs)
     }
 }

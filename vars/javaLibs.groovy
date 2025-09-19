@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.check.steps.BasicSteps
 import net.wooga.jenkins.pipeline.stages.Stages
 import net.wooga.jenkins.pipeline.config.JavaConfig
 
@@ -17,7 +18,6 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
-
   def config = JavaConfig.fromConfigMap(configMap, this)
   def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
   def mainPlatform = config.mainPlatform.name
@@ -70,9 +70,6 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           beforeAgent true
           expression { return actions.check.runWhenOrElse { env.RELEASE_TYPE == "snapshot" } }
         }
-        environment {
-          JAVA_HOME = "${config.javaHome}"
-        }
 
         steps {
           script {
@@ -111,15 +108,17 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           GRGIT_PASS            = "${GRGIT_PSW}"
           GITHUB_LOGIN          = "${GRGIT_USR}"
           GITHUB_PASSWORD       = "${GRGIT_PSW}"
-          JAVA_HOME             = "${config.javaHome}"
         }
 
 
         steps {
           script {
-            actions.publish.runActionOrElse {
-              error "This pipeline has no publish action whatsoever, " +
-                      "if you don't want to ever run publish, set 'when' to always return false"
+            def withJavaVersion = new BasicSteps(this).javaVersionWrapper(config.conventions.javaVersion, config.conventions.javaVersionFile)
+            withJavaVersion {
+              actions.publish.runActionOrElse {
+                  error "This pipeline has no publish action whatsoever, " +
+                          "if you don't want to ever run publish, set 'when' to always return false"
+              }
             }
           }
         }

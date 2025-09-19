@@ -83,6 +83,7 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
             params.RELEASE_SCOPE = "any"
             env.GRGIT_USR = "usr"
             env.GRGIT_PSW = "pwd"
+            env.JAVA_11_HOME = "java_home"
         }
 
         when: "running buildJavaLibrary pipeline"
@@ -97,11 +98,12 @@ class BuildJavaLibraryOSSRHSpec extends DeclarativeJenkinsSpec {
         env["GITHUB_LOGIN"] == "usr" //"${GRGIT_USR}"
         env["GITHUB_PASSWORD"] == "pwd" //"${GRGIT_PSW}"
         and: "sets up ossrh keys"
-        def publishEnv = usedEnvironments.last()
+        def publishEnv = usedEnvironments.find { it.containsKey("OSSRH_USERNAME") }
         publishEnv["OSSRH_USERNAME"] == "user"
         publishEnv["OSSRH_PASSWORD"] == "key"
         publishEnv["OSSRH_SIGNING_KEY"] == "signing_key"
         publishEnv["OSSRH_SIGNING_KEY_ID"] == "signing_key_id"
         publishEnv["OSSRH_SIGNING_PASSPHRASE"] == "signing_passwd"
+        publishEnv["JAVA_HOME"] == "java_home"
     }
 }
