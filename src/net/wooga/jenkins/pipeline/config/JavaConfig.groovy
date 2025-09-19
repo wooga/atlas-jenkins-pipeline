@@ -6,6 +6,7 @@ class JavaConfig implements PipelineConfig {
 
     final BaseConfig baseConfig
     final Platform[] platforms
+    final int javaVersion
 
     static List<Platform> collectPlatform(Map configMap, List<String> platformNames) {
         def index = 0
@@ -20,17 +21,32 @@ class JavaConfig implements PipelineConfig {
         config.platforms = config.platforms ?: ['macos','windows']
         def platforms = collectPlatform(config, config.platforms as List<String>)
         def baseConfig = BaseConfig.fromConfigMap(config, jenkinsScript)
+        def javaVersion = (config.javaVersion?.toString() ?: readJavaVersionFile(jenkinsScript, ".java-version")?: "11") as Integer
 
-        return new JavaConfig(baseConfig, platforms)
+        return new JavaConfig(baseConfig, platforms, javaVersion)
     }
 
-    JavaConfig(BaseConfig baseConfig, List<Platform> platforms) {
+    static String readJavaVersionFile(Object jenkins, String... versionFiles) {
+        for (String filePath : versionFiles) {
+            if(jenkins.fileExists(filePath)) {
+                return jenkins.readFile(filePath)?.trim()
+            }
+        }
+        return null
+    }
+
+    JavaConfig(BaseConfig baseConfig, List<Platform> platforms, int javaVersion) {
         this.baseConfig = baseConfig
         this.platforms = platforms
+        this.javaVersion = javaVersion
     }
 
     Platform getMainPlatform() {
         return platforms.find {it.main }
+    }
+
+    String getJavaHome() {
+        return "\$JAVA_${javaVersion}_HOME"
     }
 
     @Override
@@ -73,7 +89,6 @@ class JavaConfig implements PipelineConfig {
         if (conventions != that.conventions) return false
         if (dockerArgs != that.dockerArgs) return false
         if (gradleArgs != that.gradleArgs) return false
-        if (jenkins != that.jenkins) return false
         if (metadata != that.metadata) return false
         if (!Arrays.equals(platforms, that.platforms)) return false
 
@@ -82,7 +97,6 @@ class JavaConfig implements PipelineConfig {
 
     int hashCode() {
         int result
-        result = (jenkins != null ? jenkins.hashCode() : 0)
         result = 31 * result + (conventions != null ? conventions.hashCode() : 0)
         result = 31 * result + (platforms != null ? Arrays.hashCode(platforms) : 0)
         result = 31 * result + (metadata != null ? metadata.hashCode() : 0)

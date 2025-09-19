@@ -10,6 +10,33 @@ class JavaConfigSpec extends Specification {
     def jenkinsScript = [BUILD_NUMBER: 1, BRANCH_NAME: "branch"]
 
     @Unroll
+    def "reads java version to config"() {
+        given:
+        def jenkinsScript = new HashMap(jenkinsScript)
+        jenkinsScript.putAll([
+                fileExists: { String path -> hasVersionFile && path == ".java-version" },
+                readFile  : { String path -> expectedVersion.toString() }
+        ])
+
+        when:
+        def config = JavaConfig.fromConfigMap([javaVersion: javaVersion], jenkinsScript)
+
+        then:
+        config.javaHome == expectedJavaHome
+        config.javaVersion == expectedVersion
+
+        where:
+        hasVersionFile | javaVersion | expectedVersion | expectedJavaHome
+        false          | '23'        | 23              | "\$JAVA_23_HOME"
+        false          | 23          | 23              | "\$JAVA_23_HOME"
+        false          | 12          | 12              | "\$JAVA_12_HOME"
+        false          | 10          | 10              | "\$JAVA_10_HOME"
+        false          | null        | 11              | "\$JAVA_11_HOME"
+        true           | 15          | 15              | "\$JAVA_15_HOME"
+        true           | null        | 21              | "\$JAVA_21_HOME"
+    }
+
+    @Unroll
     def "creates valid config object from config map"() {
         given: "a configuration map"
         def configMap = [platforms: platforms, dockerArgs: dockerArgs, coverallsToken: cvallsToken] + extraFields
@@ -46,6 +73,6 @@ class JavaConfigSpec extends Specification {
         def platformObjs = platforms.withIndex().collect { String platName, int index ->
             Platform.forJava(platName, cfgMap, index == 0)
         }
-        return new JavaConfig(baseConfig, platformObjs)
+        return new JavaConfig(baseConfig, platformObjs, null)
     }
 }

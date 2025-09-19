@@ -17,6 +17,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
   configMap.showStackTrace = configMap.get("showStackTrace", params.STACK_TRACE as Boolean)
   configMap.refreshDependencies = configMap.get("refreshDependencies", params.REFRESH_DEPENDENCIES as Boolean)
   configMap.clearWs = configMap.get("clearWs", params.CLEAR_WS as boolean)
+
   def config = JavaConfig.fromConfigMap(configMap, this)
   def actions = Stages.fromClosure(params as Map, config, stepsConfigCls)
   def mainPlatform = config.mainPlatform.name
@@ -70,7 +71,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           expression { return actions.check.runWhenOrElse { env.RELEASE_TYPE == "snapshot" } }
         }
         environment {
-          JAVA_HOME = "$JAVA_17_HOME"
+          JAVA_HOME = "${config.javaHome}"
         }
 
         steps {
@@ -110,7 +111,7 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           GRGIT_PASS            = "${GRGIT_PSW}"
           GITHUB_LOGIN          = "${GRGIT_USR}"
           GITHUB_PASSWORD       = "${GRGIT_PSW}"
-          JAVA_HOME             = "$JAVA_17_HOME"
+          JAVA_HOME             = "${config.javaHome}"
         }
 
 
