@@ -69,6 +69,9 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
           beforeAgent true
           expression { return actions.check.runWhenOrElse { env.RELEASE_TYPE == "snapshot" } }
         }
+        environment {
+          JAVA_HOME = "$JAVA_17_HOME"
+        }
 
         steps {
           script {
@@ -101,13 +104,13 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         agent {
           label "$mainPlatform && atlas"
         }
-
         environment {
           GRGIT                 = credentials('github_access')
           GRGIT_USER            = "${GRGIT_USR}"
           GRGIT_PASS            = "${GRGIT_PSW}"
           GITHUB_LOGIN          = "${GRGIT_USR}"
           GITHUB_PASSWORD       = "${GRGIT_PSW}"
+          JAVA_HOME             = "$JAVA_17_HOME"
         }
 
 
