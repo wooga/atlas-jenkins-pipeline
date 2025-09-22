@@ -220,12 +220,13 @@ def call(Map configMap = [unityVersions: []]) {
               unstash 'default_setup_w'
               publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
             }
-
-            withEnv(["WDK_SETUP_AUTOREF=true"]) {
-              sh("git reset --hard HEAD")
-              sh("git clean -fdx")
-              unstash 'autoref_setup_w'
-              publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
+            if(config.autoref) {
+              withEnv(["WDK_SETUP_AUTOREF=true"]) {
+                sh("git reset --hard HEAD")
+                sh("git clean -fdx")
+                unstash 'autoref_setup_w'
+                publisher.unityArtifactoryUpm(env.RELEASE_STAGE == defaultReleaseType ? "artifactory_publish" : "artifactory_deploy")
+              }
             }
           }
         }

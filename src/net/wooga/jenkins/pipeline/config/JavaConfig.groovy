@@ -73,7 +73,6 @@ class JavaConfig implements PipelineConfig {
         if (conventions != that.conventions) return false
         if (dockerArgs != that.dockerArgs) return false
         if (gradleArgs != that.gradleArgs) return false
-        if (jenkins != that.jenkins) return false
         if (metadata != that.metadata) return false
         if (!Arrays.equals(platforms, that.platforms)) return false
 
@@ -82,7 +81,6 @@ class JavaConfig implements PipelineConfig {
 
     int hashCode() {
         int result
-        result = (jenkins != null ? jenkins.hashCode() : 0)
         result = 31 * result + (conventions != null ? conventions.hashCode() : 0)
         result = 31 * result + (platforms != null ? Arrays.hashCode(platforms) : 0)
         result = 31 * result + (metadata != null ? metadata.hashCode() : 0)

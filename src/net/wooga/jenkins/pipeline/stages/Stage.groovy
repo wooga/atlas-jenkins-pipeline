@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.stages
 
+import net.wooga.jenkins.pipeline.check.steps.StepWrapper
 import net.wooga.jenkins.pipeline.config.PipelineConfig
 
 class Stage {
