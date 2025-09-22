@@ -7,12 +7,58 @@ import net.wooga.jenkins.pipeline.config.PipelineConventions
 import net.wooga.jenkins.pipeline.config.Platform
 import net.wooga.jenkins.pipeline.model.Gradle
 
-class GradleSteps {
+
+class BasicSteps {
+    final Object jenkins
+
+    BasicSteps(Object jenkins) {
+        this.jenkins = jenkins
+    }
+
+    int resolveJavaVersion(Integer javaVersion, String... versionFiles) {
+        return versionFiles.collect { filePath ->
+            if (jenkins.fileExists(filePath)) {
+                def strVersion = jenkins.readFile(filePath).trim()
+                if(strVersion.contains('.')) {
+                    strVersion = strVersion.substring(strVersion.indexOf('.') + 1, strVersion.length())
+                }
+                return Integer.valueOf(strVersion)
+            }
+            return null
+        }.find { it != null } ?: javaVersion ?: 11
+    }
+
+    StepWrapper javaVersionStepWrapper(Integer javaVersion, String... versionFiles) {
+        return { step, platform ->
+            def withJavaVersion = javaVersionWrapper(javaVersion, versionFiles)
+            withJavaVersion {
+                step(platform)
+            }
+        }
+    }
+
+    Closure javaVersionWrapper(Integer javaVersion, String... versionFiles) {
+        def resolvedVersion = resolveJavaVersion(javaVersion, versionFiles)
+        return { Closure cls ->
+            def javaHome = jenkins.env.("JAVA_${resolvedVersion}_HOME".toString())
+            if (javaHome) {
+                jenkins.withEnv(["JAVA_HOME=${javaHome}"]) {
+                    cls()
+                }
+            } else {
+                cls()
+            }
+        }
+    }
+}
+
+class GradleSteps extends BasicSteps {
 
     final Object jenkins
     final Gradle gradle
 
     GradleSteps(Object jenkins, Gradle gradle) {
+        super(jenkins)
         this.jenkins = jenkins
         this.gradle = gradle
     }

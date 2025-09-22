@@ -11,7 +11,7 @@ class Stages {
           return new Stages(
                   new Stage(null, null),
                   new Stage(null, null),
-                  { Closure cls -> Stage.fromClosure(jenkinsParams , config, cls) })
+                  { Closure cls -> Stage.fromClosure(jenkinsParams, config, cls) })
      }
 
      static Stages fromClosure(Map jenkinsParams, PipelineConfig config, Closure cls) {

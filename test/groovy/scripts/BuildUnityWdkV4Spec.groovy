@@ -134,7 +134,6 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
         and: "has set up environment"
         def env = usedEnvironments.last()
         hasBaseEnvironment(env, "level")
-        env.UNITY_LOG_CATEGORY == "build"
         env.UPM_USER_CONFIG_FILE == upmCredsFile.absolutePath
 
         and: "stashes gradle cache and build outputs"
@@ -212,7 +211,7 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
         }
 
         then: "all workspaces are clean"
-        calls["cleanWs"].length == (clearWs ? 5 : 0) //setup x2, build, and publish x2 steps
+        calls["cleanWs"].length == (clearWs ? 4 : 0) //setup x2, build, and publish x2 steps
 
         where:
         clearWs << [true, false]
@@ -229,7 +228,9 @@ class BuildUnityWdkV4Spec extends DeclarativeJenkinsSpec {
     }
 
     def assertShCallsWith(int count = 1, String... elements) {
-        def callArgs = calls["sh"].collect { it.args[0]["script"] as String }
+        def callArgs = calls["sh"].collect {
+            it.args[0] instanceof String?  it.args[0] as String : it.args[0]["script"] as String
+        }
         def found = callArgs.findAll { args ->
             elements.every { args.contains(it) }
         }

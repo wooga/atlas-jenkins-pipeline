@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.check.steps.BasicSteps
 import net.wooga.jenkins.pipeline.stages.Stages
 import net.wooga.jenkins.pipeline.config.JavaConfig
 
@@ -101,7 +102,6 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
         agent {
           label "$mainPlatform && atlas"
         }
-
         environment {
           GRGIT                 = credentials('github_access')
           GRGIT_USER            = "${GRGIT_USR}"
@@ -113,9 +113,12 @@ def call(Map configMap = [:], Closure stepsConfigCls) {
 
         steps {
           script {
-            actions.publish.runActionOrElse {
-              error "This pipeline has no publish action whatsoever, " +
-                      "if you don't want to ever run publish, set 'when' to always return false"
+            def withJavaVersion = new BasicSteps(this).javaVersionWrapper(config.conventions.javaVersion, config.conventions.javaVersionFile)
+            withJavaVersion {
+              actions.publish.runActionOrElse {
+                  error "This pipeline has no publish action whatsoever, " +
+                          "if you don't want to ever run publish, set 'when' to always return false"
+              }
             }
           }
         }
