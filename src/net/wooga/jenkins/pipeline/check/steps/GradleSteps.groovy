@@ -41,7 +41,8 @@ class BasicSteps {
         def resolvedVersion = resolveJavaVersion(javaVersion, versionFiles)
         return { Closure cls ->
             def javaHome = jenkins.env.("JAVA_${resolvedVersion}_HOME".toString())
-            if (javaHome) {
+            def inDocker = jenkins.env."IN_DOCKER" == "1"
+            if (!inDocker && javaHome) {
                 jenkins.withEnv(["JAVA_HOME=${javaHome}"]) {
                     cls()
                 }

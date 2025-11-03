@@ -21,6 +21,7 @@ class Docker {
         if(image != null) {
             image.inside(dockerArgs.dockerImageArgs) {
                 jenkins.echo("Running inside Dockerfile")
+                jenkins.env["IN_DOCKER"] = "1"
                 main.call()
             }
         } else {
