@@ -41,7 +41,9 @@ class BasicSteps {
         def resolvedVersion = resolveJavaVersion(javaVersion, versionFiles)
         return { Closure cls ->
             def javaHome = jenkins.env.("JAVA_${resolvedVersion}_HOME".toString())
-            if (javaHome) {
+            //https://forums.docker.com/t/proc-1-cgroups-does-not-tell-if-i-am-inside-of-contianer/132552
+            def isInContainer = (jenkins.sh "mount | grep 'overlay on /'", returnStatus: true) == 0
+            if (javaHome && isInContainer) {
                 jenkins.withEnv(["JAVA_HOME=${javaHome}"]) {
                     cls()
                 }
