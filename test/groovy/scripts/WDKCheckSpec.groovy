@@ -14,38 +14,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
         binding["BUILD_NUMBER"] = 1
     }
 
-    def "executes cobertura coverage plugin"() {
-        given: "loaded check in a running build"
-        def check = loadSandboxedScript(TEST_SCRIPT_PATH)
-        and: "configuration with unity platform"
-        def configMap = [unityVersions: "2019"]
-
-        and: "mocked coverage methods"
-        helper.registerAllowedMethod("istanbulCoberturaAdapter", [String]) { it -> it }
-        helper.registerAllowedMethod("sourceFiles", [String]) { it -> it }
-        helper.registerAllowedMethod("publishCoverage", [Map]) { it -> it }
-        and: "stashed setup data"
-        stash["setup_w"] = [useDefaultExcludes: true, includes: "paket.lock .gradle/**, **/build/**, .paket/**, packages/**, paket-files/**, **/Paket.Unity3D/**, **/Wooga/Plugins/**"]
-
-        when: "running gradle pipeline with coverage token"
-        inSandbox {
-            check.wdkCoverage(configMap, "any", "any").each { it.value() }
-        }
-
-        then: "jenkins coverage plugins are called"
-        calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
-            call.args.length == 1 && call.args[0] == '**/codeCoverage/Cobertura.xml'
-        }
-        calls.has["sourceFiles"] { MethodCall call ->
-            call.args.length == 1 && call.args[0] == 'STORE_LAST_BUILD'
-        }
-        calls.has["publishCoverage"] { MethodCall call ->
-            call.args.length == 1 &&
-                    call.args[0]["adapters"] == ["**/codeCoverage/Cobertura.xml"] &&
-                    call.args[0]["sourceFileResolver"] == "STORE_LAST_BUILD"
-        }
-    }
-
     @Unroll("execute sonarqube when its token is present")
     def "executes sonarqube when its token is present"() {
         given: "loaded check in a running jenkins build"
@@ -372,11 +340,6 @@ class WDKCheckSpec extends DeclarativeJenkinsSpec {
             return call.contains("gradlew") &&
                     call.contains(convCheck)
         } == 1
-
-        then: "custom cobertura file was set"
-        calls.has["istanbulCoberturaAdapter"] { MethodCall call ->
-            call.args.length == 1 && call.args[0] == convWDKCoberturaFile
-        }
 
         where:
         convCheck  | convSonarqube | convWDKCoberturaFile | convWDKParallelPrefix | convWDKSetupStashId

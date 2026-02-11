@@ -12,7 +12,6 @@ class DeclarativeJenkinsSpec extends SandboxedDeclarativeJenkinsSpec {
 
     def setup() {
         helper.with {
-            registerAllowedMethod("istanbulCoberturaAdapter", [String]) {}
             registerAllowedMethod("isUnix") { true }
             registerAllowedMethod("sendSlackNotification", [String, boolean]) {}
             registerAllowedMethod("junit", [LinkedHashMap]) {}

@@ -106,8 +106,6 @@ class GradleSteps extends BasicSteps {
         return new Step({ Platform platform ->
             def branchName = metadata.isPR() ? null : metadata.branchName
             sonarqube.maybeRun(gradle, conventions.sonarqubeTask, branchName)
-            def coberturaAdapter = jenkins.istanbulCoberturaAdapter(conventions.wdkCoberturaFile)
-            jenkins.publishCoverage adapters: [coberturaAdapter], sourceFileResolver: jenkins.sourceFiles('STORE_LAST_BUILD')
         })
     }
 }
