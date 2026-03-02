@@ -26,7 +26,7 @@ class JavaVersion {
     static List<String> javaHomeEnv(Object jenkins, Integer javaVersion) {
         def maybeHome = versionJavaHome(jenkins, javaVersion)
         if(maybeHome != null) {
-            return["JAVA_HOME=${javaHome}"]
+            return["JAVA_HOME=${maybeHome}"]
         }
         jenkins.echo "Could not resolve JAVA_HOME for java version ${javaVersion}"
         return []
