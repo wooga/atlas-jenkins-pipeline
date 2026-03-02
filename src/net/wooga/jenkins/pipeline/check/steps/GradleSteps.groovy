@@ -1,5 +1,6 @@
 package net.wooga.jenkins.pipeline.check.steps
 
+import net.wooga.jenkins.pipeline.config.JavaVersion
 import net.wooga.jenkins.pipeline.config.JenkinsMetadata;
 import net.wooga.jenkins.pipeline.check.Coveralls
 import net.wooga.jenkins.pipeline.check.Sonarqube
@@ -15,19 +16,6 @@ class BasicSteps {
         this.jenkins = jenkins
     }
 
-    int resolveJavaVersion(Integer javaVersion, String... versionFiles) {
-        return versionFiles.collect { filePath ->
-            if (jenkins.fileExists(filePath)) {
-                def strVersion = jenkins.readFile(filePath).trim()
-                if(strVersion.contains('.')) {
-                    strVersion = strVersion.substring(strVersion.indexOf('.') + 1, strVersion.length())
-                }
-                return Integer.valueOf(strVersion)
-            }
-            return null
-        }.find { it != null } ?: javaVersion ?: 11
-    }
-
     StepWrapper javaVersionStepWrapper(Integer javaVersion, String... versionFiles) {
         return { step, platform ->
             def withJavaVersion = javaVersionWrapper(javaVersion, versionFiles)
@@ -38,12 +26,11 @@ class BasicSteps {
     }
 
     Closure javaVersionWrapper(Integer javaVersion, String... versionFiles) {
-        def resolvedVersion = resolveJavaVersion(javaVersion, versionFiles)
+        def resolvedVersion = JavaVersion.resolveVersion(jenkins, javaVersion, versionFiles)
         return { Closure cls ->
-            def javaHome = jenkins.env.("JAVA_${resolvedVersion}_HOME".toString())
             def inDocker = jenkins.env."IN_DOCKER" == "1"
             if (!inDocker && javaHome) {
-                jenkins.withEnv(["JAVA_HOME=${javaHome}"]) {
+                jenkins.withEnv(JavaVersion.javaHomeEnv(jenkins, resolvedVersion)) {
                     cls()
                 }
             } else {
