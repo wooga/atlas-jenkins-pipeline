@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
 import net.wooga.jenkins.pipeline.config.GradleArgs
+import net.wooga.jenkins.pipeline.config.JavaVersion
 
 class Gradle {
 
@@ -9,21 +10,19 @@ class Gradle {
     private String logLevel
     private boolean stackTrace
     private boolean refreshDependencies
+    private Integer javaVersion
 
     static Gradle fromJenkins(Object jenkinsScript, GradleArgs gradleArgs) {
-        return fromJenkins(jenkinsScript, gradleArgs.environment, gradleArgs.logLevel, gradleArgs.stackTrace, gradleArgs.refreshDependencies)
+        return new Gradle(jenkinsScript, gradleArgs.environment, gradleArgs.logLevel, gradleArgs.stackTrace, gradleArgs.refreshDependencies, gradleArgs.javaVersion)
     }
 
-    static Gradle fromJenkins(Object jenkinsScript, EnvVars environment, String logLevel, boolean stackTrace = false, boolean refreshDependencies = false) {
-        return new Gradle(jenkinsScript, environment, logLevel, stackTrace, refreshDependencies)
-    }
-
-    Gradle(Object jenkins, EnvVars environment, String logLevel, boolean stackTrace, boolean refreshDependencies) {
+    Gradle(Object jenkins, EnvVars environment, String logLevel, boolean stackTrace, boolean refreshDependencies, Integer javaVersion) {
         this.environment = environment
         this.stackTrace = stackTrace
         this.logLevel = logLevel
         this.jenkins = jenkins
         this.refreshDependencies = refreshDependencies
+        this.javaVersion = javaVersion
     }
 
     /**
@@ -31,7 +30,8 @@ class Gradle {
      */
     def wrapper(String command, Boolean returnStatus = false,
                 Boolean returnStdout = false) {
-        jenkins.withEnv(environment.resolveAsStrings()) {
+        def javaHomeEnv = javaVersion? JavaVersion.javaHomeEnv(jenkins, javaVersion) : []
+        jenkins.withEnv(environment.resolveAsStrings() + javaHomeEnv) {
             if (jenkins.isUnix()) {
                 return jenkins.sh(script: "./gradlew ${formatCommand(command)}", returnStdout: returnStdout, returnStatus: returnStatus)
             } else {
@@ -42,7 +42,8 @@ class Gradle {
 
     def wrapper(String umask, String command, Boolean returnStatus = false,
                 Boolean returnStdout = false) {
-        jenkins.withEnv(environment.resolveAsStrings()) {
+        def javaHomeEnv = javaVersion? JavaVersion.javaHomeEnv(jenkins, javaVersion) : []
+        jenkins.withEnv(environment.resolveAsStrings() + javaHomeEnv) {
             if (jenkins.isUnix()) {
                 if (umask != null && umask != "") {
                     def numericUmask = umask.replaceAll("[^\\d]", "")

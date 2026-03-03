@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import net.wooga.jenkins.pipeline.config.GradleArgs
 import net.wooga.jenkins.pipeline.model.EnvVars
 import net.wooga.jenkins.pipeline.model.Gradle
 
@@ -6,11 +7,14 @@ import net.wooga.jenkins.pipeline.model.Gradle
  * execute gradlew or gradlew.bat based on current os
  */
 def call(String command, Boolean returnStatus = false, Boolean returnStdout = false, List<?> environment=[]) {
-    def gradle = Gradle.fromJenkins(this,
-                EnvVars.fromList(environment),
-                params.LOG_LEVEL?: env.LOG_LEVEL as String,
-                params.STACK_TRACE? params.STACK_TRACE as Boolean : false,
-                params.REFRESH_DEPENDENCIES? params.REFRESH_DEPENDENCIES as Boolean : false)
+    def args = new GradleArgs(
+            EnvVars.fromList(environment),
+            params.LOG_LEVEL?: env.LOG_LEVEL as String,
+            params.STACK_TRACE? params.STACK_TRACE as Boolean : false,
+            params.REFRESH_DEPENDENCIES? params.REFRESH_DEPENDENCIES as Boolean : false,
+            env.GRADLE_JAVA_VERSION? env.GRADLE_JAVA_VERSION as Integer : null
+    )
+    def gradle = Gradle.fromJenkins(this, args)
     gradle.wrapper(env.UMASK as String, command, returnStatus, returnStdout)
 }
 

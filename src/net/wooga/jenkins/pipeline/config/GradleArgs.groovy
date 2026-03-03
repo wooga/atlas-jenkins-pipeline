@@ -9,21 +9,24 @@ class GradleArgs {
     final String logLevel
     final boolean stackTrace
     final boolean refreshDependencies
-
+    //nullable, if not set no java version will be enforced.
+    final Integer javaVersion
 
     static GradleArgs fromConfigMap(Map config) {
         def environment = EnvVars.fromList((config.gradleEnvironment ?: []) as List<?>)
         def showStackTraces = (config.showStackTrace ?: false) as boolean
         def refreshDependencies = (config.refreshDependencies ?: false) as boolean
-        return new GradleArgs(environment, config.logLevel as String, showStackTraces, refreshDependencies)
+        def javaVersion = config.javaVersion as Integer
+        return new GradleArgs(environment, config.logLevel as String, showStackTraces, refreshDependencies, javaVersion)
     }
 
 
-    GradleArgs(EnvVars environment, String logLevel, boolean stackTrace, boolean refreshDependencies) {
+    GradleArgs(EnvVars environment, String logLevel, boolean stackTrace, boolean refreshDependencies, Integer javaVersion = null) {
         this.environment = environment
         this.logLevel = logLevel
         this.stackTrace = stackTrace
         this.refreshDependencies = refreshDependencies
+        this.javaVersion = javaVersion
     }
 
     Gradle createGradle(Object jenkins) {
