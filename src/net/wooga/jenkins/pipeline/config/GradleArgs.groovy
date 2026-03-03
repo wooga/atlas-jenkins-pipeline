@@ -16,7 +16,7 @@ class GradleArgs {
         def environment = EnvVars.fromList((config.gradleEnvironment ?: []) as List<?>)
         def showStackTraces = (config.showStackTrace ?: false) as boolean
         def refreshDependencies = (config.refreshDependencies ?: false) as boolean
-        def javaVersion = config.javaVersion as int
+        def javaVersion = config.javaVersion as Integer
         return new GradleArgs(environment, config.logLevel as String, showStackTraces, refreshDependencies, javaVersion)
     }
 

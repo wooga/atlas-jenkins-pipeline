@@ -2,7 +2,7 @@ package net.wooga.jenkins.pipeline.config
 
 class JavaVersion {
 
-    static int resolveVersion(Object jenkins, Integer defaultJavaVersion=null, String... versionFiles) {
+    static int resolveVersion(Object jenkins, Integer defaultJavaVersion, String... versionFiles) {
         return versionFiles.collect { filePath ->
             if (jenkins.fileExists(filePath)) {
                 def strVersion = jenkins.readFile(filePath).trim()
