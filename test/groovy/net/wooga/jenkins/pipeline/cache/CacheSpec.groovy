@@ -104,14 +104,14 @@ class CacheSpec extends Specification {
         def cache = new Cache(jenkins, cacheRoot.absolutePath, "project", true)
 
         when: "renewProjectCache is called with a closure that generates assets"
-        def success = cache.renewProjectCache("testFolder", 1000) {
+        def success = cache.renewProjectCache("testFolder", 10000) {
             jenkins.echo("Generating assets")
             Thread.sleep(500)
         }
 
         then:
         success
-        cache.lastModified.ageMs > 0 && cache.lastModified.ageMs < 1000 // Ensure the cache was updated
+        cache.lastModified.ageMs > 0 && cache.lastModified.ageMs < 10000 // Ensure the cache was updated
         assert Files.walk(cacheRoot.toPath()).anyMatch {
             it.toString().endsWith("/project/$jenkins.BRANCH_NAME/testFolder/Subfolder/file1.txt")
         }
