@@ -132,7 +132,7 @@ class CacheSpec extends Specification {
         def jenkins = new FakeJenkins()
         jenkins.failMatchingSh = [
                 "^.*gtar\\s.+\$",
-                "^.*rsync\\s.+\$"
+                "^.*(rsync|rsync-new)\\s.+\$"
         ]
         jenkins.workspaceRoot.with {
             new File(it, "testFolder/Subfolder/file1.txt").with {
@@ -167,7 +167,7 @@ class CacheSpec extends Specification {
         def jenkins = new FakeJenkins()
         jenkins.failMatchingSh = [
                 "^.*gtar\\s.+\$",
-                "^.*rsync\\s.+\$"
+                "^.*(rsync|rsync-new)\\s.+\$"
         ]
         projectCache.with {
             new File(projectCache, "testFolder/Subfolder/file1.txt").with {

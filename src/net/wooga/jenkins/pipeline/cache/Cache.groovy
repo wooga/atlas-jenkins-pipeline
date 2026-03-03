@@ -142,10 +142,15 @@ class Cache {
     static def rsync(Object j, String source, String destination) {
         if (j.fileExists(source)) {
             int rsyncCode
+            //What is rsync-new? It's a different name for brew rsync, which support the arguments we require here.
+            // We need it on macos as xcode wants the default rsync to keep its rsync name.
+            // The name is awful, but hey, you do better.
+            def hasRsyncNew = j.sh(script: "which rsync-new", returnStatus: true) == 0
+            def rsyncCommand = hasRsyncNew? "rsync-new" : "rsync"
             if (destination.contains("/unity-cache/")) {
-                rsyncCode = j.sh script: "rsync --archive --delete --chmod u+rwxs,g+rwxs,o+r --groupmap *:nfs_share '$source' '$destination'", returnStatus: true
+                rsyncCode = j.sh script: "$rsyncCommand --archive --delete --chmod u+rwxs,g+rwxs,o+r --groupmap *:nfs_share '$source' '$destination'", returnStatus: true
             } else {
-                rsyncCode = j.sh script: "rsync --archive --delete --chmod u+rwx,g+rx,o+rx --chown jenkins_agent:staff '$source' '$destination'", returnStatus: true
+                rsyncCode = j.sh script: "$rsyncCommand --archive --delete --chmod u+rwx,g+rx,o+rx --chown jenkins_agent:staff '$source' '$destination'", returnStatus: true
             }
             return rsyncCode == 0
         }
