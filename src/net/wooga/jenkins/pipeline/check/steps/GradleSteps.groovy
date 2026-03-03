@@ -29,8 +29,9 @@ class BasicSteps {
         def resolvedVersion = JavaVersion.resolveVersion(jenkins, javaVersion, versionFiles)
         return { Closure cls ->
             def inDocker = jenkins.env."IN_DOCKER" == "1"
-            if (!inDocker && javaHome) {
-                jenkins.withEnv(JavaVersion.javaHomeEnv(jenkins, resolvedVersion)) {
+            def javaHomeEnv = JavaVersion.javaHomeEnv(jenkins, resolvedVersion)
+            if (!inDocker && javaHomeEnv.size() > 0) {
+                jenkins.withEnv(javaHomeEnv) {
                     cls()
                 }
             } else {
