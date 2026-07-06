@@ -7,8 +7,8 @@ class DotnetSpec extends Specification {
 
     static Expando fakeJenkins(boolean unix, Map<String, String> env = [:], boolean hasGlobalJson = false) {
         def jenkins = new Expando()
-        jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: []]
-        jenkins.isUnix = { -> unix }
+        jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: [], isUnix: 0]
+        jenkins.isUnix = { -> jenkins.calls.isUnix++; unix }
         jenkins.env = env
         jenkins.fileExists = { String path -> path == 'global.json' && hasGlobalJson }
         jenkins.withEnv = { List envList, Closure body ->
@@ -399,5 +399,17 @@ class DotnetSpec extends Specification {
         // (confirmed by real execution) - "--" forces everything after it through
         // to the tool verbatim.
         jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help" } != null
+    }
+
+    def "isUnix() memoizes the underlying jenkins.isUnix() call across every internal check"() {
+        given: "a Dotnet exercising install, NuGet source registration, and tool install/run in one call chain"
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins, null, null, null, "wooga_nuget", "https://example.com/index.json", "artifactory_read")
+
+        when: "runTool touches install()/cacheDir()/withEnvList()/ensureNuGetSource()/toolCacheDir()/toolEnv()/installTool(), each of which used to call jenkins.isUnix() separately"
+        dotnet.runTool("MyTool", "mytool", ["--help"], null, false)
+
+        then: "the real jenkins.isUnix() step is invoked only once per instance, not once per call site"
+        jenkins.calls.isUnix == 1
     }
 }

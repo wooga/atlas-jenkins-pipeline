@@ -22,6 +22,11 @@ class Dotnet {
     static final String DEFAULT_VERSION = "10.0.301"
 
     private Object jenkins
+    // Not named "unix" - that would form a Groovy JavaBean property pair with
+    // isUnix() below, and referencing the bare field name inside its own
+    // property's getter recurses back into the getter instead of reading the
+    // field, infinitely (confirmed by real execution: a StackOverflowError).
+    private Boolean unixCache
     private String version
     private String channel
     private String globalJson
@@ -74,12 +79,27 @@ class Dotnet {
     }
 
     /**
+     * Whether the current agent is unix-like, memoized after the first check.
+     * `isUnix()` is a real Jenkins step - calling it directly at every branch
+     * point (cacheDir/install/withEnvList/toolCacheDir/toolEnv/ensureNuGetSource/
+     * runTool/installTool) added a "Checks if running on a Unix-like node" step
+     * to the build log for each call; an agent's OS can't change mid-build, so
+     * a single cached check per instance is both correct and far less noisy.
+     */
+    boolean isUnix() {
+        if (unixCache == null) {
+            unixCache = jenkins.isUnix()
+        }
+        return unixCache
+    }
+
+    /**
      * The shared install/cache directory for the current agent's OS:
      * ~/.cache/jenkins-pipeline/dotnet on unix,
      * %LOCALAPPDATA%\cache\jenkins-pipeline\dotnet on Windows.
      */
     String cacheDir() {
-        if (jenkins.isUnix()) {
+        if (isUnix()) {
             return "${jenkins.env.HOME}/.cache/jenkins-pipeline/dotnet"
         }
         return "${jenkins.env.LOCALAPPDATA}\\cache\\jenkins-pipeline\\dotnet"
@@ -152,7 +172,7 @@ class Dotnet {
      * rather than environment variables.
      */
     def install() {
-        if (jenkins.isUnix()) {
+        if (isUnix()) {
             jenkins.writeFile file: '.ci/dotnet-install.sh', text: jenkins.libraryResource('dotnet/dotnet-install.sh')
             jenkins.sh "chmod +x .ci/dotnet-install.sh && .ci/dotnet-install.sh ${toShArgs(installArgs())}"
         } else {
@@ -167,7 +187,7 @@ class Dotnet {
      */
     List<String> withEnvList() {
         def dir = cacheDir()
-        def pathSeparator = jenkins.isUnix() ? ':' : ';'
+        def pathSeparator = isUnix() ? ':' : ';'
         return ["DOTNET_ROOT=${dir}", "PATH=${dir}${pathSeparator}${jenkins.env.PATH}"]
     }
 
@@ -211,7 +231,7 @@ class Dotnet {
      * no-op after the first run.
      */
     private void ensureNuGetSource() {
-        if (jenkins.isUnix()) {
+        if (isUnix()) {
             jenkins.sh "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
         } else {
             jenkins.powershell "if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
@@ -224,12 +244,12 @@ class Dotnet {
      * the default ~/.nuget/packages / ~/.dotnet locations.
      */
     String toolCacheDir() {
-        return jenkins.isUnix() ? "${cacheDir()}/tools" : "${cacheDir()}\\tools"
+        return isUnix() ? "${cacheDir()}/tools" : "${cacheDir()}\\tools"
     }
 
     private List<String> toolEnv() {
         def dir = toolCacheDir()
-        def sep = jenkins.isUnix() ? '/' : '\\'
+        def sep = isUnix() ? '/' : '\\'
         return ["NUGET_PACKAGES=${dir}${sep}packages", "DOTNET_CLI_HOME=${dir}"]
     }
 
@@ -262,7 +282,7 @@ class Dotnet {
             // they ever reach the tool, printing `dotnet tool run`'s help instead of
             // forwarding the flag (confirmed by real execution).
             def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
-            if (jenkins.isUnix()) {
+            if (isUnix()) {
                 return jenkins.sh(script: command, returnStatus: returnStatus)
             } else {
                 return jenkins.bat(script: command, returnStatus: returnStatus)
@@ -278,7 +298,7 @@ class Dotnet {
     private void installTool(String packageId, String version) {
         def versionArgs = version ? " --version ${version} --allow-downgrade" : ""
         def command = "dotnet tool install ${packageId} --create-manifest-if-needed${versionArgs}"
-        if (jenkins.isUnix()) {
+        if (isUnix()) {
             jenkins.sh command
         } else {
             jenkins.bat command
