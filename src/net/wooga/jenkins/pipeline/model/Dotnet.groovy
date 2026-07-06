@@ -1,5 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
+import com.cloudbees.groovy.cps.NonCPS
+
 /**
  * Provisions the .NET SDK into a shared per-agent cache directory (via the
  * vendored dotnet-install wrapper scripts) and exposes it to callers.
@@ -32,6 +34,10 @@ class Dotnet {
         this.globalJson = globalJson
     }
 
+    // Called from the constructor, which can't be CPS-transformed (it can't be
+    // paused/resumed) - a CPS-transformed method call from a constructor would
+    // leak an unhandled CpsCallableInvocation instead of actually running.
+    @NonCPS
     private static void validateSelectors(String version, String channel, String globalJson) {
         def given = [version: version, channel: channel, globalJson: globalJson].findAll { k, v -> v }
         if (given.size() > 1) {

@@ -46,6 +46,8 @@ Mirror `Gradle.groovy`: add `src/net/wooga/jenkins/pipeline/model/Dotnet.groovy`
 
 *Alternative considered*: duplicate the install/log logic directly in each `vars/*.groovy` file (as the reference PR does for its single step). Rejected — with two entry points sharing the same behavior, duplication risks the two steps drifting.
 
+> **Post-implementation lesson (real-pipeline bug)**: `Dotnet`'s constructor originally called `validateSelectors(...)`, a method on the same class, directly. Since Jenkins CPS-transforms every method on classes under `src/` by default, and constructors themselves cannot be CPS-transformed (they can't pause/resume), this leaked an unhandled `hudson.remoting.ProxyException` / `CpsCallableInvocation` in real pipelines — invisible to the Spock/`jenkins-pipeline-unit` test harness, which doesn't perform real CPS transformation. Fixed by annotating `validateSelectors` with `@NonCPS` (matching the existing `BuildVersion.groovy` convention). **Lesson for future model classes in this library**: avoid calling same-class (or other CPS-transformed) methods from a constructor; if unavoidable, the called method must be `@NonCPS` and must not itself invoke Jenkins pipeline steps.
+
 ### 2. Step API / signatures
 
 Both steps take the same optional selector keys: `version`, `channel`, `globalJson`.
