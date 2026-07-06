@@ -201,4 +201,120 @@ class DotnetSpec extends Specification {
         nugetCall.contains(Dotnet.NUGET_SOURCE_URL)
         nugetCall.contains(Dotnet.NUGET_SOURCE_NAME)
     }
+
+    def "toolCacheDir resolves under cacheDir on unix"() {
+        given:
+        def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester"]))
+
+        expect:
+        dotnet.toolCacheDir() == "/home/tester/.cache/dotnet/tools"
+    }
+
+    def "toolCacheDir resolves under cacheDir on Windows"() {
+        given:
+        def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local"]))
+
+        expect:
+        dotnet.toolCacheDir() == "C:\\Users\\tester\\AppData\\Local\\cache\\dotnet\\tools"
+    }
+
+    def "withTool provisions, installs the tool, then runs the block"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+        def ran = false
+
+        when:
+        dotnet.withTool("MyTool", null) { ran = true }
+
+        then:
+        ran
+        def installCall = jenkins.calls.sh.find { it.toString().contains("dotnet tool install MyTool") }
+        installCall != null
+        installCall.contains("--create-manifest-if-needed")
+        !installCall.contains("--version")
+        !installCall.contains("--allow-downgrade")
+    }
+
+    def "withTool passes version and --allow-downgrade when a version is given"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", "1.2.3") { }
+
+        then:
+        def installCall = jenkins.calls.sh.find { it.toString().contains("dotnet tool install MyTool") }
+        installCall.contains("--version 1.2.3")
+        installCall.contains("--allow-downgrade")
+    }
+
+    def "withTool redirects NUGET_PACKAGES and DOTNET_CLI_HOME under the tool cache dir"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then:
+        def toolEnvCall = jenkins.calls.withEnv.find { it.any { e -> e.toString().startsWith("NUGET_PACKAGES=") } }
+        toolEnvCall != null
+        toolEnvCall.any { it.toString() == "NUGET_PACKAGES=/home/tester/.cache/dotnet/tools/packages" }
+        toolEnvCall.any { it.toString() == "DOTNET_CLI_HOME=/home/tester/.cache/dotnet/tools" }
+    }
+
+    def "withTool installs via bat on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then:
+        jenkins.calls.bat.find { it.toString().contains("dotnet tool install MyTool") } != null
+        jenkins.calls.sh.isEmpty()
+    }
+
+    def "runTool runs the tool via dotnet tool run with args"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["--help", "--verbose"], null, false)
+
+        then:
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool --help --verbose" }
+        runCall != null
+        runCall.returnStatus == false
+    }
+
+    def "runTool threads returnStatus through"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", [], null, true)
+
+        then:
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool" }
+        runCall.returnStatus == true
+    }
+
+    def "runTool uses bat on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false)
+
+        then:
+        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool arg" } != null
+        jenkins.calls.sh.isEmpty()
+    }
 }

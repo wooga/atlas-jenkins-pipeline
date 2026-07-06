@@ -139,6 +139,69 @@ class Dotnet {
     }
 
     /**
+     * Cache directory for local dotnet tool packages and CLI resolver state,
+     * kept under the same managed cache tree as the SDK itself rather than
+     * the default ~/.nuget/packages / ~/.dotnet locations.
+     */
+    String toolCacheDir() {
+        return jenkins.isUnix() ? "${cacheDir()}/tools" : "${cacheDir()}\\tools"
+    }
+
+    private List<String> toolEnv() {
+        def dir = toolCacheDir()
+        def sep = jenkins.isUnix() ? '/' : '\\'
+        return ["NUGET_PACKAGES=${dir}${sep}packages", "DOTNET_CLI_HOME=${dir}"]
+    }
+
+    /**
+     * Provisions the SDK/creds/nuget feed, ensures <packageId> (optionally
+     * pinned to <version>) is installed as a local (manifest-based) dotnet
+     * tool in the current workspace - creating a tool manifest if one
+     * doesn't exist - then runs the given block with it invocable via
+     * `dotnet tool run <toolBinary>` (or `dotnet <toolBinary>`). The tool's
+     * package cache is redirected under toolCacheDir() for the block's
+     * duration, not the default ~/.nuget or ~/.dotnet locations.
+     */
+    def withTool(String packageId, String version = null, Closure block) {
+        withProvisionedEnv {
+            jenkins.withEnv(toolEnv()) {
+                installTool(packageId, version)
+                block()
+            }
+        }
+    }
+
+    /**
+     * Provisions the SDK/creds/tool (as withTool), then runs <toolBinary>
+     * via `dotnet tool run` with the given args.
+     */
+    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus) {
+        return withTool(packageId, version) {
+            def command = (["dotnet", "tool", "run", toolBinary] + args).join(" ")
+            if (jenkins.isUnix()) {
+                return jenkins.sh(script: command, returnStatus: returnStatus)
+            } else {
+                return jenkins.bat(script: command, returnStatus: returnStatus)
+            }
+        }
+    }
+
+    // dotnet tool install is idempotent on its own for a local/manifest tool:
+    // re-installing the same version is a no-op ("up to date"), and a version
+    // change requires --allow-downgrade regardless of direction (confirmed by
+    // real execution) - no extra existence check needed here, unlike the
+    // nuget source registration above.
+    private void installTool(String packageId, String version) {
+        def versionArgs = version ? " --version ${version} --allow-downgrade" : ""
+        def command = "dotnet tool install ${packageId} --create-manifest-if-needed${versionArgs}"
+        if (jenkins.isUnix()) {
+            jenkins.sh command
+        } else {
+            jenkins.bat command
+        }
+    }
+
+    /**
      * Registers the shared wooga_nuget feed with the dotnet CLI if it isn't
      * already present. Idempotent and safe to call on every invocation: this
      * writes to the user-level NuGet.Config, so on a persistent agent it's a

@@ -93,6 +93,55 @@ withDotnet(version: "8.0.401") {
 
 **Caveat**: a `sh` script with its own login-shell shebang (`#!/bin/bash -l`) re-sources `/etc/profile` and `~/.bash_profile`/`~/.profile` before running, which on some agents unconditionally overwrites `PATH` — discarding the `PATH` `withDotnet` set before your script's first line runs. `DOTNET_ROOT` survives this. If you need a login shell, re-add it defensively: `export PATH="$DOTNET_ROOT:$PATH"` as the first line of your script.
 
+### withDotnetTool
+
+Provisions the requested .NET SDK (same as `withDotnet`) and installs the given NuGet package as a local (manifest-based) dotnet tool in the current workspace — creating a tool manifest (`dotnet tool install --create-manifest-if-needed`) if one doesn't already exist. The tool's package cache is redirected under the shared per-agent cache directory (`~/.cache/dotnet/tools` on unix, `%LOCALAPPDATA%\cache\dotnet\tools` on Windows) via `NUGET_PACKAGES`/`DOTNET_CLI_HOME`, instead of the default `~/.nuget/packages` / `~/.dotnet` locations.
+
+Local tools aren't exposed as a bare command on `PATH` — invoke them from the block via `dotnet tool run <tool-binary>` (or the `dotnet <tool-binary>` shorthand `dotnet` itself prints after install).
+
+#### Arguments:
+
+* packageId: `string` (positional, or `packageId:` key in the map form)
+* version: `string` (optional, exact tool version; passes `--allow-downgrade` too, so it also works when a different version is already installed)
+
+#### Usage:
+
+```
+withDotnetTool("dotnet-ef") {
+    sh "dotnet tool run dotnet-ef -- database update"
+}
+
+withDotnetTool(packageId: "dotnet-ef", version: "8.0.4") {
+    sh "dotnet tool run dotnet-ef -- database update"
+}
+```
+
+### runDotnetTool
+
+Provisions the requested .NET SDK (same as `withDotnet`), installs the given NuGet package as a local dotnet tool (same as `withDotnetTool`), then runs it via `dotnet tool run <tool-binary>` with the given args.
+
+#### Arguments:
+
+* packageId: `string`
+* toolBinary: `string`
+* args: `list<string>` = *[]*
+* version: `string` (optional, exact tool version, passes `--allow-downgrade`)
+* returnStatus: `boolean` = *false*
+
+#### Usage:
+
+```
+runDotnetTool("dotnet-ef", "dotnet-ef", ["database", "update"])
+
+runDotnetTool(
+    packageId: "dotnet-ef",
+    toolBinary: "dotnet-ef",
+    args: ["database", "update"],
+    version: "8.0.4",
+    returnStatus: true
+)
+```
+
 ### buildWDKAutoSwitch
 
 Constructs a pipeline that will build an [Unity](https://unity.com/) WDK for a set of given Unity versions, running any available tests. If the build is successful it will then generate a `paket` package and publish it to our `artifactory`, where it then can be used by other WDKs or game projects.

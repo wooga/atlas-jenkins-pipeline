@@ -167,6 +167,24 @@ Requested after a real consumer hit exactly the boilerplate this whole feature i
 - **[Trade-off]** `dotnetWrapper` writes the install wrapper into the workspace (`.ci/`, per the reference pattern), lightly polluting the workspace. → Acceptable and consistent with the reference PR; the file is small and regenerated each run.
 - **[Risk]** Both steps now hard-depend on the `artifactory_read` Jenkins credential resolving in the calling context (Decision 10) — a pipeline without access to it fails on every `withDotnet`/`dotnetWrapper` call, even ones that don't need the private NuGet feed. → **Mitigation**: `artifactory_read` is already a hardcoded, widely-used credential ID elsewhere in this exact library, so this isn't a new assumption for consumers of this repo.
 
+### 11. withDotnetTool / runDotnetTool: local (manifest-based) tools only, with a redirected cache
+
+Requested as a follow-up: install a NuGet package as a dotnet tool and invoke it, reusing `withDotnet`'s SDK/credentials provisioning. Two mutually exclusive .NET tool mechanisms exist and don't interoperate: `--tool-path <dir>` installs create real shims in `<dir>` (invocable as a bare command once that dir is on `PATH`, but *not* discoverable by `dotnet tool run`), while a plain/local install registers the tool in a manifest (`.config/dotnet-tools.json` or workspace-root `dotnet-tools.json`) and is *only* invocable via `dotnet tool run <name>` (or `dotnet <name>`) — never as a bare PATH command. After clarifying with the stakeholder, both `withDotnetTool` and `runDotnetTool` use the **local/manifest** mechanism exclusively; `withDotnetTool`'s block invokes the tool itself via `dotnet tool run <toolBinary>` rather than expecting it on `PATH`.
+
+**Cache relocation** (real-execution verified on this dev machine, not just documentation-inferred): a common assumption is that local tools cache under `~/.dotnet/tools/.store/` — this is wrong; `.store` is exclusively used by **global** (`--global`) and `--tool-path` installs. A local/manifest tool's actual package content is fetched into the standard NuGet global-packages folder (`~/.nuget/packages` by default), which the well-known `NUGET_PACKAGES` env var already redirects — confirmed by installing a real tool (`dotnetsay`) with `NUGET_PACKAGES` set to a scratch directory and observing the package land there instead of `~/.nuget/packages`. A second, much smaller resolver cache lives under `~/.dotnet/toolResolverCache/`, relocatable via the `DOTNET_CLI_HOME` env var (also confirmed by real execution: setting it moved the resolver cache to `<value>/.dotnet/toolResolverCache/...` and the tool still ran correctly via `dotnet tool run`).
+
+Both env vars are set for the duration of tool install/run to:
+- `NUGET_PACKAGES = <cache-dir>/tools/packages`
+- `DOTNET_CLI_HOME = <cache-dir>/tools`
+
+keeping tool state fully self-contained under the same managed cache tree as the SDK itself, isolated from both the real user's `~/.nuget`/`~/.dotnet` and from other tools/SDKs on the same agent.
+
+**Idempotency** (also real-execution verified): unlike the `wooga_nuget` source registration, `dotnet tool install` for a local/manifest tool is *already* idempotent on its own — re-running it for an already-installed version reports "up to date" and exits 0, no custom check-then-install logic needed. A version *change* requires `--allow-downgrade` regardless of direction (confirmed: attempting a lower version without the flag errors; with it, it updates cleanly) — this is exactly why the stakeholder's original spec called for passing it whenever a version is given, and this was verified to be necessary, not just defensive.
+
+`--create-manifest-if-needed` is passed on every install so the steps work turnkey on a repo with no pre-existing tool manifest (confirmed via real execution on a fresh workspace: it auto-creates the manifest and the tool runs immediately after).
+
+*Alternative considered*: use `--tool-path <cache-dir>/tools/bin` + add that dir to `PATH`, letting `withDotnetTool`'s block invoke the tool as a bare command (matching the original example syntax). Rejected per stakeholder direction — `dotnet tool run` (explicitly requested for `runDotnetTool`) cannot resolve a `--tool-path`-only install, so unifying on one mechanism was necessary, and local/manifest was the chosen one.
+
 ## Migration Plan
 
 Purely additive — no existing step or pipeline changes. Rollout: merge to master, then bump this library's version pointer in the consuming repo to pick up the new steps, validated as the reference PR was (a downstream PR temporarily pointing `@Library` at this branch). No rollback concerns beyond reverting the merge, since nothing existing depends on these steps yet.
