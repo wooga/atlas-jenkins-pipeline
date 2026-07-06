@@ -16,8 +16,7 @@ def call(Map args) {
 }
 
 private def runCommand(Dotnet dotnet, String command, Boolean returnStatus, Boolean returnStdout) {
-    dotnet.provision()
-    withEnv(dotnet.withEnvList()) {
+    return dotnet.withProvisionedEnv {
         if (isUnix()) {
             return sh(script: "dotnet ${command}", returnStdout: returnStdout, returnStatus: returnStatus)
         } else {

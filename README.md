@@ -44,7 +44,7 @@ gradleWrapper "testEditMode -P unity.testBuildTargets=android"
 
 ### dotnetWrapper
 
-Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/dotnet` on unix, `%LOCALAPPDATA%\cache\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it.
+Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/dotnet` on unix, `%LOCALAPPDATA%\cache\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the command, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
 
 #### Arguments:
 
@@ -69,7 +69,7 @@ dotnetWrapper(command: "test", channel: "8.0")
 
 ### withDotnet
 
-Provisions the requested .NET SDK into the shared per-agent cache directory (same as `dotnetWrapper`) and runs the given block with it available on `PATH` (`DOTNET_ROOT` is also set), scoped to the block.
+Provisions the requested .NET SDK into the shared per-agent cache directory (same as `dotnetWrapper`) and runs the given block with it available on `PATH` (`DOTNET_ROOT` is also set), scoped to the block. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the block, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
 
 #### Arguments:
 

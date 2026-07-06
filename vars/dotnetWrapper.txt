@@ -8,6 +8,12 @@ major.minor is tracked as a floating channel, matching GitHub Actions'
 setup-dotnet - bump your global.json to move to a newer SDK); otherwise the
 org-wide pinned default version is installed (see Dotnet.DEFAULT_VERSION).
 
+Also idempotently registers the shared "wooga_nuget" NuGet feed (once per
+agent) and binds the 'artifactory_read' Jenkins credential for the duration
+of the command, exporting NuGetPackageSourceCredentials_wooga_nuget so
+`dotnet restore`/`dotnet test` etc. can authenticate against it with no
+extra setup.
+
 usage: ```
 // string form - selector auto-detected (workspace global.json, else org-wide default)
 dotnetWrapper "build --configuration Release"

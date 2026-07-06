@@ -7,7 +7,7 @@ The system SHALL provide a `dotnetWrapper` shared step that provisions the reque
 #### Scenario: String form runs a dotnet command
 
 - **WHEN** a pipeline calls `dotnetWrapper "build --configuration Release"`
-- **THEN** the SDK is provisioned using auto-detection (workspace `global.json`, else latest LTS)
+- **THEN** the SDK is provisioned using auto-detection (workspace `global.json`, else the org-wide default version)
 - **AND** `dotnet build --configuration Release` is executed against the provisioned SDK
 
 #### Scenario: Map form with an explicit selector
@@ -34,7 +34,7 @@ The system SHALL provide a `withDotnet` shared step that provisions the requeste
 #### Scenario: Block runs with dotnet on PATH
 
 - **WHEN** a pipeline calls `withDotnet { sh "dotnet build" }`
-- **THEN** the SDK is provisioned using auto-detection (workspace `global.json`, else latest LTS)
+- **THEN** the SDK is provisioned using auto-detection (workspace `global.json`, else the org-wide default version)
 - **AND** the block executes with the cache directory prepended to `PATH` and `DOTNET_ROOT` pointing at the cache directory
 - **AND** the `dotnet` resolved inside the block is the cached SDK, not any system-installed copy
 
@@ -62,3 +62,22 @@ Each invocation of `dotnetWrapper` or `withDotnet` SHALL surface in the build lo
 
 - **WHEN** `withDotnet` provisions and enters the block
 - **THEN** the build log shows the resolved SDK version, the selector source, and cache hit/miss before the block runs
+
+### Requirement: Automatic wooga_nuget feed registration and credentials
+
+Both `dotnetWrapper` and `withDotnet` SHALL, as part of provisioning, idempotently register the company-wide private `wooga_nuget` NuGet feed with the dotnet CLI if it is not already registered on the current agent, and SHALL bind the `artifactory_read` Jenkins credential for the duration of the command/block, exporting a `NuGetPackageSourceCredentials_wooga_nuget` environment variable in the standard `Username=<user>;Password=<pass>` NuGet CLI format so that `dotnet restore` and similar commands can authenticate against the feed without the caller wiring this up themselves.
+
+#### Scenario: NuGet feed is registered on first use on an agent
+
+- **WHEN** `withDotnet` or `dotnetWrapper` runs on an agent where the `wooga_nuget` feed is not yet registered
+- **THEN** the feed is registered with the dotnet CLI before the block/command runs
+
+#### Scenario: NuGet feed registration is idempotent
+
+- **WHEN** `withDotnet` or `dotnetWrapper` runs on an agent where the `wooga_nuget` feed is already registered (e.g. from a prior build)
+- **THEN** no attempt is made to re-register it, and no error occurs from the feed already existing
+
+#### Scenario: NuGet credentials are exported for the duration of the block/command
+
+- **WHEN** `withDotnet` or `dotnetWrapper` runs
+- **THEN** the `artifactory_read` credential is bound and `NuGetPackageSourceCredentials_wooga_nuget` is set to `Username=<bound username>;Password=<bound password>` for the duration of the block/command only

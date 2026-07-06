@@ -17,6 +17,22 @@ class Dotnet {
      */
     static final String DEFAULT_VERSION = "10.0.301"
 
+    /**
+     * Company-wide private NuGet feed, registered idempotently (once per
+     * agent, since `dotnet nuget add source` writes to the user-level
+     * NuGet.Config) so every dotnetWrapper/withDotnet invocation can restore
+     * from it without callers wiring this up themselves.
+     */
+    static final String NUGET_SOURCE_NAME = "wooga_nuget"
+    static final String NUGET_SOURCE_URL = "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json"
+
+    /**
+     * Jenkins credentials ID for read access to the private NuGet feed above.
+     * Matches the existing 'artifactory_read' convention already hardcoded by
+     * other steps in this library (e.g. javaLibs.groovy, buildWDK.groovy).
+     */
+    static final String NUGET_CREDENTIALS_ID = "artifactory_read"
+
     private Object jenkins
     private String version
     private String channel
@@ -104,12 +120,35 @@ class Dotnet {
     }
 
     /**
-     * Provisions the SDK, then runs the given block with it available on PATH.
+     * Provisions the SDK, ensures the shared wooga_nuget feed is registered
+     * and authenticated, then runs the given block with it all available.
      */
     def withProvisionedEnv(Closure block) {
         provision()
-        jenkins.withEnv(withEnvList()) {
-            block()
+        jenkins.withCredentials([jenkins.usernamePassword(
+                credentialsId: NUGET_CREDENTIALS_ID, usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS')]) {
+            jenkins.withEnv(withEnvList() + [nugetCredentialsEnv()]) {
+                ensureNuGetSource()
+                block()
+            }
+        }
+    }
+
+    private String nugetCredentialsEnv() {
+        return "NuGetPackageSourceCredentials_${NUGET_SOURCE_NAME}=Username=${jenkins.env.JFROG_USER};Password=${jenkins.env.JFROG_PASS}"
+    }
+
+    /**
+     * Registers the shared wooga_nuget feed with the dotnet CLI if it isn't
+     * already present. Idempotent and safe to call on every invocation: this
+     * writes to the user-level NuGet.Config, so on a persistent agent it's a
+     * no-op after the first run.
+     */
+    private void ensureNuGetSource() {
+        if (jenkins.isUnix()) {
+            jenkins.sh "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${NUGET_SOURCE_URL}\" || dotnet nuget add source \"${NUGET_SOURCE_URL}\" --name \"${NUGET_SOURCE_NAME}\""
+        } else {
+            jenkins.powershell "if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${NUGET_SOURCE_URL}')) { dotnet nuget add source '${NUGET_SOURCE_URL}' --name '${NUGET_SOURCE_NAME}' }"
         }
     }
 }

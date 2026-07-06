@@ -11,6 +11,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
+        credentials.addUsernamePassword("artifactory_read", "fake-jfrog-user", "fake-jfrog-pass")
     }
 
     def "runs the block with the cache dir on PATH and DOTNET_ROOT set"() {
@@ -27,9 +28,11 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
 
         then:
         ran
-        def blockEnv = usedEnvironments.last()
+        def blockEnv = usedEnvironments.find { it.containsKey("DOTNET_ROOT") }
+        blockEnv != null
         blockEnv["DOTNET_ROOT"] == "/home/tester/.cache/dotnet"
         blockEnv["PATH"].startsWith("/home/tester/.cache/dotnet")
+        blockEnv["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass"
     }
 
     def "provisions with an explicit selector before running the block"() {
@@ -79,9 +82,11 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
 
         then:
         ran
-        calls["powershell"].size() == 1
+        // one powershell call for the install wrapper, one for the idempotent nuget source registration
+        calls["powershell"].size() == 2
         calls["sh"].size() == 0
-        def blockEnv = usedEnvironments.last()
+        def blockEnv = usedEnvironments.find { it.containsKey("DOTNET_ROOT") }
+        blockEnv != null
         blockEnv["DOTNET_ROOT"] == "C:\\Users\\tester\\AppData\\Local\\cache\\dotnet"
     }
 }

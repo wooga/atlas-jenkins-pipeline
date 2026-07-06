@@ -11,6 +11,7 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
+        credentials.addUsernamePassword("artifactory_read", "fake-jfrog-user", "fake-jfrog-pass")
     }
 
     private List<Object> shArgs() {

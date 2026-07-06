@@ -11,6 +11,7 @@ Pipelines that build .NET/C# projects (e.g. Unity wdks, tooling repos) currently
 - Installs are **not** placed in the default per-user dotnet directory. Instead they go into a shared, custom cache directory: `~/.cache/dotnet` on macOS/Linux, and `%LOCALAPPDATA%\cache\dotnet` on Windows. This keeps installed SDKs cacheable/reusable across jobs on the same agent independent of the default dotnet CLI location.
 - Concurrent installs on the same agent must be serialized safely (self-healing lock, as in the reference PR) since multiple pipeline runs may share the same agent and cache directory.
 - Both steps must log which .NET SDK version is being used and where it was resolved/installed from (e.g. "already cached at `<path>`" vs. "installed via channel `X`" vs. "installed via global.json at `<path>`"), so build logs make the effective SDK version traceable without needing to inspect the cache directory.
+- Both steps also idempotently register the company-wide private `wooga_nuget` NuGet feed (once per agent) and bind the `artifactory_read` Jenkins credential for the duration of the block/command, exporting `NuGetPackageSourceCredentials_wooga_nuget` — removing boilerplate every .NET consumer would otherwise have to repeat to restore packages from that feed.
 
 ## Capabilities
 
@@ -26,3 +27,4 @@ Pipelines that build .NET/C# projects (e.g. Unity wdks, tooling repos) currently
 - New files under `vars/` (`withDotnet.groovy`, `withDotnet.txt`, `dotnetWrapper.groovy`, `dotnetWrapper.txt`) and `resources/dotnet/` (vendored `dotnet-install.sh` / `dotnet-install.ps1`, adapted for the custom cache directory).
 - No changes to existing pipelines or steps; purely additive shared library surface.
 - Consumers (e.g. Unity wdk pipelines, .NET tooling repos) can opt in to these steps once available; no forced migration.
+- New implicit dependency: any pipeline using `withDotnet`/`dotnetWrapper` now requires the `artifactory_read` Jenkins credential to be resolvable in its context (already a widely-used, pre-existing credential ID in this library — see `javaLibs.groovy`, `buildWDK.groovy`).

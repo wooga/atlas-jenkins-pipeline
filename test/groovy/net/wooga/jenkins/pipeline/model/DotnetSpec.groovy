@@ -7,7 +7,7 @@ class DotnetSpec extends Specification {
 
     static Expando fakeJenkins(boolean unix, Map<String, String> env = [:], boolean hasGlobalJson = false) {
         def jenkins = new Expando()
-        jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: []]
+        jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: []]
         jenkins.isUnix = { -> unix }
         jenkins.env = env
         jenkins.fileExists = { String path -> path == 'global.json' && hasGlobalJson }
@@ -20,6 +20,15 @@ class DotnetSpec extends Specification {
         jenkins.powershell = { Object arg -> jenkins.calls.powershell << arg }
         jenkins.writeFile = { Map args -> jenkins.calls.writeFile << args }
         jenkins.libraryResource = { String path -> jenkins.calls.libraryResource << path; return "" }
+        jenkins.usernamePassword = { Map args -> args }
+        jenkins.withCredentials = { List bindings, Closure body ->
+            jenkins.calls.withCredentials << bindings
+            bindings.each { b ->
+                if (b.usernameVariable) { env[b.usernameVariable] = "fake-jfrog-user" }
+                if (b.passwordVariable) { env[b.passwordVariable] = "fake-jfrog-pass" }
+            }
+            body.call()
+        }
         return jenkins
     }
 
@@ -138,7 +147,58 @@ class DotnetSpec extends Specification {
         then:
         ran
         jenkins.calls.withEnv.size() == 2
-        jenkins.calls.withEnv[1] == ["DOTNET_ROOT=/home/tester/.cache/dotnet", "PATH=/home/tester/.cache/dotnet:/usr/bin"]
-        jenkins.calls.sh.size() == 1
+        jenkins.calls.withEnv[1] == [
+                "DOTNET_ROOT=/home/tester/.cache/dotnet",
+                "PATH=/home/tester/.cache/dotnet:/usr/bin",
+                "NuGetPackageSourceCredentials_wooga_nuget=Username=fake-jfrog-user;Password=fake-jfrog-pass"
+        ]
+        // one sh call for the install wrapper, one for the idempotent nuget source registration
+        jenkins.calls.sh.size() == 2
+    }
+
+    def "withProvisionedEnv binds the shared artifactory_read credential"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withProvisionedEnv { }
+
+        then:
+        jenkins.calls.withCredentials.size() == 1
+        jenkins.calls.withCredentials[0] == [[
+                credentialsId: Dotnet.NUGET_CREDENTIALS_ID, usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS'
+        ]]
+    }
+
+    def "withProvisionedEnv registers the shared wooga_nuget source idempotently"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withProvisionedEnv { }
+
+        then:
+        def nugetCall = jenkins.calls.sh.find { it.toString().contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains(Dotnet.NUGET_SOURCE_URL)
+        nugetCall.contains(Dotnet.NUGET_SOURCE_NAME)
+        nugetCall.contains("dotnet nuget list source") // checks before adding, for idempotency
+    }
+
+    def "withProvisionedEnv registers the nuget source via powershell on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withProvisionedEnv { }
+
+        then:
+        def nugetCall = jenkins.calls.powershell.find { it.toString().contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains(Dotnet.NUGET_SOURCE_URL)
+        nugetCall.contains(Dotnet.NUGET_SOURCE_NAME)
     }
 }

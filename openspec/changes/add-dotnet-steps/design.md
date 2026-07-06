@@ -65,7 +65,7 @@ withDotnet(version: "8.0.401") { sh "dotnet build" }   // explicit selector
 
 - `dotnetWrapper` exposes `call(String command, Boolean returnStatus, Boolean returnStdout)` and `call(Map args)` (where `args.command` carries the command and `args.version/channel/globalJson` carry the selector), matching `gradleWrapper`.
 - `withDotnet` exposes `call(Map config = [:], Closure block)`, matching `withVisualStudioDevEnv`.
-- The **string** form of `dotnetWrapper` has no place for a selector, so it always uses auto-detect (global.json → latest LTS). Callers needing a selector use the map form.
+- The **string** form of `dotnetWrapper` has no place for a selector, so it always uses auto-detect (global.json → org-wide default). Callers needing a selector use the map form.
 
 *Alternative considered*: a separate public `installDotnet()` step (as in the reference PR) plus these two. Rejected for now — out of the requested scope; both steps provision internally, so a standalone install step is not needed by callers.
 
@@ -143,6 +143,19 @@ After provisioning, run the command against the cached SDK inside the same `with
 
 The official install scripts auto-detect the agent architecture (including Apple Silicon `arm64`), so no explicit `--architecture` handling is added. This keeps the minimal API surface; if an agent needs a non-native SDK (e.g. x64 under Rosetta), that is out of scope for this version.
 
+### 10. Automatic wooga_nuget feed registration and credentials (post-implementation addition)
+
+Requested after a real consumer hit exactly the boilerplate this whole feature is meant to remove: every .NET pipeline needing packages from the company's private Artifactory NuGet feed had to hand-write `dotnet nuget add source ...`, `withCredentials([usernamePassword(...)])`, and `export NuGetPackageSourceCredentials_wooga_nuget=...` themselves. Since this is explicitly a company-wide, always-applicable setting (not per-project), both `withDotnet` and `dotnetWrapper` now do this automatically as part of `Dotnet.withProvisionedEnv()`:
+
+1. **Idempotent source registration**: `dotnet nuget add source <url> --name wooga_nuget`, guarded by `dotnet nuget list source --format Short | grep -qF <url>` (unix) / `Select-String -SimpleMatch` (Windows) first — `dotnet nuget add source` errors if a source with that URL is already registered (confirmed by real execution: it dedups by URL, not by `--name`), and this writes to the **user-level** `NuGet.Config`, so on a persistent agent it's a one-time cost per agent user account, consistent with how the SDK cache itself already assumes agent persistence.
+2. **Credentials**: `jenkins.withCredentials([usernamePassword(credentialsId: 'artifactory_read', usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS')])` wraps the block/command, exporting `NuGetPackageSourceCredentials_wooga_nuget=Username=<user>;Password=<pass>` — the standard NuGet CLI convention for per-source env-based credentials — for its duration.
+
+`artifactory_read` is not a new credential invented for this feature — it's an existing, already-hardcoded convention in this same library (`javaLibs.groovy`, `buildWDK.groovy`, `buildUnityWdkV2/V3/V4.groovy`), confirming it's genuinely available wherever this shared library is used.
+
+*Alternative considered*: make this opt-in via a parameter (e.g. `withDotnet(nugetFeed: true)`). Rejected per explicit requirement — this is meant to be zero-configuration, company-wide default behavior, matching the "minimal API surface" philosophy already established for this change (Decision 9's `DEFAULT_VERSION` is the same pattern: an org-wide constant, not a per-call knob).
+
+*Risk accepted*: every `withDotnet`/`dotnetWrapper` call now hard-depends on the `artifactory_read` credential resolving in whatever Jenkins context it runs. If a pipeline uses these steps in a context where that credential isn't visible (e.g. a sandbox/personal Jenkins instance without the org's global credential store), the call fails even for builds that don't need the private feed at all. Accepted because the credential is already a load-bearing, widely-hardcoded assumption elsewhere in this exact library.
+
 ## Risks / Trade-offs
 
 - **[Risk]** Runtime download of Microsoft's install script (no vendored/pinned copy) means a `dot.net` outage or breaking change hits all consumers at once. → **Mitigation**: same trade-off the reference PR accepted; Microsoft keeps this script strongly backwards-compatible, and vendoring adds ongoing maintenance.
@@ -152,6 +165,7 @@ The official install scripts auto-detect the agent architecture (including Apple
 - **[Trade-off]** Builds with a `global.json` still churn the shared cache over time as Microsoft ships new patches in that channel (same as `setup-dotnet` on GitHub Actions) — old versions are never evicted. → Accepted as consistent with GitHub Actions parity (Decision 9); only the no-selector/no-`global.json` case gets a fully stable, pinned version. Cache eviction/GC remains a Non-Goal for this change.
 - **[Trade-off]** Determining hit/miss and exact version requires filesystem/string handling inside the bash/PowerShell wrappers rather than structured data. → Acceptable; the reference scripts already parse `global.json` with `grep`/`ConvertFrom-Json`.
 - **[Trade-off]** `dotnetWrapper` writes the install wrapper into the workspace (`.ci/`, per the reference pattern), lightly polluting the workspace. → Acceptable and consistent with the reference PR; the file is small and regenerated each run.
+- **[Risk]** Both steps now hard-depend on the `artifactory_read` Jenkins credential resolving in the calling context (Decision 10) — a pipeline without access to it fails on every `withDotnet`/`dotnetWrapper` call, even ones that don't need the private NuGet feed. → **Mitigation**: `artifactory_read` is already a hardcoded, widely-used credential ID elsewhere in this exact library, so this isn't a new assumption for consumers of this repo.
 
 ## Migration Plan
 
