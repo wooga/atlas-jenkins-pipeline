@@ -279,9 +279,16 @@ class Dotnet {
      * shebang, umask, or `set -x` equivalent) and are ignored on Windows:
      * - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
      *   default `sh -xe`, so the tool sees the same environment a login shell
-     *   would set up (e.g. profile-sourced PATH entries). Note this replaces
-     *   Jenkins' default invocation entirely, including its default `-x`
-     *   tracing - use logCommandToStdErr to opt back into that explicitly.
+     *   would set up (e.g. profile-sourced PATH entries). A login shell
+     *   re-sources /etc/profile and ~/.bash_profile, which on some agents
+     *   unconditionally overwrites PATH, discarding the cache dir
+     *   withInstalledDotnet put on it - DOTNET_ROOT survives this (it's a
+     *   plain Jenkins-set env var, not something profile scripts touch), so
+     *   an `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right
+     *   after the shebang to defend against that (same fix documented as a
+     *   manual caveat for withDotnet). This also replaces Jenkins' default
+     *   invocation entirely, including its default `-x` tracing - use
+     *   logCommandToStdErr to opt back into that explicitly.
      * - umask: prepended as `umask <value>` before the command, matching the
      *   umask convention used elsewhere in this library for shared-cache-safe
      *   file permissions.
@@ -306,11 +313,15 @@ class Dotnet {
     }
 
     // A custom shebang must be the very first line of the script for Jenkins'
-    // sh step to honour it, so loginShell is prepended ahead of
-    // logCommandToStdErr/umask.
+    // sh step to honour it. The PATH re-export comes right after it, before
+    // logCommandToStdErr/umask, since a login shell's profile-sourcing may
+    // have already clobbered PATH by the time the script body starts running.
     private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         List<String> lines = []
-        if (loginShell) { lines << "#!/bin/bash -l" }
+        if (loginShell) {
+            lines << "#!/bin/bash -l"
+            lines << 'export PATH="$DOTNET_ROOT:$PATH"'
+        }
         if (logCommandToStdErr) { lines << "set -x" }
         if (umask) { lines << "umask ${umask}" }
         lines << command

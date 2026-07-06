@@ -34,8 +34,13 @@ The system SHALL provide a `runDotnetTool` shared step that provisions the .NET 
 #### Scenario: loginShell, umask, and logCommandToStdErr customize the unix invocation
 
 - **WHEN** a pipeline calls `runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["arg"], loginShell: true, umask: "002", logCommandToStdErr: true)` on a unix agent
-- **THEN** the tool is run via a script beginning with a `#!/bin/bash -l` shebang, followed by `set -x`, followed by `umask 002`, followed by the `dotnet tool run` command
+- **THEN** the tool is run via a script beginning with a `#!/bin/bash -l` shebang, followed by `export PATH="$DOTNET_ROOT:$PATH"`, followed by `set -x`, followed by `umask 002`, followed by the `dotnet tool run` command
 - **AND** on a Windows agent, these three options have no effect on the generated `bat` script
+
+#### Scenario: loginShell defends against a login shell overwriting PATH
+
+- **WHEN** a pipeline calls `runDotnetTool(..., loginShell: true)` on an agent whose `/etc/profile`/`~/.bash_profile` unconditionally overwrites `PATH`
+- **THEN** the tool script still resolves `dotnet` correctly, because `export PATH="$DOTNET_ROOT:$PATH"` is re-added immediately after the shebang, restoring the cache dir on `PATH` before the `dotnet tool run` command executes
 
 ### Requirement: Tool package cache is redirected under the shared cache tree
 

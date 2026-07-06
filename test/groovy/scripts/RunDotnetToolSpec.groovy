@@ -97,7 +97,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any {
-            it instanceof Map && it.script == "#!/bin/bash -l\nset -x\numask 002\ndotnet tool run mytool -- arg"
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\ndotnet tool run mytool -- arg"
         }
     }
 }

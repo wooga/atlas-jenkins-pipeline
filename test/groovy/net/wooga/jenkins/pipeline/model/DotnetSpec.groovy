@@ -413,7 +413,7 @@ class DotnetSpec extends Specification {
         jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
     }
 
-    def "runTool with loginShell prepends a #!/bin/bash -l shebang"() {
+    def "runTool with loginShell prepends a #!/bin/bash -l shebang and re-exports PATH"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins)
@@ -422,8 +422,13 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, null, false)
 
         then:
-        // the shebang must be the very first line for Jenkins' sh step to honour it
-        jenkins.calls.sh.find { it instanceof Map && it.script == "#!/bin/bash -l\ndotnet tool run mytool -- arg" } != null
+        // the shebang must be the very first line for Jenkins' sh step to honour it;
+        // the PATH re-export defends against a login shell's profile-sourcing
+        // clobbering PATH before the tool command runs (confirmed by real execution:
+        // without it, a profile resetting PATH makes `dotnet` unresolvable).
+        jenkins.calls.sh.find {
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\ndotnet tool run mytool -- arg"
+        } != null
     }
 
     def "runTool with logCommandToStdErr prepends set -x"() {
@@ -459,9 +464,9 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
 
         then:
-        // shebang must lead; logCommandToStdErr before umask so the umask command itself is traced too
+        // shebang + PATH re-export must lead; logCommandToStdErr before umask so the umask command itself is traced too
         jenkins.calls.sh.find {
-            it instanceof Map && it.script == "#!/bin/bash -l\nset -x\numask 002\ndotnet tool run mytool -- arg"
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\ndotnet tool run mytool -- arg"
         } != null
     }
 
