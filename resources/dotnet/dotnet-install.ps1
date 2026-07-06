@@ -4,21 +4,21 @@
 
 .DESCRIPTION
   - Downloads the official install script at runtime (no vendored copy).
-  - Resolves the SDK to install from, in precedence order: $env:DOTNET_VERSION
-    (exact), $env:DOTNET_CHANNEL (floating - only used when a caller explicitly
-    asks for it), $env:GLOBAL_JSON / a global.json found in the working
-    directory (its sdk.version's major.minor is installed as a floating
-    channel, tracking the latest patch - matching how GitHub Actions'
-    setup-dotnet resolves a global.json), or $env:DOTNET_DEFAULT_VERSION (the
-    org-wide default, exact). The Dotnet.groovy model class is the single
-    source of truth for selector resolution and always sets one of these
-    before invoking this script; it is an error for none of them to be set.
-  - Installs into a custom shared cache directory ($env:DOTNET_INSTALL_DIR),
+  - Resolves the SDK to install from, in precedence order: -Version (exact),
+    -Channel (floating - only used when a caller explicitly asks for it),
+    -GlobalJson / a global.json found in the working directory (its
+    sdk.version's major.minor is installed as a floating channel, tracking
+    the latest patch - matching how GitHub Actions' setup-dotnet resolves a
+    global.json), or -DefaultVersion (the org-wide default, exact). The
+    Dotnet.groovy model class is the single source of truth for selector
+    resolution and always passes one of these parameters before invoking
+    this script; it is an error for none of them to be given.
+  - -InstallDir is required: installs into a custom shared cache directory,
     NOT the tool's own default per-user directory, so it stays a predictable,
     org-standard location independent of dotnet's own conventions.
-  - For an exact selector (version or the org-wide default), the cache is
-    checked directly by directory presence - no network call at all on a hit.
-    A floating channel selector (explicit, or derived from global.json) needs
+  - For an exact selector (-Version or -DefaultVersion), the cache is checked
+    directly by directory presence - no network call at all on a hit. A
+    floating channel selector (-Channel, or derived from global.json) needs
     a -DryRun round trip to resolve the concrete version before it can check
     the cache.
   - Always logs the resolved version, the selector that produced it, the
@@ -27,55 +27,62 @@
     that self-heals after a timeout (a stale lock is broken with a warning).
 #>
 [CmdletBinding()]
-param()
+param(
+  [string]$InstallDir,
+  [string]$Version,
+  [string]$Channel,
+  [string]$GlobalJson,
+  [string]$DefaultVersion
+)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-if (-not $env:DOTNET_INSTALL_DIR) { throw "DOTNET_INSTALL_DIR must be set" }
-$InstallDir         = $env:DOTNET_INSTALL_DIR
+if (-not $InstallDir) { throw "-InstallDir is required" }
 $LockDir            = "$InstallDir.install.lock"
+# Internal-only tuning knob, not part of the caller-facing selector - stays an
+# env var since there's no visibility need for it on the Jenkins console log.
 $LockTimeoutSeconds = if ($env:DOTNET_INSTALL_LOCK_TIMEOUT) { [int]$env:DOTNET_INSTALL_LOCK_TIMEOUT } else { 300 }
 $InstallScriptUrl   = 'https://dot.net/v1/dotnet-install.ps1'
 
 function Write-Log  { param([string] $Message) Write-Host ("{0} [dotnet-install] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message) }
 function Write-Warn { param([string] $Message) Write-Warning ("[dotnet-install] {0}" -f $Message) }
 
-# Resolve the selector to install, in precedence order: explicit version
-# argument, explicit channel argument, explicit/auto-detected global.json (its
-# sdk.version's major.minor installed as a floating channel), org-wide default
-# version. Each source gets a distinct, clearly-worded description so the
-# resulting log line always says *why* this version was chosen. Throws if none
-# is set - the caller (Dotnet.groovy) is expected to always provide one.
+# Resolve the selector to install, in precedence order: -Version, -Channel,
+# -GlobalJson / auto-detected global.json (its sdk.version's major.minor
+# installed as a floating channel), -DefaultVersion. Each source gets a
+# distinct, clearly-worded description so the resulting log line always says
+# *why* this version was chosen. Throws if none is set - the caller
+# (Dotnet.groovy) is expected to always provide one.
 function Resolve-Selector {
-  if ($env:DOTNET_VERSION) {
-    return [pscustomobject]@{ Kind = 'version'; Value = $env:DOTNET_VERSION; Description = "explicit version argument ($($env:DOTNET_VERSION))" }
+  if ($Version) {
+    return [pscustomobject]@{ Kind = 'version'; Value = $Version; Description = "explicit version argument ($Version)" }
   }
-  if ($env:DOTNET_CHANNEL) {
-    return [pscustomobject]@{ Kind = 'channel'; Value = $env:DOTNET_CHANNEL; Description = "explicit channel argument ($($env:DOTNET_CHANNEL))" }
+  if ($Channel) {
+    return [pscustomobject]@{ Kind = 'channel'; Value = $Channel; Description = "explicit channel argument ($Channel)" }
   }
 
-  $globalJson = $env:GLOBAL_JSON
-  if (-not $globalJson) {
+  $resolvedGlobalJson = $GlobalJson
+  if (-not $resolvedGlobalJson) {
     $candidate = Join-Path (Get-Location).Path 'global.json'
-    if (Test-Path -LiteralPath $candidate) { $globalJson = $candidate }
+    if (Test-Path -LiteralPath $candidate) { $resolvedGlobalJson = $candidate }
   }
-  if ($globalJson) {
-    if (-not (Test-Path -LiteralPath $globalJson)) { throw "global.json not found at '$globalJson'" }
-    $json = Get-Content -Raw -LiteralPath $globalJson | ConvertFrom-Json
-    $version = $json.sdk.version
-    if ([string]::IsNullOrWhiteSpace($version)) { throw "Unable to read sdk.version from $globalJson" }
-    $parts = $version.Split('.')
-    if ($parts.Length -lt 2) { throw "sdk.version '$version' is not in expected major.minor.patch form" }
-    $channel = '{0}.{1}' -f $parts[0], $parts[1]
-    return [pscustomobject]@{ Kind = 'channel'; Value = $channel; Description = "channel $channel from global.json at $globalJson (sdk.version $version)" }
-  }
-
-  if ($env:DOTNET_DEFAULT_VERSION) {
-    return [pscustomobject]@{ Kind = 'version'; Value = $env:DOTNET_DEFAULT_VERSION; Description = 'org-wide default version (no global.json found)' }
+  if ($resolvedGlobalJson) {
+    if (-not (Test-Path -LiteralPath $resolvedGlobalJson)) { throw "global.json not found at '$resolvedGlobalJson'" }
+    $json = Get-Content -Raw -LiteralPath $resolvedGlobalJson | ConvertFrom-Json
+    $sdkVersion = $json.sdk.version
+    if ([string]::IsNullOrWhiteSpace($sdkVersion)) { throw "Unable to read sdk.version from $resolvedGlobalJson" }
+    $parts = $sdkVersion.Split('.')
+    if ($parts.Length -lt 2) { throw "sdk.version '$sdkVersion' is not in expected major.minor.patch form" }
+    $derivedChannel = '{0}.{1}' -f $parts[0], $parts[1]
+    return [pscustomobject]@{ Kind = 'channel'; Value = $derivedChannel; Description = "channel $derivedChannel from global.json at $resolvedGlobalJson (sdk.version $sdkVersion)" }
   }
 
-  throw "No selector given: expected one of `$env:DOTNET_VERSION, `$env:DOTNET_CHANNEL, `$env:GLOBAL_JSON, `$env:DOTNET_DEFAULT_VERSION, or a global.json in $((Get-Location).Path)"
+  if ($DefaultVersion) {
+    return [pscustomobject]@{ Kind = 'version'; Value = $DefaultVersion; Description = 'org-wide default version (no global.json found)' }
+  }
+
+  throw "No selector given: expected one of -Version, -Channel, -GlobalJson, -DefaultVersion, or a global.json in $((Get-Location).Path)"
 }
 
 function Enter-InstallLock {

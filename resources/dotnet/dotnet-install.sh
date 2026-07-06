@@ -2,21 +2,21 @@
 # Provision the .NET SDK for CI by wrapping Microsoft's official dotnet-install.sh.
 #
 # - Downloads the official install script at runtime (no vendored copy).
-# - Resolves the SDK to install from, in precedence order: $DOTNET_VERSION
-#   (exact), $DOTNET_CHANNEL (floating - only used when a caller explicitly
-#   asks for it), $GLOBAL_JSON / a global.json found in the working directory
-#   (its sdk.version's major.minor is installed as a floating channel, tracking
+# - Resolves the SDK to install from, in precedence order: --version (exact),
+#   --channel (floating - only used when a caller explicitly asks for it),
+#   --global-json / a global.json found in the working directory (its
+#   sdk.version's major.minor is installed as a floating channel, tracking
 #   the latest patch - matching how GitHub Actions' setup-dotnet resolves a
-#   global.json), or $DOTNET_DEFAULT_VERSION (the org-wide default, exact).
+#   global.json), or --default-version (the org-wide default, exact).
 #   The Dotnet.groovy model class is the single source of truth for selector
-#   resolution and always sets one of these before invoking this script; it is
-#   an error for none of them to be set.
-# - Installs into a custom shared cache directory ($DOTNET_INSTALL_DIR), NOT
-#   the tool's own default per-user directory, so it stays a predictable,
+#   resolution and always passes one of these flags before invoking this
+#   script; it is an error for none of them to be given.
+# - --install-dir is required: installs into a custom shared cache directory,
+#   NOT the tool's own default per-user directory, so it stays a predictable,
 #   org-standard location independent of dotnet's own conventions.
-# - For an exact selector (version or the org-wide default), the cache is
+# - For an exact selector (--version or --default-version), the cache is
 #   checked directly by directory presence - no network call at all on a hit.
-#   A floating channel selector (explicit, or derived from global.json) needs
+#   A floating channel selector (--channel, or derived from global.json) needs
 #   a --dry-run round trip to resolve the concrete version before it can check
 #   the cache.
 # - Always logs the resolved version, the selector that produced it, the
@@ -25,8 +25,8 @@
 #   that self-heals after a timeout (a stale lock is broken with a warning).
 set -euo pipefail
 
-INSTALL_DIR="${DOTNET_INSTALL_DIR:?DOTNET_INSTALL_DIR must be set}"
-LOCK_DIR="${INSTALL_DIR}.install.lock"
+# Internal-only tuning knob, not part of the caller-facing selector - stays an
+# env var since there's no visibility need for it on the Jenkins console log.
 LOCK_TIMEOUT_SECONDS="${DOTNET_INSTALL_LOCK_TIMEOUT:-300}"
 INSTALL_SCRIPT_URL="https://dot.net/v1/dotnet-install.sh"
 
@@ -37,24 +37,54 @@ die()  { printf '%s [dotnet-install] ERROR: %s\n' "$(date -u +%H:%M:%S)" "$*" >&
 # Epoch seconds of a path's last modification (GNU stat, then BSD/macOS stat).
 get_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
 
-# Resolve the selector to install, in precedence order: explicit version
-# argument, explicit channel argument, explicit/auto-detected global.json
-# (its sdk.version's major.minor installed as a floating channel), org-wide
-# default version. Each source gets a distinct, clearly-worded description so
-# the resulting log line always says *why* this version was chosen. Prints
-# "<kind>|<value>|<description>". Errors if none is set - the caller
-# (Dotnet.groovy) is expected to always provide one.
+INSTALL_DIR=""
+CLI_VERSION=""
+CLI_CHANNEL=""
+CLI_GLOBAL_JSON=""
+CLI_DEFAULT_VERSION=""
+
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --install-dir)
+        [ $# -ge 2 ] || die "--install-dir requires a value"
+        INSTALL_DIR="$2"; shift 2 ;;
+      --version)
+        [ $# -ge 2 ] || die "--version requires a value"
+        CLI_VERSION="$2"; shift 2 ;;
+      --channel)
+        [ $# -ge 2 ] || die "--channel requires a value"
+        CLI_CHANNEL="$2"; shift 2 ;;
+      --global-json)
+        [ $# -ge 2 ] || die "--global-json requires a value"
+        CLI_GLOBAL_JSON="$2"; shift 2 ;;
+      --default-version)
+        [ $# -ge 2 ] || die "--default-version requires a value"
+        CLI_DEFAULT_VERSION="$2"; shift 2 ;;
+      *)
+        die "Unknown argument: $1" ;;
+    esac
+  done
+  [ -n "$INSTALL_DIR" ] || die "--install-dir is required"
+}
+
+# Resolve the selector to install, in precedence order: --version, --channel,
+# --global-json / auto-detected global.json (its sdk.version's major.minor
+# installed as a floating channel), --default-version. Each source gets a
+# distinct, clearly-worded description so the resulting log line always says
+# *why* this version was chosen. Prints "<kind>|<value>|<description>". Errors
+# if none is set - the caller (Dotnet.groovy) is expected to always pass one.
 resolve_selector() {
-  if [ -n "${DOTNET_VERSION:-}" ]; then
-    printf 'version|%s|explicit version argument (%s)\n' "$DOTNET_VERSION" "$DOTNET_VERSION"
+  if [ -n "$CLI_VERSION" ]; then
+    printf 'version|%s|explicit version argument (%s)\n' "$CLI_VERSION" "$CLI_VERSION"
     return
   fi
-  if [ -n "${DOTNET_CHANNEL:-}" ]; then
-    printf 'channel|%s|explicit channel argument (%s)\n' "$DOTNET_CHANNEL" "$DOTNET_CHANNEL"
+  if [ -n "$CLI_CHANNEL" ]; then
+    printf 'channel|%s|explicit channel argument (%s)\n' "$CLI_CHANNEL" "$CLI_CHANNEL"
     return
   fi
 
-  local global_json="${GLOBAL_JSON:-}"
+  local global_json="$CLI_GLOBAL_JSON"
   if [ -z "$global_json" ] && [ -f "$PWD/global.json" ]; then
     global_json="$PWD/global.json"
   fi
@@ -73,16 +103,17 @@ resolve_selector() {
     return
   fi
 
-  if [ -n "${DOTNET_DEFAULT_VERSION:-}" ]; then
-    printf 'version|%s|org-wide default version (no global.json found)\n' "$DOTNET_DEFAULT_VERSION"
+  if [ -n "$CLI_DEFAULT_VERSION" ]; then
+    printf 'version|%s|org-wide default version (no global.json found)\n' "$CLI_DEFAULT_VERSION"
     return
   fi
 
-  die "No selector given: expected one of \$DOTNET_VERSION, \$DOTNET_CHANNEL, \$GLOBAL_JSON, \$DOTNET_DEFAULT_VERSION, or a global.json in $PWD"
+  die "No selector given: expected one of --version, --channel, --global-json, --default-version, or a global.json in $PWD"
 }
 
 OWNS_LOCK=0
 SCRIPT_TMP_DIR=""
+LOCK_DIR=""
 cleanup() {
   if [ "$OWNS_LOCK" = "1" ]; then rm -rf "$LOCK_DIR" 2>/dev/null || true; fi
   if [ -n "$SCRIPT_TMP_DIR" ]; then rm -rf "$SCRIPT_TMP_DIR" 2>/dev/null || true; fi
@@ -122,6 +153,9 @@ download_install_script() {
 }
 
 main() {
+  parse_args "$@"
+  LOCK_DIR="${INSTALL_DIR}.install.lock"
+
   local selector kind value description resolved_version script
   local -a selector_args
 

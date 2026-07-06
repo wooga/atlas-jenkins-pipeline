@@ -58,8 +58,8 @@ class WithDotnetToolSpec extends DeclarativeJenkinsSpec {
         }
 
         then:
-        usedEnvironments.find { it["NUGET_PACKAGES"] == "/home/tester/.cache/dotnet/tools/packages" } != null
-        usedEnvironments.find { it["DOTNET_CLI_HOME"] == "/home/tester/.cache/dotnet/tools" } != null
+        usedEnvironments.find { it["NUGET_PACKAGES"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages" } != null
+        usedEnvironments.find { it["DOTNET_CLI_HOME"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools" } != null
     }
 
     def "installs via bat on Windows"() {

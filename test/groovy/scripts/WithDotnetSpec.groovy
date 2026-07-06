@@ -14,6 +14,10 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         credentials.addUsernamePassword("artifactory_read", "fake-jfrog-user", "fake-jfrog-pass")
     }
 
+    private List<Object> shArgs() {
+        return calls["sh"].collect { it.args[0] }
+    }
+
     def "runs the block with the cache dir on PATH and DOTNET_ROOT set"() {
         given:
         def withDotnet = loadSandboxedScript(SCRIPT_PATH)
@@ -30,12 +34,12 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         ran
         def blockEnv = usedEnvironments.find { it.containsKey("DOTNET_ROOT") }
         blockEnv != null
-        blockEnv["DOTNET_ROOT"] == "/home/tester/.cache/dotnet"
-        blockEnv["PATH"].startsWith("/home/tester/.cache/dotnet")
+        blockEnv["DOTNET_ROOT"] == "/home/tester/.cache/jenkins-pipeline/dotnet"
+        blockEnv["PATH"].startsWith("/home/tester/.cache/jenkins-pipeline/dotnet")
         blockEnv["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass"
     }
 
-    def "provisions with an explicit selector before running the block"() {
+    def "installs with an explicit selector before running the block"() {
         given:
         def withDotnet = loadSandboxedScript(SCRIPT_PATH)
         def ran = false
@@ -49,7 +53,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
 
         then:
         ran
-        usedEnvironments.find { it["DOTNET_VERSION"] == "8.0.401" } != null
+        shArgs().find { it instanceof String && it.contains("dotnet-install.sh") }.contains("--version '8.0.401'")
     }
 
     def "conflicting selectors fail fast"() {
@@ -67,7 +71,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         thrown(Exception)
     }
 
-    def "provisions via powershell on Windows"() {
+    def "installs via powershell on Windows"() {
         given:
         helper.registerAllowedMethod("isUnix", []) { false }
         def withDotnet = loadSandboxedScript(SCRIPT_PATH)
@@ -87,6 +91,45 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         calls["sh"].size() == 0
         def blockEnv = usedEnvironments.find { it.containsKey("DOTNET_ROOT") }
         blockEnv != null
-        blockEnv["DOTNET_ROOT"] == "C:\\Users\\tester\\AppData\\Local\\cache\\dotnet"
+        blockEnv["DOTNET_ROOT"] == "C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet"
+    }
+
+    def "NuGet source and credentials can be overridden"() {
+        given:
+        credentials.addUsernamePassword("custom_creds", "custom-user", "custom-pass")
+        def withDotnet = loadSandboxedScript(SCRIPT_PATH)
+        def ran = false
+
+        when:
+        inSandbox {
+            withDotnet(nugetSourceName: "custom_source", nugetSourceUrl: "https://example.com/index.json", nugetCredentialsId: "custom_creds") {
+                ran = true
+            }
+        }
+
+        then:
+        ran
+        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains("custom_source")
+        usedEnvironments.find { it["NuGetPackageSourceCredentials_custom_source"] == "Username=custom-user;Password=custom-pass" } != null
+    }
+
+    def "nuget: false fully opts out of NuGet setup"() {
+        given:
+        def withDotnet = loadSandboxedScript(SCRIPT_PATH)
+        def ran = false
+
+        when:
+        inSandbox {
+            withDotnet(nuget: false) {
+                ran = true
+            }
+        }
+
+        then:
+        ran
+        shArgs().every { !(it instanceof String && it.contains("nuget add source")) }
+        calls["withCredentials"].size() == 0
     }
 }

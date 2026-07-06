@@ -95,6 +95,8 @@ Both steps set `DOTNET_ROOT` (= cache dir) and prepend the cache dir to `PATH` f
 
 *Alternative considered*: keep the tool's own default per-user directory (reference PR behavior). Rejected per explicit requirement.
 
+> **Post-implementation revision** (code review): the cache root moved one level deeper to `~/.cache/jenkins-pipeline/dotnet` / `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet`, to be collision-safe with other tools/libraries that might otherwise also claim a bare `~/.cache/dotnet`. This silently orphans any `~/.cache/dotnet` populated by testing an earlier version of this branch — no migration code was added (cache GC is a Non-Goal), so that stale directory is simply abandoned; an agent operator can delete it manually if reclaiming the space matters.
+
 ### 5. Groovy ↔ wrapper-script contract (environment variables)
 
 `Dotnet.groovy` communicates the selector and target to the vendored scripts purely through environment variables (set via `withEnv` before invoking the script), keeping the scripts free of positional-argument parsing:
@@ -108,6 +110,8 @@ Both steps set `DOTNET_ROOT` (= cache dir) and prepend the cache dir to `PATH` f
 | `DOTNET_DEFAULT_VERSION` | Exact org-wide default SDK version | none of the above apply (see Decision 9) |
 
 The wrapper scripts apply the same precedence as Decision 3 over whichever of these are set, and error out if *none* of them is set — `Dotnet.groovy` is the single source of truth for selector resolution and always sets exactly one before invoking the script (the scripts are not meant to be run standalone). Note `DOTNET_DEFAULT_VERSION` is intentionally a distinct variable from `DOTNET_VERSION` rather than reusing it: this lets the install log say *why* a version was chosen — an explicit caller argument vs. the org-wide fallback — instead of the two being indistinguishable in the output. The lock timeout keeps its internal default (300s) and is not surfaced as an env var in the public API.
+
+> **Superseded** (code review, see Decision 12): this env-var contract was replaced by CLI arguments (`--install-dir`/`--version`/`--channel`/`--global-json`/`--default-version`, and their `-InstallDir`/`-Version`/`-Channel`/`-GlobalJson`/`-DefaultVersion` PowerShell equivalents) so the selector actually being installed is visible directly in the Jenkins console log line that invokes the wrapper script, rather than only inside the script's own log output. The table above documents the original, no-longer-current contract for historical context. `DOTNET_INSTALL_LOCK_TIMEOUT` is the one exception — it stayed an internal env var, since it has no console-visibility need.
 
 ### 6. Cache-hit detection and version/source logging
 
@@ -156,6 +160,8 @@ Requested after a real consumer hit exactly the boilerplate this whole feature i
 
 *Risk accepted*: every `withDotnet`/`dotnetWrapper` call now hard-depends on the `artifactory_read` credential resolving in whatever Jenkins context it runs. If a pipeline uses these steps in a context where that credential isn't visible (e.g. a sandbox/personal Jenkins instance without the org's global credential store), the call fails even for builds that don't need the private feed at all. Accepted because the credential is already a load-bearing, widely-hardcoded assumption elsewhere in this exact library.
 
+> **Post-implementation revision** (code review, see Decision 12): `wooga_nuget`/`artifactory_read` are no longer hardcoded on `Dotnet.groovy` itself. The model class is now fully generic with respect to NuGet (source/credentials are plain optional constructor parameters, defaulting to "do nothing"); the wooga-specific defaults moved to a new `DotnetNugetConfig` class, applied only by the `vars/*.groovy` step scripts. Behavior for existing callers is unchanged — `withDotnet`/`dotnetWrapper`/`withDotnetTool`/`runDotnetTool` all still apply these defaults automatically — but `withDotnet`/`dotnetWrapper` callers can now override the source/credentials or opt out entirely (`nuget: false`), which the original hardcoded-constant design had no way to express.
+
 ## Risks / Trade-offs
 
 - **[Risk]** Runtime download of Microsoft's install script (no vendored/pinned copy) means a `dot.net` outage or breaking change hits all consumers at once. → **Mitigation**: same trade-off the reference PR accepted; Microsoft keeps this script strongly backwards-compatible, and vendoring adds ongoing maintenance.
@@ -186,6 +192,19 @@ keeping tool state fully self-contained under the same managed cache tree as the
 `--create-manifest-if-needed` is passed on every install so the steps work turnkey on a repo with no pre-existing tool manifest (confirmed via real execution on a fresh workspace: it auto-creates the manifest and the tool runs immediately after).
 
 *Alternative considered*: use `--tool-path <cache-dir>/tools/bin` + add that dir to `PATH`, letting `withDotnetTool`'s block invoke the tool as a bare command (matching the original example syntax). Rejected per stakeholder direction — `dotnet tool run` (explicitly requested for `runDotnetTool`) cannot resolve a `--tool-path`-only install, so unifying on one mechanism was necessary, and local/manifest was the chosen one.
+
+### 12. Code-review refactor: CLI-argument contract, generic NuGet config, method renames (post-implementation revision)
+
+PR review (`@Joaquimmnetto`) on the initial implementation requested several extensibility/clarity changes, addressed together as one refactor:
+
+1. **CLI-argument contract for the wrapper scripts** (supersedes Decision 5): `Dotnet.groovy` now passes the install directory and selector to `dotnet-install.sh`/`.ps1` as CLI flags (`--install-dir`/`--version`/`--channel`/`--global-json`/`--default-version`, `-InstallDir`/`-Version`/`-Channel`/`-GlobalJson`/`-DefaultVersion`) rather than environment variables, so the exact invocation is visible directly in the Jenkins console log line, not just inside the script's own log output. `install()` no longer wraps the invocation in `withEnv` at all — it builds one shell/PowerShell command string and runs it directly. New `@NonCPS` `shQuote`/`psQuote` helpers quote each value for safe interpolation (single-quote wrap; `'` escaped as `'"'"'` in bash, doubled as `''` in PowerShell) — needed since a `globalJson` path may contain spaces and is now interpolated into a command string instead of passed through an env var. Real-execution verified (both a closed-loop `shQuote`/`eval` round trip in bash and a `psQuote` round trip through real `pwsh` parsing) that a space- and quote-containing value survives correctly.
+2. **Generic `Dotnet` w.r.t. NuGet** (extends Decision 10, see the revision note there): `nugetSourceName`/`nugetSourceUrl`/`nugetCredentialsId` became plain optional constructor parameters (all `null` by default — NuGet is fully skipped when none are given), validated at construction (`nugetSourceName`/`nugetSourceUrl` must be given together; `nugetCredentialsId` requires a source). The wooga-specific defaults moved to `src/net/wooga/jenkins/pipeline/config/DotnetNugetConfig.groovy`.
+3. **Method renames** for clarity: `provision()` → `install()`; `withProvisionedEnv()` → `withInstalledDotnet()`; the private selector-formatting method became `installArgs()` (now returns a semantic `Map`, not `"KEY=VALUE"` strings).
+4. **`dotnetWrapper` map-form parameter parity**: once (2) landed, `dotnetWrapper`'s map form gained the same `nugetSourceName`/`nugetSourceUrl`/`nugetCredentialsId`/`nuget: false` override/opt-out as `withDotnet` (the string form still always applies the wooga defaults — it has no place for these keys).
+
+**Further revision** (extraction into a shared conventions class): `withDotnet.groovy` and `dotnetWrapper.groovy` initially each carried a private `withNugetDefaults`/`nugetDefaults` method duplicating the override/opt-out merge logic. Following this repo's existing `fromConfigMap`/`mergeWithConfigMap` convention (see `WDKConfig.fromConfigMap`, `PipelineConventions.mergeWithConfigMap`), `DotnetNugetConfig` became an instance-based config object: a `static final standard` singleton holding the wooga defaults, a `mergeWithConfigMap(Map)` instance method encapsulating the override/opt-out logic (returns a new, all-`null` config when `configMap.nuget == false`), and a `toDotnetArgs()` helper shaping the result into the `Map` keys `Dotnet.fromJenkins()` expects. Both `vars/*.groovy` step scripts now call `DotnetNugetConfig.standard.mergeWithConfigMap(config).toDotnetArgs()` instead of duplicating the merge logic; `withDotnetTool`/`runDotnetTool` (no override, per the minimal-scope decision below) call `DotnetNugetConfig.standard.toDotnetArgs()` directly.
+
+`withDotnetTool`/`runDotnetTool` deliberately stayed **out of scope** for the override/opt-out API — confirmed with the stakeholder that these two keep silently applying the wooga defaults with no new caller-facing parameters, since the reviewer's comments were scoped to `Dotnet.groovy`/`dotnetWrapper.groovy` only and there was no expressed need to extend it further.
 
 ## Migration Plan
 

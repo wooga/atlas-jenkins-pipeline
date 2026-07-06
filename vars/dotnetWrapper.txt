@@ -1,6 +1,6 @@
 Provisions the requested .NET SDK into the shared per-agent cache directory
-(~/.cache/dotnet on unix, %LOCALAPPDATA%\cache\dotnet on Windows) and runs
-`dotnet &lt;command&gt;` against it.
+(~/.cache/jenkins-pipeline/dotnet on unix, %LOCALAPPDATA%\cache\jenkins-pipeline\dotnet
+on Windows) and runs `dotnet &lt;command&gt;` against it.
 
 Selector resolution when no version/channel/globalJson argument is given:
 a global.json in the workspace root is used if present (its sdk.version's
@@ -12,7 +12,9 @@ Also idempotently registers the shared "wooga_nuget" NuGet feed (once per
 agent) and binds the 'artifactory_read' Jenkins credential for the duration
 of the command, exporting NuGetPackageSourceCredentials_wooga_nuget so
 `dotnet restore`/`dotnet test` etc. can authenticate against it with no
-extra setup.
+extra setup. Override with nugetSourceName/nugetSourceUrl/nugetCredentialsId,
+or opt out entirely with nuget: false (map form only - the string form always
+applies the defaults).
 
 usage: ```
 // string form - selector auto-detected (workspace global.json, else org-wide default)
@@ -25,4 +27,8 @@ dotnetWrapper(command: "test", globalJson: "${env.WORKSPACE}/global.json")
 
 // returnStatus / returnStdout, mirroring gradleWrapper (mutually exclusive, as with the `sh` step)
 dotnetWrapper(command: "test", returnStatus: true)
+
+// custom NuGet feed/credentials, or opt out entirely
+dotnetWrapper(command: "nuget push out/*.nupkg", nugetSourceName: "wooga_nuget", nugetSourceUrl: "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json", nugetCredentialsId: "artifactory_publish")
+dotnetWrapper(command: "build", nuget: false)
 ```

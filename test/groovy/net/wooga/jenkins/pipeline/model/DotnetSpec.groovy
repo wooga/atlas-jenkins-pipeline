@@ -64,12 +64,43 @@ class DotnetSpec extends Specification {
         null      | null    | "global.json"
     }
 
+    @Unroll
+    def "rejects invalid NuGet config (name=#nugetSourceName, url=#nugetSourceUrl, credentials=#nugetCredentialsId)"() {
+        when:
+        new Dotnet(fakeJenkins(true), null, null, null, nugetSourceName, nugetSourceUrl, nugetCredentialsId)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        nugetSourceName | nugetSourceUrl                    | nugetCredentialsId
+        "my_source"     | null                               | null
+        null            | "https://example.com/index.json"  | null
+        null            | null                               | "my_creds"
+        "my_source"     | null                               | "my_creds"
+    }
+
+    @Unroll
+    def "accepts valid NuGet config combinations (name=#nugetSourceName, url=#nugetSourceUrl, credentials=#nugetCredentialsId)"() {
+        when:
+        new Dotnet(fakeJenkins(true), null, null, null, nugetSourceName, nugetSourceUrl, nugetCredentialsId)
+
+        then:
+        noExceptionThrown()
+
+        where:
+        nugetSourceName | nugetSourceUrl                   | nugetCredentialsId
+        null            | null                              | null
+        "my_source"     | "https://example.com/index.json" | null
+        "my_source"     | "https://example.com/index.json" | "my_creds"
+    }
+
     def "resolves unix cache dir from HOME"() {
         given:
         def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester"]))
 
         expect:
-        dotnet.cacheDir() == "/home/tester/.cache/dotnet"
+        dotnet.cacheDir() == "/home/tester/.cache/jenkins-pipeline/dotnet"
     }
 
     def "resolves windows cache dir from LOCALAPPDATA"() {
@@ -77,46 +108,83 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local"]))
 
         expect:
-        dotnet.cacheDir() == "C:\\Users\\tester\\AppData\\Local\\cache\\dotnet"
+        dotnet.cacheDir() == "C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet"
     }
 
     @Unroll
-    def "provision() sets selector env DOTNET_INSTALL_DIR plus #expectedExtra"() {
+    def "install() passes the install dir and #description as CLI args, not env vars"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester"], hasGlobalJson)
         def dotnet = new Dotnet(jenkins, version, channel, globalJson)
 
         when:
-        dotnet.provision()
+        dotnet.install()
 
         then:
-        jenkins.calls.withEnv == [["DOTNET_INSTALL_DIR=/home/tester/.cache/dotnet"] + expectedExtra]
+        jenkins.calls.withEnv.isEmpty()
         jenkins.calls.libraryResource == ["dotnet/dotnet-install.sh"]
         jenkins.calls.writeFile[0].file == ".ci/dotnet-install.sh"
-        jenkins.calls.sh.size() == 1
+        jenkins.calls.sh == ["chmod +x .ci/dotnet-install.sh && .ci/dotnet-install.sh --install-dir '/home/tester/.cache/jenkins-pipeline/dotnet'${expectedSuffix}".toString()]
 
         where:
-        version   | channel | globalJson         | hasGlobalJson | expectedExtra
-        "8.0.401" | null    | null               | false         | ["DOTNET_VERSION=8.0.401"]
-        null      | "8.0"   | null               | false         | ["DOTNET_CHANNEL=8.0"]
-        null      | null    | "path/global.json" | false         | ["GLOBAL_JSON=path/global.json"]
-        null      | null    | null               | true          | [] // workspace global.json found: let the script auto-detect it
-        null      | null    | null               | false         | ["DOTNET_DEFAULT_VERSION=${Dotnet.DEFAULT_VERSION}"]
+        version   | channel | globalJson         | hasGlobalJson | description                               | expectedSuffix
+        "8.0.401" | null    | null               | false         | "an explicit version"                     | " --version '8.0.401'"
+        null      | "8.0"   | null               | false         | "an explicit channel"                     | " --channel '8.0'"
+        null      | null    | "path/global.json" | false         | "an explicit globalJson"                  | " --global-json 'path/global.json'"
+        null      | null    | null               | true          | "no extra flag (workspace global.json)"   | ""
+        null      | null    | null               | false         | "the org-wide default version"            | " --default-version '${Dotnet.DEFAULT_VERSION}'"
     }
 
-    def "provision() uses the powershell wrapper on Windows"() {
+    def "install() uses the powershell wrapper on Windows with PascalCase flags"() {
         given:
         def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local"])
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.provision()
+        dotnet.install()
 
         then:
+        jenkins.calls.withEnv.isEmpty()
         jenkins.calls.libraryResource == ["dotnet/dotnet-install.ps1"]
         jenkins.calls.writeFile[0].file == ".ci/dotnet-install.ps1"
-        jenkins.calls.powershell.size() == 1
+        jenkins.calls.powershell == [".ci\\dotnet-install.ps1 -InstallDir 'C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet' -DefaultVersion '${Dotnet.DEFAULT_VERSION}'".toString()]
         jenkins.calls.sh.isEmpty()
+    }
+
+    def "install() quotes a CLI arg value containing a space (unix)"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester"])
+        def dotnet = new Dotnet(jenkins, null, null, "/path with space/global.json")
+
+        when:
+        dotnet.install()
+
+        then:
+        jenkins.calls.sh[0].toString().contains("--global-json '/path with space/global.json'")
+    }
+
+    def "install() escapes an embedded single quote in a CLI arg value (unix)"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester"])
+        def dotnet = new Dotnet(jenkins, null, null, "/path/o'brien/global.json")
+
+        when:
+        dotnet.install()
+
+        then:
+        jenkins.calls.sh[0].toString().contains("--global-json '/path/o'\"'\"'brien/global.json'")
+    }
+
+    def "install() doubles an embedded single quote in a CLI arg value (windows)"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local"])
+        def dotnet = new Dotnet(jenkins, null, null, "C:\\path\\o'brien\\global.json")
+
+        when:
+        dotnet.install()
+
+        then:
+        jenkins.calls.powershell[0].toString().contains("-GlobalJson 'C:\\path\\o''brien\\global.json'")
     }
 
     def "withEnvList exposes the cache dir on PATH and as DOTNET_ROOT"() {
@@ -124,7 +192,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"]))
 
         expect:
-        dotnet.withEnvList() == ["DOTNET_ROOT=/home/tester/.cache/dotnet", "PATH=/home/tester/.cache/dotnet:/usr/bin"]
+        dotnet.withEnvList() == ["DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet", "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin"]
     }
 
     def "withEnvList uses a semicolon PATH separator on Windows"() {
@@ -132,74 +200,73 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"]))
 
         expect:
-        dotnet.withEnvList() == ["DOTNET_ROOT=C:\\Users\\tester\\AppData\\Local\\cache\\dotnet", "PATH=C:\\Users\\tester\\AppData\\Local\\cache\\dotnet;C:\\Windows"]
+        dotnet.withEnvList() == ["DOTNET_ROOT=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet", "PATH=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet;C:\\Windows"]
     }
 
-    def "withProvisionedEnv provisions the SDK then runs the block inside the provisioned env"() {
+    def "withInstalledDotnet installs the SDK then runs the block; no NuGet config means NuGet is never touched"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins)
         def ran = false
 
         when:
-        dotnet.withProvisionedEnv { ran = true }
+        dotnet.withInstalledDotnet { ran = true }
 
         then:
         ran
-        jenkins.calls.withEnv.size() == 2
-        jenkins.calls.withEnv[1] == [
-                "DOTNET_ROOT=/home/tester/.cache/dotnet",
-                "PATH=/home/tester/.cache/dotnet:/usr/bin",
-                "NuGetPackageSourceCredentials_wooga_nuget=Username=fake-jfrog-user;Password=fake-jfrog-pass"
-        ]
-        // one sh call for the install wrapper, one for the idempotent nuget source registration
-        jenkins.calls.sh.size() == 2
+        jenkins.calls.withCredentials.isEmpty()
+        jenkins.calls.sh.size() == 1 // just the install wrapper, no nuget source call
+        jenkins.calls.withEnv == [["DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet", "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin"]]
     }
 
-    def "withProvisionedEnv binds the shared artifactory_read credential"() {
+    def "withInstalledDotnet registers a NuGet source without binding credentials when only the source is given"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        def dotnet = new Dotnet(jenkins)
+        def dotnet = new Dotnet(jenkins, null, null, null, "my_source", "https://example.com/index.json", null)
 
         when:
-        dotnet.withProvisionedEnv { }
+        dotnet.withInstalledDotnet { }
 
         then:
-        jenkins.calls.withCredentials.size() == 1
-        jenkins.calls.withCredentials[0] == [[
-                credentialsId: Dotnet.NUGET_CREDENTIALS_ID, usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS'
-        ]]
-    }
-
-    def "withProvisionedEnv registers the shared wooga_nuget source idempotently"() {
-        given:
-        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        def dotnet = new Dotnet(jenkins)
-
-        when:
-        dotnet.withProvisionedEnv { }
-
-        then:
+        jenkins.calls.withCredentials.isEmpty()
         def nugetCall = jenkins.calls.sh.find { it.toString().contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains(Dotnet.NUGET_SOURCE_URL)
-        nugetCall.contains(Dotnet.NUGET_SOURCE_NAME)
+        nugetCall.contains("https://example.com/index.json")
+        nugetCall.contains("my_source")
         nugetCall.contains("dotnet nuget list source") // checks before adding, for idempotency
+        jenkins.calls.withEnv.find { it.any { e -> e.toString().startsWith("NuGetPackageSourceCredentials_") } } == null
     }
 
-    def "withProvisionedEnv registers the nuget source via powershell on Windows"() {
+    def "withInstalledDotnet registers the source and binds credentials when all three are given"() {
         given:
-        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
-        def dotnet = new Dotnet(jenkins)
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins, null, null, null, "my_source", "https://example.com/index.json", "my_creds")
 
         when:
-        dotnet.withProvisionedEnv { }
+        dotnet.withInstalledDotnet { }
+
+        then:
+        jenkins.calls.withCredentials == [[[credentialsId: "my_creds", usernameVariable: "JFROG_USER", passwordVariable: "JFROG_PASS"]]]
+        def nugetCall = jenkins.calls.sh.find { it.toString().contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains("https://example.com/index.json")
+        nugetCall.contains("my_source")
+        jenkins.calls.withEnv[0].any { it.toString() == "NuGetPackageSourceCredentials_my_source=Username=fake-jfrog-user;Password=fake-jfrog-pass" }
+    }
+
+    def "withInstalledDotnet registers the NuGet source via powershell on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins, null, null, null, "my_source", "https://example.com/index.json", "my_creds")
+
+        when:
+        dotnet.withInstalledDotnet { }
 
         then:
         def nugetCall = jenkins.calls.powershell.find { it.toString().contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains(Dotnet.NUGET_SOURCE_URL)
-        nugetCall.contains(Dotnet.NUGET_SOURCE_NAME)
+        nugetCall.contains("https://example.com/index.json")
+        nugetCall.contains("my_source")
     }
 
     def "toolCacheDir resolves under cacheDir on unix"() {
@@ -207,7 +274,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester"]))
 
         expect:
-        dotnet.toolCacheDir() == "/home/tester/.cache/dotnet/tools"
+        dotnet.toolCacheDir() == "/home/tester/.cache/jenkins-pipeline/dotnet/tools"
     }
 
     def "toolCacheDir resolves under cacheDir on Windows"() {
@@ -215,10 +282,10 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local"]))
 
         expect:
-        dotnet.toolCacheDir() == "C:\\Users\\tester\\AppData\\Local\\cache\\dotnet\\tools"
+        dotnet.toolCacheDir() == "C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\tools"
     }
 
-    def "withTool provisions, installs the tool, then runs the block"() {
+    def "withTool installs, installs the tool, then runs the block"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins)
@@ -261,8 +328,8 @@ class DotnetSpec extends Specification {
         then:
         def toolEnvCall = jenkins.calls.withEnv.find { it.any { e -> e.toString().startsWith("NUGET_PACKAGES=") } }
         toolEnvCall != null
-        toolEnvCall.any { it.toString() == "NUGET_PACKAGES=/home/tester/.cache/dotnet/tools/packages" }
-        toolEnvCall.any { it.toString() == "DOTNET_CLI_HOME=/home/tester/.cache/dotnet/tools" }
+        toolEnvCall.any { it.toString() == "NUGET_PACKAGES=/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages" }
+        toolEnvCall.any { it.toString() == "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools" }
     }
 
     def "withTool installs via bat on Windows"() {

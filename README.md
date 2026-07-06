@@ -44,7 +44,7 @@ gradleWrapper "testEditMode -P unity.testBuildTargets=android"
 
 ### dotnetWrapper
 
-Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/dotnet` on unix, `%LOCALAPPDATA%\cache\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the command, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
+Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/jenkins-pipeline/dotnet` on unix, `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the command, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
 
 #### Arguments:
 
@@ -54,8 +54,14 @@ Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.c
 * globalJson: `string` (optional, path to a `global.json` to read the version from)
 * returnStatus: `boolean` = *false*
 * returnStdout: `boolean` = *false*
+* nugetSourceName: `string` (optional, overrides the `wooga_nuget` default; map form only)
+* nugetSourceUrl: `string` (optional, overrides the `wooga_nuget` feed URL; must be given together with `nugetSourceName`; map form only)
+* nugetCredentialsId: `string` (optional, overrides the `artifactory_read` credential; map form only)
+* nuget: `boolean` = *true* (set to `false` to skip NuGet feed/credential setup entirely; map form only)
 
 At most one of `version` / `channel` / `globalJson` may be given. When none is given, a `global.json` in the workspace root is used if present (its `sdk.version`'s major.minor is tracked as a floating channel — same behavior as GitHub Actions' `setup-dotnet`; bump your `global.json` to move to a newer SDK), otherwise a pinned org-wide default version is installed.
+
+The string form (`dotnetWrapper "build"`) always applies the `wooga_nuget`/`artifactory_read` defaults; overriding or opting out requires the map form.
 
 #### Usage:
 
@@ -65,6 +71,12 @@ dotnetWrapper "build --configuration Release"
 
 // explicit selector
 dotnetWrapper(command: "test", channel: "8.0")
+
+// custom NuGet feed/credentials
+dotnetWrapper(command: "nuget push out/*.nupkg", nugetSourceName: "wooga_nuget", nugetSourceUrl: "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json", nugetCredentialsId: "artifactory_publish")
+
+// no NuGet feed at all
+dotnetWrapper(command: "build", nuget: false)
 ```
 
 ### withDotnet
@@ -76,6 +88,10 @@ Provisions the requested .NET SDK into the shared per-agent cache directory (sam
 * version: `string` (optional, exact SDK version)
 * channel: `string` (optional, e.g. `8.0`, `LTS`)
 * globalJson: `string` (optional, path to a `global.json` to read the version from)
+* nugetSourceName: `string` (optional, overrides the `wooga_nuget` default)
+* nugetSourceUrl: `string` (optional, overrides the `wooga_nuget` feed URL; must be given together with `nugetSourceName`)
+* nugetCredentialsId: `string` (optional, overrides the `artifactory_read` credential)
+* nuget: `boolean` = *true* (set to `false` to skip NuGet feed/credential setup entirely)
 
 At most one of `version` / `channel` / `globalJson` may be given. When none is given, a `global.json` in the workspace root is used if present (its `sdk.version`'s major.minor is tracked as a floating channel — same behavior as GitHub Actions' `setup-dotnet`; bump your `global.json` to move to a newer SDK), otherwise a pinned org-wide default version is installed.
 
@@ -89,13 +105,17 @@ withDotnet {
 withDotnet(version: "8.0.401") {
     sh "dotnet build"
 }
+
+withDotnet(nuget: false) {
+    sh "dotnet build --no-restore"
+}
 ```
 
 **Caveat**: a `sh` script with its own login-shell shebang (`#!/bin/bash -l`) re-sources `/etc/profile` and `~/.bash_profile`/`~/.profile` before running, which on some agents unconditionally overwrites `PATH` — discarding the `PATH` `withDotnet` set before your script's first line runs. `DOTNET_ROOT` survives this. If you need a login shell, re-add it defensively: `export PATH="$DOTNET_ROOT:$PATH"` as the first line of your script.
 
 ### withDotnetTool
 
-Provisions the requested .NET SDK (same as `withDotnet`) and installs the given NuGet package as a local (manifest-based) dotnet tool in the current workspace — creating a tool manifest (`dotnet tool install --create-manifest-if-needed`) if one doesn't already exist. The tool's package cache is redirected under the shared per-agent cache directory (`~/.cache/dotnet/tools` on unix, `%LOCALAPPDATA%\cache\dotnet\tools` on Windows) via `NUGET_PACKAGES`/`DOTNET_CLI_HOME`, instead of the default `~/.nuget/packages` / `~/.dotnet` locations.
+Provisions the requested .NET SDK (same as `withDotnet`, always applying the `wooga_nuget`/`artifactory_read` defaults with no override) and installs the given NuGet package as a local (manifest-based) dotnet tool in the current workspace — creating a tool manifest (`dotnet tool install --create-manifest-if-needed`) if one doesn't already exist. The tool's package cache is redirected under the shared per-agent cache directory (`~/.cache/jenkins-pipeline/dotnet/tools` on unix, `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet\tools` on Windows) via `NUGET_PACKAGES`/`DOTNET_CLI_HOME`, instead of the default `~/.nuget/packages` / `~/.dotnet` locations.
 
 Local tools aren't exposed as a bare command on `PATH` — invoke them from the block via `dotnet tool run <tool-binary>` (or the `dotnet <tool-binary>` shorthand `dotnet` itself prints after install).
 

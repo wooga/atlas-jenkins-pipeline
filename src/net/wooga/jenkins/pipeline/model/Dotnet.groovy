@@ -3,8 +3,12 @@ package net.wooga.jenkins.pipeline.model
 import com.cloudbees.groovy.cps.NonCPS
 
 /**
- * Provisions the .NET SDK into a shared per-agent cache directory (via the
- * vendored dotnet-install wrapper scripts) and exposes it to callers.
+ * Installs the .NET SDK into a shared per-agent cache directory (via the
+ * vendored dotnet-install wrapper scripts) and exposes it to callers. Generic
+ * with respect to NuGet: source/credentials are optional constructor
+ * parameters with no built-in default - callers (see vars/withDotnet.groovy,
+ * vars/dotnetWrapper.groovy) are responsible for supplying org-specific
+ * defaults.
  */
 class Dotnet {
 
@@ -17,37 +21,30 @@ class Dotnet {
      */
     static final String DEFAULT_VERSION = "10.0.301"
 
-    /**
-     * Company-wide private NuGet feed, registered idempotently (once per
-     * agent, since `dotnet nuget add source` writes to the user-level
-     * NuGet.Config) so every dotnetWrapper/withDotnet invocation can restore
-     * from it without callers wiring this up themselves.
-     */
-    static final String NUGET_SOURCE_NAME = "wooga_nuget"
-    static final String NUGET_SOURCE_URL = "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json"
-
-    /**
-     * Jenkins credentials ID for read access to the private NuGet feed above.
-     * Matches the existing 'artifactory_read' convention already hardcoded by
-     * other steps in this library (e.g. javaLibs.groovy, buildWDK.groovy).
-     */
-    static final String NUGET_CREDENTIALS_ID = "artifactory_read"
-
     private Object jenkins
     private String version
     private String channel
     private String globalJson
+    private String nugetSourceName
+    private String nugetSourceUrl
+    private String nugetCredentialsId
 
     static Dotnet fromJenkins(Object jenkinsScript, Map args = [:]) {
-        return new Dotnet(jenkinsScript, args.version as String, args.channel as String, args.globalJson as String)
+        return new Dotnet(jenkinsScript, args.version as String, args.channel as String, args.globalJson as String,
+                args.nugetSourceName as String, args.nugetSourceUrl as String, args.nugetCredentialsId as String)
     }
 
-    Dotnet(Object jenkins, String version = null, String channel = null, String globalJson = null) {
+    Dotnet(Object jenkins, String version = null, String channel = null, String globalJson = null,
+           String nugetSourceName = null, String nugetSourceUrl = null, String nugetCredentialsId = null) {
         validateSelectors(version, channel, globalJson)
+        validateNugetConfig(nugetSourceName, nugetSourceUrl, nugetCredentialsId)
         this.jenkins = jenkins
         this.version = version
         this.channel = channel
         this.globalJson = globalJson
+        this.nugetSourceName = nugetSourceName
+        this.nugetSourceUrl = nugetSourceUrl
+        this.nugetCredentialsId = nugetCredentialsId
     }
 
     // Called from the constructor, which can't be CPS-transformed (it can't be
@@ -62,55 +59,110 @@ class Dotnet {
         }
     }
 
+    @NonCPS
+    private static void validateNugetConfig(String nugetSourceName, String nugetSourceUrl, String nugetCredentialsId) {
+        boolean hasSourceName = nugetSourceName as boolean
+        boolean hasSourceUrl = nugetSourceUrl as boolean
+        if (hasSourceName != hasSourceUrl) {
+            throw new IllegalArgumentException(
+                    "dotnet NuGet source is incomplete: 'nugetSourceName' and 'nugetSourceUrl' must be given together (got: nugetSourceName=${nugetSourceName}, nugetSourceUrl=${nugetSourceUrl})")
+        }
+        if (nugetCredentialsId && !hasSourceName) {
+            throw new IllegalArgumentException(
+                    "'nugetCredentialsId' was given without a NuGet source: 'nugetSourceName'/'nugetSourceUrl' are required for the credentials to have a source to authenticate")
+        }
+    }
+
     /**
      * The shared install/cache directory for the current agent's OS:
-     * ~/.cache/dotnet on unix, %LOCALAPPDATA%\cache\dotnet on Windows.
+     * ~/.cache/jenkins-pipeline/dotnet on unix,
+     * %LOCALAPPDATA%\cache\jenkins-pipeline\dotnet on Windows.
      */
     String cacheDir() {
         if (jenkins.isUnix()) {
-            return "${jenkins.env.HOME}/.cache/dotnet"
+            return "${jenkins.env.HOME}/.cache/jenkins-pipeline/dotnet"
         }
-        return "${jenkins.env.LOCALAPPDATA}\\cache\\dotnet"
+        return "${jenkins.env.LOCALAPPDATA}\\cache\\jenkins-pipeline\\dotnet"
     }
 
-    private List<String> selectorEnv() {
-        List<String> envVars = ["DOTNET_INSTALL_DIR=${cacheDir()}"]
+    /**
+     * The install-dir + selector to pass to the install wrapper, as a
+     * semantic map (key -> value), in precedence order: version, channel,
+     * globalJson, then (if a workspace global.json exists) nothing extra -
+     * letting the wrapper script auto-detect it - else defaultVersion.
+     */
+    private Map<String, String> installArgs() {
+        Map<String, String> args = [installDir: cacheDir()]
         if (version) {
-            envVars << "DOTNET_VERSION=${version}"
+            args.version = version
         } else if (channel) {
-            envVars << "DOTNET_CHANNEL=${channel}"
+            args.channel = channel
         } else if (globalJson) {
-            envVars << "GLOBAL_JSON=${globalJson}"
+            args.globalJson = globalJson
         } else if (jenkins.fileExists('global.json')) {
             // Let the wrapper script auto-detect the workspace global.json and
             // install its sdk.version's major.minor as a floating channel
             // (matches how GitHub Actions' setup-dotnet resolves global.json).
         } else {
-            // Distinct from DOTNET_VERSION so the install log can tell an
-            // explicit version argument apart from this org-wide fallback.
-            envVars << "DOTNET_DEFAULT_VERSION=${DEFAULT_VERSION}"
+            args.defaultVersion = DEFAULT_VERSION
         }
-        return envVars
+        return args
+    }
+
+    // Deliberately a plain sequence of ifs/string-building, not a closure-based
+    // Map.collect - the sandboxed script-security whitelist rejects a closure
+    // resolving a static field lookup by key (confirmed by real test execution:
+    // "RejectedAccessException: ... DefaultGroovyMethods invokeMethod").
+    private static String toShArgs(Map<String, String> args) {
+        List<String> parts = []
+        if (args.installDir) { parts << "--install-dir ${shQuote(args.installDir)}" }
+        if (args.version) { parts << "--version ${shQuote(args.version)}" }
+        if (args.channel) { parts << "--channel ${shQuote(args.channel)}" }
+        if (args.globalJson) { parts << "--global-json ${shQuote(args.globalJson)}" }
+        if (args.defaultVersion) { parts << "--default-version ${shQuote(args.defaultVersion)}" }
+        return parts.join(' ')
+    }
+
+    private static String toPsArgs(Map<String, String> args) {
+        List<String> parts = []
+        if (args.installDir) { parts << "-InstallDir ${psQuote(args.installDir)}" }
+        if (args.version) { parts << "-Version ${psQuote(args.version)}" }
+        if (args.channel) { parts << "-Channel ${psQuote(args.channel)}" }
+        if (args.globalJson) { parts << "-GlobalJson ${psQuote(args.globalJson)}" }
+        if (args.defaultVersion) { parts << "-DefaultVersion ${psQuote(args.defaultVersion)}" }
+        return parts.join(' ')
+    }
+
+    // Pure string formatting, no Jenkins step calls - safe and unnecessary to
+    // run through CPS transformation.
+    @NonCPS
+    private static String shQuote(String value) {
+        return "'" + value.replace("'", "'\"'\"'") + "'"
+    }
+
+    @NonCPS
+    private static String psQuote(String value) {
+        return "'" + value.replace("'", "''") + "'"
     }
 
     /**
-     * Ensures the selected SDK is installed into the shared cache directory by
-     * running the vendored install wrapper for the current OS.
+     * Installs the selected SDK into the shared cache directory by running
+     * the vendored install wrapper for the current OS, passing the install
+     * dir and selector as CLI arguments (visible in the Jenkins console log)
+     * rather than environment variables.
      */
-    def provision() {
-        jenkins.withEnv(selectorEnv()) {
-            if (jenkins.isUnix()) {
-                jenkins.writeFile file: '.ci/dotnet-install.sh', text: jenkins.libraryResource('dotnet/dotnet-install.sh')
-                jenkins.sh 'chmod +x .ci/dotnet-install.sh && .ci/dotnet-install.sh'
-            } else {
-                jenkins.writeFile file: '.ci/dotnet-install.ps1', text: jenkins.libraryResource('dotnet/dotnet-install.ps1')
-                jenkins.powershell '.ci\\dotnet-install.ps1'
-            }
+    def install() {
+        if (jenkins.isUnix()) {
+            jenkins.writeFile file: '.ci/dotnet-install.sh', text: jenkins.libraryResource('dotnet/dotnet-install.sh')
+            jenkins.sh "chmod +x .ci/dotnet-install.sh && .ci/dotnet-install.sh ${toShArgs(installArgs())}"
+        } else {
+            jenkins.writeFile file: '.ci/dotnet-install.ps1', text: jenkins.libraryResource('dotnet/dotnet-install.ps1')
+            jenkins.powershell ".ci\\dotnet-install.ps1 ${toPsArgs(installArgs())}"
         }
     }
 
     /**
-     * Env entries exposing the provisioned SDK to a block or command: the
+     * Env entries exposing the installed SDK to a block or command: the
      * cache dir set as DOTNET_ROOT and prepended to PATH.
      */
     List<String> withEnvList() {
@@ -120,22 +172,50 @@ class Dotnet {
     }
 
     /**
-     * Provisions the SDK, ensures the shared wooga_nuget feed is registered
-     * and authenticated, then runs the given block with it all available.
+     * Installs the SDK, then runs the given block with it available on PATH.
+     * If a NuGet source was given, ensures it's registered (idempotent); if
+     * credentials were also given, binds them for the block's duration and
+     * exports NuGetPackageSourceCredentials_<source>. With no NuGet config at
+     * all, this is purely an SDK install - NuGet is never touched.
      */
-    def withProvisionedEnv(Closure block) {
-        provision()
-        jenkins.withCredentials([jenkins.usernamePassword(
-                credentialsId: NUGET_CREDENTIALS_ID, usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS')]) {
-            jenkins.withEnv(withEnvList() + [nugetCredentialsEnv()]) {
+    def withInstalledDotnet(Closure block) {
+        install()
+        if (nugetCredentialsId) {
+            jenkins.withCredentials([jenkins.usernamePassword(
+                    credentialsId: nugetCredentialsId, usernameVariable: 'JFROG_USER', passwordVariable: 'JFROG_PASS')]) {
+                jenkins.withEnv(withEnvList() + [nugetCredentialsEnv()]) {
+                    ensureNuGetSource()
+                    block()
+                }
+            }
+        } else if (nugetSourceName) {
+            jenkins.withEnv(withEnvList()) {
                 ensureNuGetSource()
+                block()
+            }
+        } else {
+            jenkins.withEnv(withEnvList()) {
                 block()
             }
         }
     }
 
     private String nugetCredentialsEnv() {
-        return "NuGetPackageSourceCredentials_${NUGET_SOURCE_NAME}=Username=${jenkins.env.JFROG_USER};Password=${jenkins.env.JFROG_PASS}"
+        return "NuGetPackageSourceCredentials_${nugetSourceName}=Username=${jenkins.env.JFROG_USER};Password=${jenkins.env.JFROG_PASS}"
+    }
+
+    /**
+     * Registers the configured NuGet feed with the dotnet CLI if it isn't
+     * already present. Idempotent and safe to call on every invocation: this
+     * writes to the user-level NuGet.Config, so on a persistent agent it's a
+     * no-op after the first run.
+     */
+    private void ensureNuGetSource() {
+        if (jenkins.isUnix()) {
+            jenkins.sh "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+        } else {
+            jenkins.powershell "if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
+        }
     }
 
     /**
@@ -154,16 +234,16 @@ class Dotnet {
     }
 
     /**
-     * Provisions the SDK/creds/nuget feed, ensures <packageId> (optionally
-     * pinned to <version>) is installed as a local (manifest-based) dotnet
-     * tool in the current workspace - creating a tool manifest if one
-     * doesn't exist - then runs the given block with it invocable via
-     * `dotnet tool run <toolBinary>` (or `dotnet <toolBinary>`). The tool's
-     * package cache is redirected under toolCacheDir() for the block's
-     * duration, not the default ~/.nuget or ~/.dotnet locations.
+     * Installs the SDK/NuGet feed (as withInstalledDotnet), ensures
+     * <packageId> (optionally pinned to <version>) is installed as a local
+     * (manifest-based) dotnet tool in the current workspace - creating a
+     * tool manifest if one doesn't exist - then runs the given block with it
+     * invocable via `dotnet tool run <toolBinary>` (or `dotnet <toolBinary>`).
+     * The tool's package cache is redirected under toolCacheDir() for the
+     * block's duration, not the default ~/.nuget or ~/.dotnet locations.
      */
     def withTool(String packageId, String version = null, Closure block) {
-        withProvisionedEnv {
+        withInstalledDotnet {
             jenkins.withEnv(toolEnv()) {
                 installTool(packageId, version)
                 block()
@@ -172,7 +252,7 @@ class Dotnet {
     }
 
     /**
-     * Provisions the SDK/creds/tool (as withTool), then runs <toolBinary>
+     * Installs the SDK/NuGet feed/tool (as withTool), then runs <toolBinary>
      * via `dotnet tool run` with the given args.
      */
     def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus) {
@@ -198,20 +278,6 @@ class Dotnet {
             jenkins.sh command
         } else {
             jenkins.bat command
-        }
-    }
-
-    /**
-     * Registers the shared wooga_nuget feed with the dotnet CLI if it isn't
-     * already present. Idempotent and safe to call on every invocation: this
-     * writes to the user-level NuGet.Config, so on a persistent agent it's a
-     * no-op after the first run.
-     */
-    private void ensureNuGetSource() {
-        if (jenkins.isUnix()) {
-            jenkins.sh "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${NUGET_SOURCE_URL}\" || dotnet nuget add source \"${NUGET_SOURCE_URL}\" --name \"${NUGET_SOURCE_NAME}\""
-        } else {
-            jenkins.powershell "if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${NUGET_SOURCE_URL}')) { dotnet nuget add source '${NUGET_SOURCE_URL}' --name '${NUGET_SOURCE_NAME}' }"
         }
     }
 }

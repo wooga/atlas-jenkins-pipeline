@@ -58,18 +58,18 @@ The system SHALL fail fast with a clear error when a caller provides more than o
 
 ### Requirement: Custom shared cache install directory
 
-The system SHALL install SDKs into a custom shared cache directory rather than the install tool's default per-user directory. The cache directory SHALL be `~/.cache/dotnet` on macOS and Linux agents, and `%LOCALAPPDATA%\cache\dotnet` on Windows agents. Multiple SDK versions SHALL be able to coexist under this directory.
+The system SHALL install SDKs into a custom shared cache directory rather than the install tool's default per-user directory. The cache directory SHALL be `~/.cache/jenkins-pipeline/dotnet` on macOS and Linux agents, and `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet` on Windows agents. Multiple SDK versions SHALL be able to coexist under this directory. The install directory and selector SHALL be passed to the install scripts as CLI arguments (e.g. `--install-dir`/`--version`, `-InstallDir`/`-Version`), not environment variables, so the exact invocation is visible in the build log.
 
 #### Scenario: Install into cache directory on unix
 
 - **WHEN** an SDK is provisioned on a unix agent
-- **THEN** the official install script is invoked with an explicit install directory of `~/.cache/dotnet`
+- **THEN** the official install script is invoked with an explicit `--install-dir` of `~/.cache/jenkins-pipeline/dotnet`
 - **AND** the SDK is not installed into the default `$HOME/.dotnet` location
 
 #### Scenario: Install into cache directory on Windows
 
 - **WHEN** an SDK is provisioned on a Windows agent
-- **THEN** the official install script is invoked with an explicit install directory of `%LOCALAPPDATA%\cache\dotnet`
+- **THEN** the official install script is invoked with an explicit `-InstallDir` of `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet`
 - **AND** the SDK is not installed into the default `%LocalAppData%\Microsoft\dotnet` location
 
 #### Scenario: Multiple versions coexist

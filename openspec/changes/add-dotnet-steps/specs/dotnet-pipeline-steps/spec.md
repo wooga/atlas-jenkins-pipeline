@@ -63,9 +63,9 @@ Each invocation of `dotnetWrapper` or `withDotnet` SHALL surface in the build lo
 - **WHEN** `withDotnet` provisions and enters the block
 - **THEN** the build log shows the resolved SDK version, the selector source, and cache hit/miss before the block runs
 
-### Requirement: Automatic wooga_nuget feed registration and credentials
+### Requirement: Automatic, overridable wooga_nuget feed registration and credentials
 
-Both `dotnetWrapper` and `withDotnet` SHALL, as part of provisioning, idempotently register the company-wide private `wooga_nuget` NuGet feed with the dotnet CLI if it is not already registered on the current agent, and SHALL bind the `artifactory_read` Jenkins credential for the duration of the command/block, exporting a `NuGetPackageSourceCredentials_wooga_nuget` environment variable in the standard `Username=<user>;Password=<pass>` NuGet CLI format so that `dotnet restore` and similar commands can authenticate against the feed without the caller wiring this up themselves.
+Both `dotnetWrapper` and `withDotnet` SHALL, by default, idempotently register the company-wide private `wooga_nuget` NuGet feed with the dotnet CLI if it is not already registered on the current agent, and SHALL bind the `artifactory_read` Jenkins credential for the duration of the command/block, exporting a `NuGetPackageSourceCredentials_<source>` environment variable in the standard `Username=<user>;Password=<pass>` NuGet CLI format so that `dotnet restore` and similar commands can authenticate against the feed without the caller wiring this up themselves. The underlying `Dotnet` model class itself has no built-in knowledge of `wooga_nuget`/`artifactory_read` — these are wooga-specific defaults applied by the step scripts (`DotnetNugetConfig`), not hardcoded into the model. Callers of the map forms of `dotnetWrapper`/`withDotnet` MAY override the NuGet source name, source URL, and/or credentials ID, or opt out of NuGet setup entirely with `nuget: false`. The string form of `dotnetWrapper` has no place for these keys and always applies the defaults.
 
 #### Scenario: NuGet feed is registered on first use on an agent
 
@@ -81,3 +81,13 @@ Both `dotnetWrapper` and `withDotnet` SHALL, as part of provisioning, idempotent
 
 - **WHEN** `withDotnet` or `dotnetWrapper` runs
 - **THEN** the `artifactory_read` credential is bound and `NuGetPackageSourceCredentials_wooga_nuget` is set to `Username=<bound username>;Password=<bound password>` for the duration of the block/command only
+
+#### Scenario: NuGet source and credentials can be overridden
+
+- **WHEN** a caller passes `nugetSourceName`, `nugetSourceUrl`, and/or `nugetCredentialsId` to the map form of `withDotnet` or `dotnetWrapper`
+- **THEN** the given values are used instead of the `wooga_nuget`/`artifactory_read` defaults for that invocation
+
+#### Scenario: NuGet setup can be fully disabled
+
+- **WHEN** a caller passes `nuget: false` to the map form of `withDotnet` or `dotnetWrapper`
+- **THEN** no NuGet feed is registered and no credentials are bound for that invocation

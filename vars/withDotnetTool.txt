@@ -3,8 +3,8 @@ wooga_nuget feed, artifactory_read credentials) and installs the given NuGet
 package as a local (manifest-based) dotnet tool in the current workspace -
 creating a tool manifest (`dotnet tool install --create-manifest-if-needed`)
 if one doesn't already exist. The tool's package cache is redirected under
-the shared per-agent cache directory (~/.cache/dotnet/tools on unix,
-%LOCALAPPDATA%\cache\dotnet\tools on Windows) via NUGET_PACKAGES/DOTNET_CLI_HOME,
+the shared per-agent cache directory (~/.cache/jenkins-pipeline/dotnet/tools on unix,
+%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet\tools on Windows) via NUGET_PACKAGES/DOTNET_CLI_HOME,
 instead of the default ~/.nuget/packages / ~/.dotnet locations.
 
 Local tools are not exposed as a bare command on PATH - invoke them from the

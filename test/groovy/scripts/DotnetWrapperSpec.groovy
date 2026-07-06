@@ -22,7 +22,11 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         return calls["bat"].collect { it.args[0] }
     }
 
-    def "string form provisions the SDK and runs the command via sh on unix"() {
+    private String installShString() {
+        return shArgs().find { it instanceof String && it.contains("dotnet-install.sh") }
+    }
+
+    def "string form installs the SDK and runs the command via sh on unix"() {
         given:
         def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
 
@@ -30,11 +34,11 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         inSandbox { dotnetWrapper "build --configuration Release" }
 
         then:
-        shArgs().any { it instanceof String && it.contains("dotnet-install.sh") }
+        installShString() != null
         shArgs().any { it instanceof Map && it.script == "dotnet build --configuration Release" }
     }
 
-    def "map form with an explicit channel selector is provisioned and run"() {
+    def "map form with an explicit channel selector is installed and run"() {
         given:
         def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
 
@@ -43,10 +47,10 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof Map && it.script == "dotnet test" }
-        usedEnvironments.find { it["DOTNET_CHANNEL"] == "8.0" } != null
+        installShString().contains("--channel '8.0'")
     }
 
-    def "map form with an explicit version selector is provisioned and run"() {
+    def "map form with an explicit version selector is installed and run"() {
         given:
         def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
 
@@ -55,7 +59,7 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof Map && it.script == "dotnet test" }
-        usedEnvironments.find { it["DOTNET_VERSION"] == "8.0.401" } != null
+        installShString().contains("--version '8.0.401'")
     }
 
     def "conflicting selectors fail fast"() {
@@ -104,5 +108,49 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         then:
         batArgs().any { it instanceof Map && it.script == "dotnet build" }
         shArgs().isEmpty()
+    }
+
+    def "default NuGet source and credentials are applied when not overridden"() {
+        given:
+        def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { dotnetWrapper(command: "test") }
+
+        then:
+        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains("wooga_nuget")
+        usedEnvironments.find { it["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass" } != null
+    }
+
+    def "NuGet source and credentials can be overridden"() {
+        given:
+        credentials.addUsernamePassword("custom_creds", "custom-user", "custom-pass")
+        def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox {
+            dotnetWrapper(command: "test", nugetSourceName: "custom_source", nugetSourceUrl: "https://example.com/index.json", nugetCredentialsId: "custom_creds")
+        }
+
+        then:
+        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        nugetCall != null
+        nugetCall.contains("custom_source")
+        nugetCall.contains("https://example.com/index.json")
+        usedEnvironments.find { it["NuGetPackageSourceCredentials_custom_source"] == "Username=custom-user;Password=custom-pass" } != null
+    }
+
+    def "nuget: false fully opts out of NuGet setup"() {
+        given:
+        def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { dotnetWrapper(command: "test", nuget: false) }
+
+        then:
+        shArgs().every { !(it instanceof String && it.contains("nuget add source")) }
+        calls["withCredentials"].size() == 0
     }
 }
