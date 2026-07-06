@@ -136,12 +136,16 @@ try {
     if ($selector.Kind -eq 'channel') {
       # A floating channel selector doesn't name a concrete version, so
       # resolve it up front via -DryRun to check the cache before installing.
-      $dryRunOutput = (& $downloaded.Script -InstallDir $InstallDir @selectorArgs -DryRun 2>&1 | Out-String)
-      $versionMatch = [regex]::Match($dryRunOutput, '\d+\.\d+\.\d+[A-Za-z0-9.-]*')
-      if (-not $versionMatch.Success) {
+      # *>&1 (not 2>&1) is required: the official script logs via Write-Host,
+      # which writes to the Information stream, not stdout/stderr - 2>&1 alone
+      # silently captures nothing (confirmed by real execution on Windows: the
+      # dry-run output was visible in the console but $dryRunOutput was empty).
+      $dryRunOutput = (& $downloaded.Script -InstallDir $InstallDir @selectorArgs -DryRun *>&1 | Out-String)
+      $versionMatches = [regex]::Matches($dryRunOutput, '\d+\.\d+\.\d+[A-Za-z0-9.-]*')
+      if ($versionMatches.Count -eq 0) {
         throw "Could not resolve an exact SDK version from dry-run output for $($selector.Description)"
       }
-      $resolvedVersion = $versionMatch.Value
+      $resolvedVersion = $versionMatches[$versionMatches.Count - 1].Value
 
       $sdkPath = Join-Path (Join-Path $InstallDir 'sdk') $resolvedVersion
       if (Test-Path -LiteralPath $sdkPath) {
