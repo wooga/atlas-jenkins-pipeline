@@ -91,6 +91,8 @@ withDotnet(version: "8.0.401") {
 }
 ```
 
+**Caveat**: a `sh` script with its own login-shell shebang (`#!/bin/bash -l`) re-sources `/etc/profile` and `~/.bash_profile`/`~/.profile` before running, which on some agents unconditionally overwrites `PATH` — discarding the `PATH` `withDotnet` set before your script's first line runs. `DOTNET_ROOT` survives this. If you need a login shell, re-add it defensively: `export PATH="$DOTNET_ROOT:$PATH"` as the first line of your script.
+
 ### buildWDKAutoSwitch
 
 Constructs a pipeline that will build an [Unity](https://unity.com/) WDK for a set of given Unity versions, running any available tests. If the build is successful it will then generate a `paket` package and publish it to our `artifactory`, where it then can be used by other WDKs or game projects.

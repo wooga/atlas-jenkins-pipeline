@@ -26,3 +26,19 @@ withDotnet(globalJson: "${env.WORKSPACE}/global.json") {
     sh "dotnet build"
 }
 ```
+
+Caveat: a `sh` script with its own login-shell shebang (`#!/bin/bash -l`) re-sources
+`/etc/profile` and `~/.bash_profile`/`~/.profile` before running, which on some
+agents unconditionally overwrites PATH - discarding the PATH set by withDotnet
+before your script's first line even runs. DOTNET_ROOT survives this (generic
+profile scripts don't know about it), so if you need a login shell, re-add it
+defensively as the first line of your script:
+
+```
+withDotnet {
+    sh(script: '''#!/bin/bash -l
+        export PATH="$DOTNET_ROOT:$PATH"
+        dotnet build
+    ''')
+}
+```
