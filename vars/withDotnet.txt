@@ -1,0 +1,28 @@
+Provisions the requested .NET SDK into the shared per-agent cache directory
+(~/.cache/dotnet on unix, %LOCALAPPDATA%\cache\dotnet on Windows) and runs the
+given block with it available on PATH (DOTNET_ROOT is also set to the cache
+directory). The environment change only applies for the duration of the block.
+
+Selector resolution when no version/channel/globalJson argument is given:
+a global.json in the workspace root is used if present (its sdk.version's
+major.minor is tracked as a floating channel, matching GitHub Actions'
+setup-dotnet - bump your global.json to move to a newer SDK); otherwise the
+org-wide pinned default version is installed (see Dotnet.DEFAULT_VERSION).
+
+usage: ```
+// selector auto-detected (workspace global.json, else org-wide default)
+withDotnet {
+    sh "dotnet build"
+}
+
+// explicit selector (at most one of version / channel / globalJson)
+withDotnet(channel: "8.0") {
+    sh "dotnet build"
+}
+withDotnet(version: "8.0.401") {
+    sh "dotnet build"
+}
+withDotnet(globalJson: "${env.WORKSPACE}/global.json") {
+    sh "dotnet build"
+}
+```

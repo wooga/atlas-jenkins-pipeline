@@ -42,6 +42,55 @@ Invokes the gradle wrapper for the current platform (Windows/Unix);
 gradleWrapper "testEditMode -P unity.testBuildTargets=android"
 ```
 
+### dotnetWrapper
+
+Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/dotnet` on unix, `%LOCALAPPDATA%\cache\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it.
+
+#### Arguments:
+
+* command: `string`
+* version: `string` (optional, exact SDK version)
+* channel: `string` (optional, e.g. `8.0`, `LTS`)
+* globalJson: `string` (optional, path to a `global.json` to read the version from)
+* returnStatus: `boolean` = *false*
+* returnStdout: `boolean` = *false*
+
+At most one of `version` / `channel` / `globalJson` may be given. When none is given, a `global.json` in the workspace root is used if present (its `sdk.version`'s major.minor is tracked as a floating channel — same behavior as GitHub Actions' `setup-dotnet`; bump your `global.json` to move to a newer SDK), otherwise a pinned org-wide default version is installed.
+
+#### Usage:
+
+```
+// selector auto-detected (workspace global.json, else org-wide default)
+dotnetWrapper "build --configuration Release"
+
+// explicit selector
+dotnetWrapper(command: "test", channel: "8.0")
+```
+
+### withDotnet
+
+Provisions the requested .NET SDK into the shared per-agent cache directory (same as `dotnetWrapper`) and runs the given block with it available on `PATH` (`DOTNET_ROOT` is also set), scoped to the block.
+
+#### Arguments:
+
+* version: `string` (optional, exact SDK version)
+* channel: `string` (optional, e.g. `8.0`, `LTS`)
+* globalJson: `string` (optional, path to a `global.json` to read the version from)
+
+At most one of `version` / `channel` / `globalJson` may be given. When none is given, a `global.json` in the workspace root is used if present (its `sdk.version`'s major.minor is tracked as a floating channel — same behavior as GitHub Actions' `setup-dotnet`; bump your `global.json` to move to a newer SDK), otherwise a pinned org-wide default version is installed.
+
+#### Usage:
+
+```
+withDotnet {
+    sh "dotnet build"
+}
+
+withDotnet(version: "8.0.401") {
+    sh "dotnet build"
+}
+```
+
 ### buildWDKAutoSwitch
 
 Constructs a pipeline that will build an [Unity](https://unity.com/) WDK for a set of given Unity versions, running any available tests. If the build is successful it will then generate a `paket` package and publish it to our `artifactory`, where it then can be used by other WDKs or game projects.

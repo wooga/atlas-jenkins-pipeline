@@ -1,0 +1,22 @@
+Provisions the requested .NET SDK into the shared per-agent cache directory
+(~/.cache/dotnet on unix, %LOCALAPPDATA%\cache\dotnet on Windows) and runs
+`dotnet &lt;command&gt;` against it.
+
+Selector resolution when no version/channel/globalJson argument is given:
+a global.json in the workspace root is used if present (its sdk.version's
+major.minor is tracked as a floating channel, matching GitHub Actions'
+setup-dotnet - bump your global.json to move to a newer SDK); otherwise the
+org-wide pinned default version is installed (see Dotnet.DEFAULT_VERSION).
+
+usage: ```
+// string form - selector auto-detected (workspace global.json, else org-wide default)
+dotnetWrapper "build --configuration Release"
+
+// map form - explicit selector (at most one of version / channel / globalJson)
+dotnetWrapper(command: "test", channel: "8.0")
+dotnetWrapper(command: "test", version: "8.0.401")
+dotnetWrapper(command: "test", globalJson: "${env.WORKSPACE}/global.json")
+
+// returnStatus / returnStdout, mirroring gradleWrapper (mutually exclusive, as with the `sh` step)
+dotnetWrapper(command: "test", returnStatus: true)
+```
