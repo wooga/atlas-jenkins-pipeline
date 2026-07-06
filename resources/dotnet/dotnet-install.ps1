@@ -110,7 +110,12 @@ function Get-InstallScript {
 }
 
 $selector = Resolve-Selector
-$selectorArgs = if ($selector.Kind -eq 'version') { @('-Version', $selector.Value) } else { @('-Channel', $selector.Value) }
+# Must be a hashtable, not an array: splatting an array (@array) passes each
+# element as a POSITIONAL argument (verified by real execution to silently
+# misbind "-Channel"/"10.0" onto the script's Channel/Quality parameters
+# positionally instead of by name) - only a hashtable splat (@hashtable) maps
+# keys to named parameters.
+$selectorArgs = if ($selector.Kind -eq 'version') { @{ Version = $selector.Value } } else { @{ Channel = $selector.Value } }
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Enter-InstallLock
