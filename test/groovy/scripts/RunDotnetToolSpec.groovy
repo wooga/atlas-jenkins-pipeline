@@ -84,4 +84,20 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         // intercepts --help and prints its own help instead of the tool's.
         shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help" }
     }
+
+    def "map form threads loginShell, umask and logCommandToStdErr through"() {
+        given:
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox {
+            runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["arg"],
+                    loginShell: true, umask: "002", logCommandToStdErr: true)
+        }
+
+        then:
+        shArgs().any {
+            it instanceof Map && it.script == "#!/bin/bash -l\nset -x\numask 002\ndotnet tool run mytool -- arg"
+        }
+    }
 }

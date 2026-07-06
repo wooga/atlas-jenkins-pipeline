@@ -401,6 +401,83 @@ class DotnetSpec extends Specification {
         jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help" } != null
     }
 
+    def "runTool defaults to a plain command with no loginShell/umask/logCommandToStdErr"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false)
+
+        then:
+        jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
+    }
+
+    def "runTool with loginShell prepends a #!/bin/bash -l shebang"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, null, false)
+
+        then:
+        // the shebang must be the very first line for Jenkins' sh step to honour it
+        jenkins.calls.sh.find { it instanceof Map && it.script == "#!/bin/bash -l\ndotnet tool run mytool -- arg" } != null
+    }
+
+    def "runTool with logCommandToStdErr prepends set -x"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, null, true)
+
+        then:
+        jenkins.calls.sh.find { it instanceof Map && it.script == "set -x\ndotnet tool run mytool -- arg" } != null
+    }
+
+    def "runTool with umask prepends the umask command"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, "002", false)
+
+        then:
+        jenkins.calls.sh.find { it instanceof Map && it.script == "umask 002\ndotnet tool run mytool -- arg" } != null
+    }
+
+    def "runTool combines loginShell, logCommandToStdErr and umask in the correct order"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
+
+        then:
+        // shebang must lead; logCommandToStdErr before umask so the umask command itself is traced too
+        jenkins.calls.sh.find {
+            it instanceof Map && it.script == "#!/bin/bash -l\nset -x\numask 002\ndotnet tool run mytool -- arg"
+        } != null
+    }
+
+    def "runTool ignores loginShell/umask/logCommandToStdErr on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
+
+        then:
+        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
+        jenkins.calls.sh.isEmpty()
+    }
+
     def "isUnix() memoizes the underlying jenkins.isUnix() call across every internal check"() {
         given: "a Dotnet exercising install, NuGet source registration, and tool install/run in one call chain"
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])

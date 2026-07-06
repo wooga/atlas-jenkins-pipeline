@@ -8,6 +8,19 @@ instead of intercepting them as its own CLI options. The tool's package cache
 is redirected under the shared per-agent cache directory, same as
 withDotnetTool.
 
+Map-form-only, unix-only options (ignored on Windows - bat has no shebang,
+umask, or `set -x` equivalent):
+- loginShell (boolean, default false): run via a `#!/bin/bash -l` shebang
+  instead of Jenkins' default `sh -xe`, so the tool sees the same environment
+  a login shell would set up (e.g. profile-sourced PATH entries). This
+  replaces Jenkins' default invocation entirely, including its default -x
+  tracing - pair with logCommandToStdErr to opt back into that.
+- umask (string, optional): prepended as `umask &lt;value&gt;` before the
+  tool command.
+- logCommandToStdErr (boolean, default false): prepends `set -x` (echoes
+  each command to stderr before running it) - useful with loginShell since a
+  custom shebang loses Jenkins' own default tracing.
+
 usage: ```
 // simple form
 runDotnetTool("dotnet-ef", "dotnet-ef", ["database", "update"])
@@ -19,5 +32,15 @@ runDotnetTool(
     args: ["database", "update"],
     version: "8.0.4",
     returnStatus: true
+)
+
+// run via a login shell with explicit tracing and a shared-cache-safe umask
+runDotnetTool(
+    packageId: "dotnet-ef",
+    toolBinary: "dotnet-ef",
+    args: ["database", "update"],
+    loginShell: true,
+    logCommandToStdErr: true,
+    umask: "002"
 )
 ```

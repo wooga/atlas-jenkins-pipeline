@@ -18,5 +18,8 @@ def call(Map args) {
             args.toolBinary?.toString(),
             (args.args ?: []) as List<String>,
             args.version as String,
-            (args.returnStatus ?: false) as Boolean)
+            (args.returnStatus ?: false) as Boolean,
+            (args.loginShell ?: false) as Boolean,
+            args.umask as String,
+            (args.logCommandToStdErr ?: false) as Boolean)
 }

@@ -274,8 +274,23 @@ class Dotnet {
     /**
      * Installs the SDK/NuGet feed/tool (as withTool), then runs <toolBinary>
      * via `dotnet tool run` with the given args.
+     *
+     * loginShell/umask/logCommandToStdErr only apply on unix (bat has no
+     * shebang, umask, or `set -x` equivalent) and are ignored on Windows:
+     * - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
+     *   default `sh -xe`, so the tool sees the same environment a login shell
+     *   would set up (e.g. profile-sourced PATH entries). Note this replaces
+     *   Jenkins' default invocation entirely, including its default `-x`
+     *   tracing - use logCommandToStdErr to opt back into that explicitly.
+     * - umask: prepended as `umask <value>` before the command, matching the
+     *   umask convention used elsewhere in this library for shared-cache-safe
+     *   file permissions.
+     * - logCommandToStdErr: prepends `set -x` (echoes each command to stderr
+     *   before running it), since a custom loginShell shebang above loses
+     *   Jenkins' own default `-xe` tracing.
      */
-    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus) {
+    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus,
+                Boolean loginShell = false, String umask = null, Boolean logCommandToStdErr = false) {
         return withTool(packageId, version) {
             // The "--" separator is required: without it, dotnet's own CLI parser
             // intercepts args that look like its own options (e.g. --help, -h) before
@@ -283,11 +298,23 @@ class Dotnet {
             // forwarding the flag (confirmed by real execution).
             def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
             if (isUnix()) {
-                return jenkins.sh(script: command, returnStatus: returnStatus)
+                return jenkins.sh(script: shScript(command, loginShell, umask, logCommandToStdErr), returnStatus: returnStatus)
             } else {
                 return jenkins.bat(script: command, returnStatus: returnStatus)
             }
         }
+    }
+
+    // A custom shebang must be the very first line of the script for Jenkins'
+    // sh step to honour it, so loginShell is prepended ahead of
+    // logCommandToStdErr/umask.
+    private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        List<String> lines = []
+        if (loginShell) { lines << "#!/bin/bash -l" }
+        if (logCommandToStdErr) { lines << "set -x" }
+        if (umask) { lines << "umask ${umask}" }
+        lines << command
+        return lines.join("\n")
     }
 
     // dotnet tool install is idempotent on its own for a local/manifest tool:

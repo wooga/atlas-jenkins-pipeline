@@ -147,6 +147,9 @@ Provisions the requested .NET SDK (same as `withDotnet`), installs the given NuG
 * args: `list<string>` = *[]*
 * version: `string` (optional, exact tool version, passes `--allow-downgrade`)
 * returnStatus: `boolean` = *false*
+* loginShell: `boolean` = *false* (unix only; map form only) — run via a `#!/bin/bash -l` shebang instead of Jenkins' default `sh -xe`, so the tool sees the same environment a login shell would set up (e.g. profile-sourced `PATH` entries). This replaces Jenkins' default invocation entirely, including its default `-x` tracing — pair with `logCommandToStdErr` to opt back into that.
+* umask: `string` (optional, unix only; map form only) — prepended as `umask <value>` before the tool command.
+* logCommandToStdErr: `boolean` = *false* (unix only; map form only) — prepends `set -x`, useful with `loginShell` since a custom shebang loses Jenkins' own default tracing.
 
 #### Usage:
 
@@ -159,6 +162,16 @@ runDotnetTool(
     args: ["database", "update"],
     version: "8.0.4",
     returnStatus: true
+)
+
+// run via a login shell with explicit tracing and a shared-cache-safe umask
+runDotnetTool(
+    packageId: "dotnet-ef",
+    toolBinary: "dotnet-ef",
+    args: ["database", "update"],
+    loginShell: true,
+    logCommandToStdErr: true,
+    umask: "002"
 )
 ```
 

@@ -18,7 +18,7 @@ The system SHALL provide a `withDotnetTool` shared step that provisions the .NET
 
 ### Requirement: runDotnetTool command step
 
-The system SHALL provide a `runDotnetTool` shared step that provisions the .NET SDK, installs a given NuGet package as a local dotnet tool (as `withDotnetTool` does), then runs it via `dotnet tool run <toolBinary> -- <args>` with the given arguments. The `--` separator SHALL always be inserted before the forwarded arguments, so that argument values matching one of `dotnet`'s own CLI options (e.g. `--help`, `-h`) are passed through to the tool instead of being intercepted by `dotnet` itself. It SHALL accept a simple positional form (`runDotnetTool(packageId, toolBinary, args)`) and a map form supporting an optional `version` and a `returnStatus` option.
+The system SHALL provide a `runDotnetTool` shared step that provisions the .NET SDK, installs a given NuGet package as a local dotnet tool (as `withDotnetTool` does), then runs it via `dotnet tool run <toolBinary> -- <args>` with the given arguments. The `--` separator SHALL always be inserted before the forwarded arguments, so that argument values matching one of `dotnet`'s own CLI options (e.g. `--help`, `-h`) are passed through to the tool instead of being intercepted by `dotnet` itself. It SHALL accept a simple positional form (`runDotnetTool(packageId, toolBinary, args)`) and a map form supporting an optional `version`, a `returnStatus` option, and unix-only `loginShell`/`umask`/`logCommandToStdErr` options.
 
 #### Scenario: Simple form installs and runs the tool
 
@@ -30,6 +30,12 @@ The system SHALL provide a `runDotnetTool` shared step that provisions the .NET 
 
 - **WHEN** a pipeline calls `runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: [], returnStatus: true)` and the tool exits non-zero
 - **THEN** the exit status is returned to the caller instead of failing the build
+
+#### Scenario: loginShell, umask, and logCommandToStdErr customize the unix invocation
+
+- **WHEN** a pipeline calls `runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["arg"], loginShell: true, umask: "002", logCommandToStdErr: true)` on a unix agent
+- **THEN** the tool is run via a script beginning with a `#!/bin/bash -l` shebang, followed by `set -x`, followed by `umask 002`, followed by the `dotnet tool run` command
+- **AND** on a Windows agent, these three options have no effect on the generated `bat` script
 
 ### Requirement: Tool package cache is redirected under the shared cache tree
 
