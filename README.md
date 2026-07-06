@@ -138,7 +138,7 @@ withDotnetTool(packageId: "dotnet-ef", version: "8.0.4") {
 
 ### runDotnetTool
 
-Provisions the requested .NET SDK (same as `withDotnet`), installs the given NuGet package as a local dotnet tool (same as `withDotnetTool`), then runs it via `dotnet tool run <tool-binary>` with the given args.
+Provisions the requested .NET SDK (same as `withDotnet`), installs the given NuGet package as a local dotnet tool (same as `withDotnetTool`), then runs it via `dotnet tool run <tool-binary> -- <args>` with the given args. The `--` separator is always inserted so `dotnet` forwards option-like args (e.g. `--help`) to the tool instead of intercepting them itself.
 
 #### Arguments:
 

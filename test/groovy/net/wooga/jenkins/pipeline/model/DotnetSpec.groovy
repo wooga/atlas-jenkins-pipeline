@@ -354,7 +354,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["--help", "--verbose"], null, false)
 
         then:
-        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool --help --verbose" }
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help --verbose" }
         runCall != null
         runCall.returnStatus == false
     }
@@ -368,7 +368,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", [], null, true)
 
         then:
-        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool" }
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool --" }
         runCall.returnStatus == true
     }
 
@@ -381,7 +381,23 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false)
 
         then:
-        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool arg" } != null
+        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
         jenkins.calls.sh.isEmpty()
+    }
+
+    def "runTool inserts -- so dotnet forwards option-like args to the tool instead of intercepting them"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", ["--help"], null, false)
+
+        then:
+        // without "--", `dotnet tool run mytool --help` would have dotnet's own CLI
+        // parser intercept --help and print dotnet's help instead of the tool's
+        // (confirmed by real execution) - "--" forces everything after it through
+        // to the tool verbatim.
+        jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help" } != null
     }
 }

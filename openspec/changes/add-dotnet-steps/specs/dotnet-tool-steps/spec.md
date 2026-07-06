@@ -18,13 +18,13 @@ The system SHALL provide a `withDotnetTool` shared step that provisions the .NET
 
 ### Requirement: runDotnetTool command step
 
-The system SHALL provide a `runDotnetTool` shared step that provisions the .NET SDK, installs a given NuGet package as a local dotnet tool (as `withDotnetTool` does), then runs it via `dotnet tool run <toolBinary>` with the given arguments. It SHALL accept a simple positional form (`runDotnetTool(packageId, toolBinary, args)`) and a map form supporting an optional `version` and a `returnStatus` option.
+The system SHALL provide a `runDotnetTool` shared step that provisions the .NET SDK, installs a given NuGet package as a local dotnet tool (as `withDotnetTool` does), then runs it via `dotnet tool run <toolBinary> -- <args>` with the given arguments. The `--` separator SHALL always be inserted before the forwarded arguments, so that argument values matching one of `dotnet`'s own CLI options (e.g. `--help`, `-h`) are passed through to the tool instead of being intercepted by `dotnet` itself. It SHALL accept a simple positional form (`runDotnetTool(packageId, toolBinary, args)`) and a map form supporting an optional `version` and a `returnStatus` option.
 
 #### Scenario: Simple form installs and runs the tool
 
 - **WHEN** a pipeline calls `runDotnetTool("MyTool", "mytool", ["--help"])`
 - **THEN** `MyTool` is installed as a local dotnet tool
-- **AND** `dotnet tool run mytool --help` is executed
+- **AND** `dotnet tool run mytool -- --help` is executed, so `--help` reaches the tool rather than being intercepted as a `dotnet` CLI option
 
 #### Scenario: returnStatus controls failure behavior
 

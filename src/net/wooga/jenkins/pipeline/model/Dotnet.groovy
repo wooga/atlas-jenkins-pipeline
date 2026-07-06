@@ -257,7 +257,11 @@ class Dotnet {
      */
     def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus) {
         return withTool(packageId, version) {
-            def command = (["dotnet", "tool", "run", toolBinary] + args).join(" ")
+            // The "--" separator is required: without it, dotnet's own CLI parser
+            // intercepts args that look like its own options (e.g. --help, -h) before
+            // they ever reach the tool, printing `dotnet tool run`'s help instead of
+            // forwarding the flag (confirmed by real execution).
+            def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
             if (jenkins.isUnix()) {
                 return jenkins.sh(script: command, returnStatus: returnStatus)
             } else {

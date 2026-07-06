@@ -1,9 +1,12 @@
 Provisions the requested .NET SDK (same as withDotnet: shared cache dir,
 wooga_nuget feed, artifactory_read credentials), installs the given NuGet
 package as a local (manifest-based) dotnet tool - creating a tool manifest if
-one doesn't already exist - then runs it via `dotnet tool run &lt;tool-binary&gt;`
-with the given args. The tool's package cache is redirected under the shared
-per-agent cache directory, same as withDotnetTool.
+one doesn't already exist - then runs it via `dotnet tool run &lt;tool-binary&gt;
+-- &lt;args&gt;` with the given args. A "--" separator is always inserted before
+the args so dotnet forwards option-like values (e.g. --help) to the tool
+instead of intercepting them as its own CLI options. The tool's package cache
+is redirected under the shared per-agent cache directory, same as
+withDotnetTool.
 
 usage: ```
 // simple form

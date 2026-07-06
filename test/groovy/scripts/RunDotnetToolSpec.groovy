@@ -31,7 +31,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") && it.contains("--create-manifest-if-needed") }
-        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool --help --verbose" }
+        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help --verbose" }
     }
 
     def "map form with an explicit version passes --allow-downgrade"() {
@@ -43,7 +43,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof String && it.contains("--version 1.2.3") && it.contains("--allow-downgrade") }
-        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool run" }
+        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- run" }
     }
 
     def "map form threads returnStatus through"() {
@@ -54,7 +54,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: [], returnStatus: true) }
 
         then:
-        def runCall = shArgs().find { it instanceof Map && it.script == "dotnet tool run mytool" }
+        def runCall = shArgs().find { it instanceof Map && it.script == "dotnet tool run mytool --" }
         runCall.returnStatus == true
     }
 
@@ -68,7 +68,20 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         batArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") }
-        batArgs().any { it instanceof Map && it.script == "dotnet tool run mytool --help" }
+        batArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help" }
         shArgs().isEmpty()
+    }
+
+    def "passes --help through to the tool instead of dotnet intercepting it"() {
+        given:
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { runDotnetTool("MyTool", "mytool", ["--help"]) }
+
+        then:
+        // Confirmed by real execution: without "--", dotnet's own CLI parser
+        // intercepts --help and prints its own help instead of the tool's.
+        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help" }
     }
 }
