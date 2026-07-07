@@ -91,3 +91,17 @@ Both `dotnetWrapper` and `withDotnet` SHALL, by default, idempotently register t
 
 - **WHEN** a caller passes `nuget: false` to the map form of `withDotnet` or `dotnetWrapper`
 - **THEN** no NuGet feed is registered and no credentials are bound for that invocation
+
+### Requirement: dotnet CLI state never touches the user's default locations
+
+`dotnetWrapper` and `withDotnet` SHALL unconditionally redirect `NUGET_PACKAGES` and `DOTNET_CLI_HOME` under the same shared per-agent cache directory used for the SDK itself, for every invocation, regardless of whether a NuGet source is configured. This SHALL hold for the SDK-only path as well as the tool path (`withDotnetTool`/`runDotnetTool`) — there is exactly one `DOTNET_CLI_HOME` scope per invocation, applied before any `dotnet` command (including NuGet feed registration) runs. Nothing this library does with `dotnet` SHALL ever write to the user's default `~/.nuget` or `~/.dotnet` locations.
+
+#### Scenario: NUGET_PACKAGES/DOTNET_CLI_HOME are redirected even with no NuGet config
+
+- **WHEN** a pipeline calls `withDotnet(nuget: false) { sh "dotnet build" }` or `dotnetWrapper(command: "build", nuget: false)`
+- **THEN** `NUGET_PACKAGES` and `DOTNET_CLI_HOME` are still set to locations under the shared cache directory for the duration of the block/command
+
+#### Scenario: dotnet CLI invocations fail fast if DOTNET_CLI_HOME is ever unset
+
+- **WHEN** any internal `dotnet` invocation this library makes (NuGet feed registration, tool install, tool run) somehow runs without `DOTNET_CLI_HOME` set
+- **THEN** it fails immediately with a clear error instead of silently writing to the user's default NuGet/dotnet locations

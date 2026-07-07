@@ -5,6 +5,11 @@ import tools.DeclarativeJenkinsSpec
 class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
     private static final String SCRIPT_PATH = "vars/runDotnetTool.groovy"
 
+    // Mirrors Dotnet.requireDotnetCliHomeSh()/requireDotnetCliHomeBat() - every
+    // dotnet invocation now prepends one of them.
+    private static final String CLI_HOME_GUARD_SH = '[ -n "$DOTNET_CLI_HOME" ] || { echo "[dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations" >&2; exit 1; }'
+    private static final String CLI_HOME_GUARD_BAT = 'if not defined DOTNET_CLI_HOME (echo [dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations 1>&2 & exit /b 1)'
+
     def setup() {
         helper.registerAllowedMethod("libraryResource", [String]) { String path -> "" }
         helper.registerAllowedMethod("powershell", [String]) { String script -> null }
@@ -31,7 +36,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") && it.contains("--create-manifest-if-needed") }
-        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help --verbose" }
+        shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help --verbose" }
     }
 
     def "map form with an explicit version passes --allow-downgrade"() {
@@ -43,7 +48,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any { it instanceof String && it.contains("--version 1.2.3") && it.contains("--allow-downgrade") }
-        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- run" }
+        shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- run" }
     }
 
     def "map form threads returnStatus through"() {
@@ -54,7 +59,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: [], returnStatus: true) }
 
         then:
-        def runCall = shArgs().find { it instanceof Map && it.script == "dotnet tool run mytool --" }
+        def runCall = shArgs().find { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool --" }
         runCall.returnStatus == true
     }
 
@@ -68,7 +73,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         batArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") }
-        batArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help" }
+        batArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_BAT} & dotnet tool run mytool -- --help" }
         shArgs().isEmpty()
     }
 
@@ -82,7 +87,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         then:
         // Confirmed by real execution: without "--", dotnet's own CLI parser
         // intercepts --help and prints its own help instead of the tool's.
-        shArgs().any { it instanceof Map && it.script == "dotnet tool run mytool -- --help" }
+        shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help" }
     }
 
     def "map form threads loginShell, umask and logCommandToStdErr through"() {
@@ -97,7 +102,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any {
-            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\ndotnet tool run mytool -- arg"
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg"
         }
     }
 }

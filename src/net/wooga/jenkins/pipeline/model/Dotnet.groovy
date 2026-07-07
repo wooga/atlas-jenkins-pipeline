@@ -81,7 +81,7 @@ class Dotnet {
     /**
      * Whether the current agent is unix-like, memoized after the first check.
      * `isUnix()` is a real Jenkins step - calling it directly at every branch
-     * point (cacheDir/install/withEnvList/toolCacheDir/toolEnv/ensureNuGetSource/
+     * point (cacheDir/install/withEnvList/toolCacheDir/nugetHomeEnv/ensureNuGetSource/
      * runTool/installTool) added a "Checks if running on a Unix-like node" step
      * to the build log for each call; an agent's OS can't change mid-build, so
      * a single cached check per instance is both correct and far less noisy.
@@ -183,12 +183,17 @@ class Dotnet {
 
     /**
      * Env entries exposing the installed SDK to a block or command: the
-     * cache dir set as DOTNET_ROOT and prepended to PATH.
+     * cache dir set as DOTNET_ROOT and prepended to PATH, plus NUGET_PACKAGES
+     * and DOTNET_CLI_HOME unconditionally redirected under the shared cache
+     * tree (see nugetHomeEnv()) - applied for every call this class makes,
+     * not just tool-related ones, so nothing done through this class (or a
+     * caller's block) can ever write to the user's default ~/.nuget or
+     * ~/.dotnet locations.
      */
     List<String> withEnvList() {
         def dir = cacheDir()
         def pathSeparator = isUnix() ? ':' : ';'
-        return ["DOTNET_ROOT=${dir}", "PATH=${dir}${pathSeparator}${jenkins.env.PATH}"]
+        return ["DOTNET_ROOT=${dir}", "PATH=${dir}${pathSeparator}${jenkins.env.PATH}"] + nugetHomeEnv()
     }
 
     /**
@@ -227,39 +232,77 @@ class Dotnet {
     /**
      * Registers the configured NuGet feed with the dotnet CLI if it isn't
      * already present. Idempotent and safe to call on every invocation: this
-     * writes to the user-level NuGet.Config, so on a persistent agent it's a
-     * no-op after the first run.
+     * always writes to the NuGet.Config under DOTNET_CLI_HOME (see
+     * withEnvList()/nugetHomeEnv()), never the user's real home, so on a
+     * persistent agent it's a no-op after the first run.
      *
-     * The leading echo/Write-Host is a permanent diagnostic, not just a
-     * one-off: DOTNET_CLI_HOME governs which NuGet.Config this actually
-     * writes to (see withTool()), and this call runs at least twice per
-     * withTool()/runTool() invocation (once at the SDK level, once again
-     * once DOTNET_CLI_HOME is redirected for the tool cache) - logging which
-     * scope each call ran under makes that visible in the build log instead
-     * of being an invisible implementation detail, which matters for
-     * diagnosing "package not found on my private feed" reports.
+     * The leading guard clause and the echo/Write-Host that follows it are
+     * permanent, not diagnostic scaffolding: DOTNET_CLI_HOME is always
+     * expected to be set by the time this runs (withEnvList() guarantees it
+     * for every call site in this class), so the guard fails loudly instead
+     * of silently falling back to the user's default ~/.nuget location if
+     * that invariant is ever broken by a future change, and the log line
+     * records which DOTNET_CLI_HOME scope was used - useful when diagnosing
+     * "package not found on my private feed" reports.
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
-            jenkins.sh "echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\${DOTNET_CLI_HOME:-<unset>}')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+            jenkins.sh "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
         } else {
-            jenkins.powershell "Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
+            jenkins.powershell "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
         }
     }
 
     /**
      * Cache directory for local dotnet tool packages and CLI resolver state,
      * kept under the same managed cache tree as the SDK itself rather than
-     * the default ~/.nuget/packages / ~/.dotnet locations.
+     * the default ~/.nuget/packages / ~/.dotnet locations. Despite the name
+     * (kept for API stability), this is now the single DOTNET_CLI_HOME/
+     * NUGET_PACKAGES redirect target for every dotnet invocation this class
+     * makes, not just tool-related ones - see nugetHomeEnv().
      */
     String toolCacheDir() {
         return isUnix() ? "${cacheDir()}/tools" : "${cacheDir()}\\tools"
     }
 
-    private List<String> toolEnv() {
+    /**
+     * NUGET_PACKAGES/DOTNET_CLI_HOME, unconditionally redirected under
+     * toolCacheDir(). Folded into withEnvList() so every withInstalledDotnet()
+     * call (SDK-only or tool-related) applies the same redirect - there is
+     * deliberately only ever one DOTNET_CLI_HOME scope per instance, which is
+     * also why ensureNuGetSource() only needs to run once per
+     * withInstalledDotnet() call: everything downstream (a caller's block,
+     * installTool(), runTool()) shares that same scope, so a source
+     * registered there is guaranteed visible to all of them.
+     */
+    private List<String> nugetHomeEnv() {
         def dir = toolCacheDir()
         def sep = isUnix() ? '/' : '\\'
         return ["NUGET_PACKAGES=${dir}${sep}packages", "DOTNET_CLI_HOME=${dir}"]
+    }
+
+    // Every dotnet invocation that could touch a NuGet.Config or the tool
+    // resolver cache must run with DOTNET_CLI_HOME pointed at our managed
+    // cache dir - withEnvList() always sets it (see nugetHomeEnv()), so it
+    // should never be unset in practice. These guards are a defensive
+    // backstop: if that invariant is ever broken by a future change, fail
+    // loudly instead of silently writing to the user's real ~/.nuget or
+    // ~/.dotnet. Three variants since this class shells out via sh (unix),
+    // powershell (unix/windows install + NuGet source registration), and bat
+    // (windows tool install/run) - each needs its own native syntax.
+    @NonCPS
+    private static String requireDotnetCliHomeSh() {
+        return '[ -n "$DOTNET_CLI_HOME" ] || { echo "[dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations" >&2; exit 1; }'
+    }
+
+    @NonCPS
+    private static String requireDotnetCliHomePs() {
+        return 'if (-not $env:DOTNET_CLI_HOME) { Write-Error "[dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations"; exit 1 }'
+    }
+
+    @NonCPS
+    private static String requireDotnetCliHomeBat() {
+        return 'if not defined DOTNET_CLI_HOME (echo [dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations 1>&2 & exit /b 1)'
     }
 
     /**
@@ -268,28 +311,14 @@ class Dotnet {
      * (manifest-based) dotnet tool in the current workspace - creating a
      * tool manifest if one doesn't exist - then runs the given block with it
      * invocable via `dotnet tool run <toolBinary>` (or `dotnet <toolBinary>`).
-     * The tool's package cache is redirected under toolCacheDir() for the
-     * block's duration, not the default ~/.nuget or ~/.dotnet locations.
+     * NUGET_PACKAGES/DOTNET_CLI_HOME are already redirected by
+     * withInstalledDotnet()'s withEnvList(), so no separate env scope or
+     * NuGet source re-registration is needed here.
      */
     def withTool(String packageId, String version = null, Closure block) {
         withInstalledDotnet {
-            jenkins.withEnv(toolEnv()) {
-                // DOTNET_CLI_HOME above redirects dotnet's user-level
-                // NuGet.Config to a location separate from the one
-                // withInstalledDotnet() already registered the feed under
-                // (confirmed by real execution: DOTNET_CLI_HOME genuinely
-                // changes which NuGet.Config dotnet nuget/dotnet tool
-                // reads and writes - a source registered under one value
-                // is invisible under another). Without re-registering here,
-                // `dotnet tool install` only ever sees the default nuget.org
-                // feed and fails to find a private package. ensureNuGetSource
-                // is idempotent, so calling it again in this scope is safe.
-                if (nugetSourceName) {
-                    ensureNuGetSource()
-                }
-                installTool(packageId, version)
-                block()
-            }
+            installTool(packageId, version)
+            block()
         }
     }
 
@@ -329,7 +358,7 @@ class Dotnet {
             if (isUnix()) {
                 return jenkins.sh(script: shScript(command, loginShell, umask, logCommandToStdErr), returnStatus: returnStatus)
             } else {
-                return jenkins.bat(script: command, returnStatus: returnStatus)
+                return jenkins.bat(script: "${requireDotnetCliHomeBat()} & ${command}", returnStatus: returnStatus)
             }
         }
     }
@@ -338,6 +367,8 @@ class Dotnet {
     // sh step to honour it. The PATH re-export comes right after it, before
     // logCommandToStdErr/umask, since a login shell's profile-sourcing may
     // have already clobbered PATH by the time the script body starts running.
+    // The DOTNET_CLI_HOME guard comes last, immediately before the actual
+    // command, since it's a precondition check for that command specifically.
     private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         List<String> lines = []
         if (loginShell) {
@@ -346,6 +377,7 @@ class Dotnet {
         }
         if (logCommandToStdErr) { lines << "set -x" }
         if (umask) { lines << "umask ${umask}" }
+        lines << requireDotnetCliHomeSh()
         lines << command
         return lines.join("\n")
     }
@@ -359,9 +391,9 @@ class Dotnet {
         def versionArgs = version ? " --version ${version} --allow-downgrade" : ""
         def command = "dotnet tool install ${packageId} --create-manifest-if-needed${versionArgs}"
         if (isUnix()) {
-            jenkins.sh command
+            jenkins.sh "${requireDotnetCliHomeSh()}; ${command}"
         } else {
-            jenkins.bat command
+            jenkins.bat "${requireDotnetCliHomeBat()} & ${command}"
         }
     }
 }

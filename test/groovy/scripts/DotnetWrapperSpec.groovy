@@ -124,6 +124,18 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         usedEnvironments.find { it["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass" } != null
     }
 
+    def "always redirects NUGET_PACKAGES/DOTNET_CLI_HOME under the shared cache tree, never the user's default locations"() {
+        given:
+        def dotnetWrapper = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { dotnetWrapper(command: "test") }
+
+        then:
+        usedEnvironments.find { it["NUGET_PACKAGES"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages" } != null
+        usedEnvironments.find { it["DOTNET_CLI_HOME"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools" } != null
+    }
+
     def "NuGet source and credentials can be overridden"() {
         given:
         credentials.addUsernamePassword("custom_creds", "custom-user", "custom-pass")

@@ -44,7 +44,7 @@ gradleWrapper "testEditMode -P unity.testBuildTargets=android"
 
 ### dotnetWrapper
 
-Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/jenkins-pipeline/dotnet` on unix, `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the command, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
+Provisions the requested .NET SDK into a shared per-agent cache directory (`~/.cache/jenkins-pipeline/dotnet` on unix, `%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet` on Windows) via Microsoft's official install scripts, then invokes `dotnet` for the current platform (Windows/Unix) against it. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the command, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup. `NUGET_PACKAGES` and `DOTNET_CLI_HOME` are also always redirected under that same shared cache directory (see `withDotnet`'s note below) — nothing this step does with `dotnet` ever touches the user's default `~/.nuget` or `~/.dotnet` locations.
 
 #### Arguments:
 
@@ -82,6 +82,8 @@ dotnetWrapper(command: "build", nuget: false)
 ### withDotnet
 
 Provisions the requested .NET SDK into the shared per-agent cache directory (same as `dotnetWrapper`) and runs the given block with it available on `PATH` (`DOTNET_ROOT` is also set), scoped to the block. Also idempotently registers the shared `wooga_nuget` NuGet feed (once per agent) and binds the `artifactory_read` Jenkins credential for the duration of the block, exporting `NuGetPackageSourceCredentials_wooga_nuget` so `dotnet restore`/`dotnet test` etc. can authenticate against it with no extra setup.
+
+`NUGET_PACKAGES` and `DOTNET_CLI_HOME` are also always redirected under the shared cache directory (`<cache-dir>/tools/packages` and `<cache-dir>/tools` respectively) for the duration of the block — this applies unconditionally, even with `nuget: false` or no NuGet config at all, so nothing this library does with `dotnet` (SDK-level or tool-level) can ever write to the user's default `~/.nuget` or `~/.dotnet` locations.
 
 #### Arguments:
 

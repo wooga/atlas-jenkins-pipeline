@@ -5,6 +5,13 @@ import spock.lang.Unroll
 
 class DotnetSpec extends Specification {
 
+    // Mirrors Dotnet.requireDotnetCliHomeSh()/requireDotnetCliHomeBat() - kept
+    // as literal constants here since those are private and every dotnet
+    // invocation now prepends one of them, so most sh/bat script assertions
+    // below need to account for it.
+    static final String CLI_HOME_GUARD_SH = '[ -n "$DOTNET_CLI_HOME" ] || { echo "[dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations" >&2; exit 1; }'
+    static final String CLI_HOME_GUARD_BAT = 'if not defined DOTNET_CLI_HOME (echo [dotnet] DOTNET_CLI_HOME is not set - refusing to run to avoid writing to the default NuGet/dotnet locations 1>&2 & exit /b 1)'
+
     static Expando fakeJenkins(boolean unix, Map<String, String> env = [:], boolean hasGlobalJson = false) {
         def jenkins = new Expando()
         jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: [], isUnix: 0]
@@ -187,12 +194,17 @@ class DotnetSpec extends Specification {
         jenkins.calls.powershell[0].toString().contains("-GlobalJson 'C:\\path\\o''brien\\global.json'")
     }
 
-    def "withEnvList exposes the cache dir on PATH and as DOTNET_ROOT"() {
+    def "withEnvList exposes the cache dir on PATH/DOTNET_ROOT and always redirects NUGET_PACKAGES/DOTNET_CLI_HOME"() {
         given:
         def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"]))
 
         expect:
-        dotnet.withEnvList() == ["DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet", "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin"]
+        dotnet.withEnvList() == [
+                "DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet",
+                "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin",
+                "NUGET_PACKAGES=/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages",
+                "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools",
+        ]
     }
 
     def "withEnvList uses a semicolon PATH separator on Windows"() {
@@ -200,7 +212,12 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"]))
 
         expect:
-        dotnet.withEnvList() == ["DOTNET_ROOT=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet", "PATH=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet;C:\\Windows"]
+        dotnet.withEnvList() == [
+                "DOTNET_ROOT=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet",
+                "PATH=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet;C:\\Windows",
+                "NUGET_PACKAGES=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\tools\\packages",
+                "DOTNET_CLI_HOME=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\tools",
+        ]
     }
 
     def "withInstalledDotnet installs the SDK then runs the block; no NuGet config means NuGet is never touched"() {
@@ -216,7 +233,12 @@ class DotnetSpec extends Specification {
         ran
         jenkins.calls.withCredentials.isEmpty()
         jenkins.calls.sh.size() == 1 // just the install wrapper, no nuget source call
-        jenkins.calls.withEnv == [["DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet", "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin"]]
+        jenkins.calls.withEnv == [[
+                "DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet",
+                "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin",
+                "NUGET_PACKAGES=/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages",
+                "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools",
+        ]]
     }
 
     def "withInstalledDotnet registers a NuGet source without binding credentials when only the source is given"() {
@@ -332,21 +354,21 @@ class DotnetSpec extends Specification {
         toolEnvCall.any { it.toString() == "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools" }
     }
 
-    def "withTool re-registers the NuGet source under the tool's redirected DOTNET_CLI_HOME"() {
-        given: "DOTNET_CLI_HOME redirects dotnet's user-level NuGet.Config independently of the real HOME" +
-                " (confirmed by real execution) - a source registered before toolEnv() takes effect is invisible" +
-                " to dotnet tool install/run unless it's re-registered under that same redirected scope too"
+    def "withTool registers the NuGet source exactly once, visible to installTool/runTool since there's only one DOTNET_CLI_HOME scope"() {
+        given: "NUGET_PACKAGES/DOTNET_CLI_HOME are unconditionally part of withEnvList() now (nugetHomeEnv()), so" +
+                " withInstalledDotnet's ensureNuGetSource() call already runs in the exact same scope installTool()/" +
+                " runTool() will use - no second, tool-specific registration call is needed anymore"
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins, null, null, null, "wooga_nuget", "https://example.com/index.json", null)
 
         when:
         dotnet.withTool("MyTool", null) { }
 
-        then: "ensureNuGetSource runs once for withInstalledDotnet's own (SDK-level) scope, and again inside toolEnv()'s scope"
-        jenkins.calls.sh.count { it.toString().contains("nuget add source") } == 2
+        then:
+        jenkins.calls.sh.count { it.toString().contains("nuget add source") } == 1
     }
 
-    def "withTool skips NuGet source re-registration when no NuGet config was given"() {
+    def "withTool registers no NuGet source when none was configured"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins)
@@ -380,7 +402,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["--help", "--verbose"], null, false)
 
         then:
-        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help --verbose" }
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help --verbose" }
         runCall != null
         runCall.returnStatus == false
     }
@@ -394,7 +416,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", [], null, true)
 
         then:
-        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool --" }
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool --" }
         runCall.returnStatus == true
     }
 
@@ -407,7 +429,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false)
 
         then:
-        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
+        jenkins.calls.bat.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_BAT} & dotnet tool run mytool -- arg" } != null
         jenkins.calls.sh.isEmpty()
     }
 
@@ -424,7 +446,7 @@ class DotnetSpec extends Specification {
         // parser intercept --help and print dotnet's help instead of the tool's
         // (confirmed by real execution) - "--" forces everything after it through
         // to the tool verbatim.
-        jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- --help" } != null
+        jenkins.calls.sh.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help" } != null
     }
 
     def "runTool defaults to a plain command with no loginShell/umask/logCommandToStdErr"() {
@@ -436,7 +458,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false)
 
         then:
-        jenkins.calls.sh.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
+        jenkins.calls.sh.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg" } != null
     }
 
     def "runTool with loginShell prepends a #!/bin/bash -l shebang and re-exports PATH"() {
@@ -453,7 +475,7 @@ class DotnetSpec extends Specification {
         // clobbering PATH before the tool command runs (confirmed by real execution:
         // without it, a profile resetting PATH makes `dotnet` unresolvable).
         jenkins.calls.sh.find {
-            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\ndotnet tool run mytool -- arg"
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg"
         } != null
     }
 
@@ -466,7 +488,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, null, true)
 
         then:
-        jenkins.calls.sh.find { it instanceof Map && it.script == "set -x\ndotnet tool run mytool -- arg" } != null
+        jenkins.calls.sh.find { it instanceof Map && it.script == "set -x\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg" } != null
     }
 
     def "runTool with umask prepends the umask command"() {
@@ -478,7 +500,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, "002", false)
 
         then:
-        jenkins.calls.sh.find { it instanceof Map && it.script == "umask 002\ndotnet tool run mytool -- arg" } != null
+        jenkins.calls.sh.find { it instanceof Map && it.script == "umask 002\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg" } != null
     }
 
     def "runTool combines loginShell, logCommandToStdErr and umask in the correct order"() {
@@ -490,9 +512,10 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
 
         then:
-        // shebang + PATH re-export must lead; logCommandToStdErr before umask so the umask command itself is traced too
+        // shebang + PATH re-export must lead; logCommandToStdErr before umask so the umask command itself is traced too;
+        // the DOTNET_CLI_HOME guard comes last, immediately before the actual command
         jenkins.calls.sh.find {
-            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\ndotnet tool run mytool -- arg"
+            it instanceof Map && it.script == "#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\nset -x\numask 002\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg"
         } != null
     }
 
@@ -505,7 +528,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
 
         then:
-        jenkins.calls.bat.find { it instanceof Map && it.script == "dotnet tool run mytool -- arg" } != null
+        jenkins.calls.bat.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_BAT} & dotnet tool run mytool -- arg" } != null
         jenkins.calls.sh.isEmpty()
     }
 
@@ -514,7 +537,7 @@ class DotnetSpec extends Specification {
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins, null, null, null, "wooga_nuget", "https://example.com/index.json", "artifactory_read")
 
-        when: "runTool touches install()/cacheDir()/withEnvList()/ensureNuGetSource()/toolCacheDir()/toolEnv()/installTool(), each of which used to call jenkins.isUnix() separately"
+        when: "runTool touches install()/cacheDir()/withEnvList()/ensureNuGetSource()/toolCacheDir()/nugetHomeEnv()/installTool(), each of which used to call jenkins.isUnix() separately"
         dotnet.runTool("MyTool", "mytool", ["--help"], null, false)
 
         then: "the real jenkins.isUnix() step is invoked only once per instance, not once per call site"

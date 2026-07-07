@@ -37,6 +37,12 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         blockEnv["DOTNET_ROOT"] == "/home/tester/.cache/jenkins-pipeline/dotnet"
         blockEnv["PATH"].startsWith("/home/tester/.cache/jenkins-pipeline/dotnet")
         blockEnv["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass"
+        // NUGET_PACKAGES/DOTNET_CLI_HOME are always redirected under the shared
+        // cache tree now, even for plain withDotnet (not just withDotnetTool),
+        // so nothing this library does with `dotnet` can ever write to the
+        // user's default ~/.nuget or ~/.dotnet locations.
+        blockEnv["NUGET_PACKAGES"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages"
+        blockEnv["DOTNET_CLI_HOME"] == "/home/tester/.cache/jenkins-pipeline/dotnet/tools"
     }
 
     def "installs with an explicit selector before running the block"() {
