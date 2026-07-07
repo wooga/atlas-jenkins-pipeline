@@ -229,12 +229,21 @@ class Dotnet {
      * already present. Idempotent and safe to call on every invocation: this
      * writes to the user-level NuGet.Config, so on a persistent agent it's a
      * no-op after the first run.
+     *
+     * The leading echo/Write-Host is a permanent diagnostic, not just a
+     * one-off: DOTNET_CLI_HOME governs which NuGet.Config this actually
+     * writes to (see withTool()), and this call runs at least twice per
+     * withTool()/runTool() invocation (once at the SDK level, once again
+     * once DOTNET_CLI_HOME is redirected for the tool cache) - logging which
+     * scope each call ran under makes that visible in the build log instead
+     * of being an invisible implementation detail, which matters for
+     * diagnosing "package not found on my private feed" reports.
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
-            jenkins.sh "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+            jenkins.sh "echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\${DOTNET_CLI_HOME:-<unset>}')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
         } else {
-            jenkins.powershell "if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
+            jenkins.powershell "Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
         }
     }
 
