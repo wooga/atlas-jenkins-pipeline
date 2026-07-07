@@ -256,6 +256,10 @@ class DotnetSpec extends Specification {
         nugetCall.script.contains("https://example.com/index.json")
         nugetCall.script.contains("my_source")
         nugetCall.script.contains("dotnet nuget list source") // checks before adding, for idempotency
+        nugetCall.script.contains("--configfile ./nuget.config") // registers into a local, workspace-relative config...
+        nugetCall.script.contains("dotnet new nugetconfig") // ...creating it first if it doesn't already exist
+        !nugetCall.script.contains("--username") // never write credentials into the file - see nugetCredentialsEnv()
+        !nugetCall.script.contains("--store-password-in-clear-text")
         jenkins.calls.withEnv.find { it.any { e -> e.toString().startsWith("NuGetPackageSourceCredentials_") } } == null
     }
 
@@ -273,6 +277,11 @@ class DotnetSpec extends Specification {
         nugetCall != null
         nugetCall.script.contains("https://example.com/index.json")
         nugetCall.script.contains("my_source")
+        nugetCall.script.contains("--configfile ./nuget.config")
+        // credentials flow exclusively via the env var below, never as CLI args on the
+        // nuget add source call itself, regardless of which NuGet.Config registered the source
+        !nugetCall.script.contains("--username")
+        !nugetCall.script.contains("--store-password-in-clear-text")
         jenkins.calls.withEnv[0].any { it.toString() == "NuGetPackageSourceCredentials_my_source=Username=fake-jfrog-user;Password=fake-jfrog-pass" }
     }
 
@@ -289,6 +298,10 @@ class DotnetSpec extends Specification {
         nugetCall != null
         nugetCall.script.contains("https://example.com/index.json")
         nugetCall.script.contains("my_source")
+        nugetCall.script.contains("--configfile ./nuget.config")
+        nugetCall.script.contains("dotnet new nugetconfig")
+        !nugetCall.script.contains("--username")
+        !nugetCall.script.contains("--store-password-in-clear-text")
     }
 
     def "toolCacheDir resolves under cacheDir on unix"() {

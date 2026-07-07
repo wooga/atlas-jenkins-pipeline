@@ -65,22 +65,23 @@ Each invocation of `dotnetWrapper` or `withDotnet` SHALL surface in the build lo
 
 ### Requirement: Automatic, overridable wooga_nuget feed registration and credentials
 
-Both `dotnetWrapper` and `withDotnet` SHALL, by default, idempotently register the company-wide private `wooga_nuget` NuGet feed with the dotnet CLI if it is not already registered on the current agent, and SHALL bind the `artifactory_read` Jenkins credential for the duration of the command/block, exporting a `NuGetPackageSourceCredentials_<source>` environment variable in the standard `Username=<user>;Password=<pass>` NuGet CLI format so that `dotnet restore` and similar commands can authenticate against the feed without the caller wiring this up themselves. The underlying `Dotnet` model class itself has no built-in knowledge of `wooga_nuget`/`artifactory_read` — these are wooga-specific defaults applied by the step scripts (`DotnetNugetConfig`), not hardcoded into the model. Callers of the map forms of `dotnetWrapper`/`withDotnet` MAY override the NuGet source name, source URL, and/or credentials ID, or opt out of NuGet setup entirely with `nuget: false`. The string form of `dotnetWrapper` has no place for these keys and always applies the defaults.
+Both `dotnetWrapper` and `withDotnet` SHALL, by default, idempotently register the company-wide private `wooga_nuget` NuGet feed with the dotnet CLI if it is not already registered, into a workspace-local `./nuget.config` file (created via `dotnet new nugetconfig` if one doesn't already exist), and SHALL bind the `artifactory_read` Jenkins credential for the duration of the command/block, exporting a `NuGetPackageSourceCredentials_<source>` environment variable in the standard `Username=<user>;Password=<pass>` NuGet CLI format so that `dotnet restore` and similar commands can authenticate against the feed without the caller wiring this up themselves. The underlying `Dotnet` model class itself has no built-in knowledge of `wooga_nuget`/`artifactory_read` — these are wooga-specific defaults applied by the step scripts (`DotnetNugetConfig`), not hardcoded into the model. Callers of the map forms of `dotnetWrapper`/`withDotnet` MAY override the NuGet source name, source URL, and/or credentials ID, or opt out of NuGet setup entirely with `nuget: false`. The string form of `dotnetWrapper` has no place for these keys and always applies the defaults.
 
-#### Scenario: NuGet feed is registered on first use on an agent
+#### Scenario: NuGet feed is registered on first use in a workspace
 
-- **WHEN** `withDotnet` or `dotnetWrapper` runs on an agent where the `wooga_nuget` feed is not yet registered
-- **THEN** the feed is registered with the dotnet CLI before the block/command runs
+- **WHEN** `withDotnet` or `dotnetWrapper` runs in a workspace where the `wooga_nuget` feed is not yet registered
+- **THEN** a `./nuget.config` is created (via `dotnet new nugetconfig`) if one doesn't already exist, and the feed is registered into it before the block/command runs
 
 #### Scenario: NuGet feed registration is idempotent
 
-- **WHEN** `withDotnet` or `dotnetWrapper` runs on an agent where the `wooga_nuget` feed is already registered (e.g. from a prior build)
+- **WHEN** `withDotnet` or `dotnetWrapper` runs in a workspace where the `wooga_nuget` feed is already registered (e.g. from a prior build in a persistent workspace)
 - **THEN** no attempt is made to re-register it, and no error occurs from the feed already existing
 
-#### Scenario: NuGet credentials are exported for the duration of the block/command
+#### Scenario: NuGet credentials are exported for the duration of the block/command, never written to a file
 
 - **WHEN** `withDotnet` or `dotnetWrapper` runs
 - **THEN** the `artifactory_read` credential is bound and `NuGetPackageSourceCredentials_wooga_nuget` is set to `Username=<bound username>;Password=<bound password>` for the duration of the block/command only
+- **AND** the credential is never passed as a `dotnet nuget add source` argument (e.g. `--username`/`--password`) and never written to `./nuget.config` or any other file
 
 #### Scenario: NuGet source and credentials can be overridden
 

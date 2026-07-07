@@ -231,10 +231,26 @@ class Dotnet {
 
     /**
      * Registers the configured NuGet feed with the dotnet CLI if it isn't
-     * already present. Idempotent and safe to call on every invocation: this
-     * always writes to the NuGet.Config under DOTNET_CLI_HOME (see
-     * withEnvList()/nugetHomeEnv()), never the user's real home, so on a
-     * persistent agent it's a no-op after the first run.
+     * already present, into a local, workspace-relative `./nuget.config`
+     * (created via `dotnet new nugetconfig` if it doesn't already exist)
+     * rather than the user-level NuGet.Config under DOTNET_CLI_HOME. This
+     * guarantees the registration actually takes effect for this workspace:
+     * a *project-level* nuget.config takes precedence over (and can fully
+     * override, via `<clear />`) any user-level config, so relying solely on
+     * the DOTNET_CLI_HOME-scoped user config risked the registration being
+     * silently invisible to `dotnet` if such a project-level config already
+     * existed or got created some other way. Idempotent and safe to call on
+     * every invocation - a no-op once the source is present, whether that's
+     * from a previous run in a persistent workspace or from this one.
+     *
+     * Deliberately does NOT pass credentials here (no --username/--password/
+     * --store-password-in-clear-text): storing a password in a file - even
+     * workspace-local - has a much larger blast radius than the env-var-based
+     * NuGetPackageSourceCredentials_<source> approach already used elsewhere
+     * in this class (see nugetCredentialsEnv()/withInstalledDotnet()), which
+     * NuGet reads directly from the process environment regardless of which
+     * NuGet.Config file registered the source name. That mechanism needs no
+     * changes here.
      *
      * The leading guard clause and the echo/Write-Host that follows it are
      * permanent, not diagnostic scaffolding: DOTNET_CLI_HOME is always
@@ -254,15 +270,15 @@ class Dotnet {
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
-            def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+            def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
             jenkins.sh(
                     label: addSourceCommand,
-                    script: "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || ${addSourceCommand}")
+                    script: "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }")
         } else {
-            def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}'"
+            def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' --configfile ./nuget.config"
             jenkins.powershell(
                     label: addSourceCommand,
-                    script: "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { ${addSourceCommand} }")
+                    script: "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { if (-not (Test-Path ./nuget.config)) { dotnet new nugetconfig }; ${addSourceCommand} }")
         }
     }
 
