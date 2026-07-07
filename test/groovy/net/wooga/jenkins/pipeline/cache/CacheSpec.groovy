@@ -131,7 +131,7 @@ class CacheSpec extends Specification {
         def cacheRoot = Files.createTempDirectory("cacheRoot").toFile()
         def jenkins = new FakeJenkins()
         jenkins.failMatchingSh = [
-                "^.*gtar\\s.+\$",
+                "^.*\\bg?tar\\s.+\$", // matches either gtar (macOS) or tar (Linux fallback, see Cache.tarCopy())
                 "^.*(rsync|rsync-new)\\s.+\$"
         ]
         jenkins.workspaceRoot.with {
@@ -166,7 +166,7 @@ class CacheSpec extends Specification {
         def projectCache = new File(cacheRoot, "project/branch")
         def jenkins = new FakeJenkins()
         jenkins.failMatchingSh = [
-                "^.*gtar\\s.+\$",
+                "^.*\\bg?tar\\s.+\$", // matches either gtar (macOS) or tar (Linux fallback, see Cache.tarCopy())
                 "^.*(rsync|rsync-new)\\s.+\$"
         ]
         projectCache.with {
@@ -193,7 +193,7 @@ class CacheSpec extends Specification {
         !success
         jenkins.shInvocations.size() > 0
         jenkins.shInvocations.collect{it.script.toString()}.with { _ ->
-            assert count {it.matches("^.*gtar\\s.+'${cacheRoot.absolutePath}/project/branch' -c 'testFolder/'.*\$") } == 1
+            assert count {it.matches("^.*\\bg?tar\\s.+'${cacheRoot.absolutePath}/project/branch' -c 'testFolder/'.*\$") } == 1
             assert count {it.matches("^.*rsync\\s.+'${cacheRoot.absolutePath}/project/branch/testFolder/' 'testFolder'.*\$") } == 1
         }
         !new File(jenkins.workspaceRoot,'project/branch/testFolder').exists()

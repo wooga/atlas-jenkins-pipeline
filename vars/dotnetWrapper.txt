@@ -1,0 +1,38 @@
+Provisions the requested .NET SDK into the shared per-agent cache directory
+(~/.cache/jenkins-pipeline/dotnet on unix, %LOCALAPPDATA%\cache\jenkins-pipeline\dotnet
+on Windows) and runs `dotnet &lt;command&gt;` against it.
+
+Selector resolution when no version/channel/globalJson argument is given:
+a global.json in the workspace root is used if present (its sdk.version's
+major.minor is tracked as a floating channel, matching GitHub Actions'
+setup-dotnet - bump your global.json to move to a newer SDK); otherwise the
+org-wide pinned default version is installed (see Dotnet.DEFAULT_VERSION).
+
+Also idempotently registers the shared "wooga_nuget" NuGet feed into a
+workspace-local ./nuget.config (created via `dotnet new nugetconfig` if one
+doesn't already exist - a project-level config takes precedence over a
+user-level one, so this guarantees the registration actually takes effect)
+and binds the 'artifactory_read' Jenkins credential for the duration of the
+command, exporting NuGetPackageSourceCredentials_wooga_nuget so
+`dotnet restore`/`dotnet test` etc. can authenticate against it with no
+extra setup - the credential is never written to nuget.config or any other
+file. Override with nugetSourceName/nugetSourceUrl/nugetCredentialsId,
+or opt out entirely with nuget: false (map form only - the string form always
+applies the defaults).
+
+usage: ```
+// string form - selector auto-detected (workspace global.json, else org-wide default)
+dotnetWrapper "build --configuration Release"
+
+// map form - explicit selector (at most one of version / channel / globalJson)
+dotnetWrapper(command: "test", channel: "8.0")
+dotnetWrapper(command: "test", version: "8.0.401")
+dotnetWrapper(command: "test", globalJson: "${env.WORKSPACE}/global.json")
+
+// returnStatus / returnStdout, mirroring gradleWrapper (mutually exclusive, as with the `sh` step)
+dotnetWrapper(command: "test", returnStatus: true)
+
+// custom NuGet feed/credentials, or opt out entirely
+dotnetWrapper(command: "nuget push out/*.nupkg", nugetSourceName: "wooga_nuget", nugetSourceUrl: "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json", nugetCredentialsId: "artifactory_publish")
+dotnetWrapper(command: "build", nuget: false)
+```
