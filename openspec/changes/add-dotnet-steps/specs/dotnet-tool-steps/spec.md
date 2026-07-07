@@ -55,3 +55,18 @@ Both `withDotnetTool` and `runDotnetTool` SHALL redirect the dotnet tool's packa
 
 - **WHEN** either step installs a tool
 - **THEN** the tool's package content is not written to the default `~/.nuget/packages` or `~/.dotnet` locations
+
+### Requirement: The configured NuGet feed remains visible under the redirected DOTNET_CLI_HOME
+
+`DOTNET_CLI_HOME` governs where `dotnet` reads and writes its user-level `NuGet.Config`, independently of the real `$HOME`. Because redirecting `DOTNET_CLI_HOME` for the tool cache (per the previous requirement) points at a different `NuGet.Config` than the one the SDK-level registration wrote to, a NuGet source registered before that redirection is invisible to `dotnet tool install`/`dotnet tool run`. The system SHALL therefore re-register the configured NuGet source (idempotently, same as the SDK-level registration) once `DOTNET_CLI_HOME` has been redirected for the tool cache, before installing or running the tool.
+
+#### Scenario: A configured NuGet source is visible to dotnet tool install
+
+- **WHEN** `withDotnetTool`/`runDotnetTool` is configured with a NuGet source (directly, or via the org-wide default applied by the `vars/*.groovy` step)
+- **THEN** `dotnet tool install` resolves the package from that source, not only the default `nuget.org` feed
+- **AND** this holds true regardless of whether the source was already registered under the real (non-redirected) `DOTNET_CLI_HOME`
+
+#### Scenario: No re-registration when no NuGet source is configured
+
+- **WHEN** `withTool`/`runTool` is used with no NuGet source configured at all
+- **THEN** no NuGet source registration is attempted under the redirected `DOTNET_CLI_HOME`

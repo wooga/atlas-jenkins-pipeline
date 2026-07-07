@@ -265,6 +265,19 @@ class Dotnet {
     def withTool(String packageId, String version = null, Closure block) {
         withInstalledDotnet {
             jenkins.withEnv(toolEnv()) {
+                // DOTNET_CLI_HOME above redirects dotnet's user-level
+                // NuGet.Config to a location separate from the one
+                // withInstalledDotnet() already registered the feed under
+                // (confirmed by real execution: DOTNET_CLI_HOME genuinely
+                // changes which NuGet.Config dotnet nuget/dotnet tool
+                // reads and writes - a source registered under one value
+                // is invisible under another). Without re-registering here,
+                // `dotnet tool install` only ever sees the default nuget.org
+                // feed and fails to find a private package. ensureNuGetSource
+                // is idempotent, so calling it again in this scope is safe.
+                if (nugetSourceName) {
+                    ensureNuGetSource()
+                }
                 installTool(packageId, version)
                 block()
             }

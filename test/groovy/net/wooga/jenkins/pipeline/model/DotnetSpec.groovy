@@ -332,6 +332,32 @@ class DotnetSpec extends Specification {
         toolEnvCall.any { it.toString() == "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools" }
     }
 
+    def "withTool re-registers the NuGet source under the tool's redirected DOTNET_CLI_HOME"() {
+        given: "DOTNET_CLI_HOME redirects dotnet's user-level NuGet.Config independently of the real HOME" +
+                " (confirmed by real execution) - a source registered before toolEnv() takes effect is invisible" +
+                " to dotnet tool install/run unless it's re-registered under that same redirected scope too"
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins, null, null, null, "wooga_nuget", "https://example.com/index.json", null)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then: "ensureNuGetSource runs once for withInstalledDotnet's own (SDK-level) scope, and again inside toolEnv()'s scope"
+        jenkins.calls.sh.count { it.toString().contains("nuget add source") } == 2
+    }
+
+    def "withTool skips NuGet source re-registration when no NuGet config was given"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then:
+        jenkins.calls.sh.count { it.toString().contains("nuget add source") } == 0
+    }
+
     def "withTool installs via bat on Windows"() {
         given:
         def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
