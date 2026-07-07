@@ -8,6 +8,7 @@ class WithDotnetToolSpec extends DeclarativeJenkinsSpec {
     def setup() {
         helper.registerAllowedMethod("libraryResource", [String]) { String path -> "" }
         helper.registerAllowedMethod("powershell", [String]) { String script -> null }
+        helper.registerAllowedMethod("powershell", [Map]) { Map args -> null }
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
@@ -32,7 +33,7 @@ class WithDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         ran
-        shArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") && it.contains("--create-manifest-if-needed") }
+        shArgs().any { it instanceof Map && it.script.contains("dotnet tool install MyTool") && it.script.contains("--create-manifest-if-needed") }
     }
 
     def "passes version and --allow-downgrade when a version is given"() {
@@ -45,7 +46,7 @@ class WithDotnetToolSpec extends DeclarativeJenkinsSpec {
         }
 
         then:
-        shArgs().any { it instanceof String && it.contains("--version 1.2.3") && it.contains("--allow-downgrade") }
+        shArgs().any { it instanceof Map && it.script.contains("--version 1.2.3") && it.script.contains("--allow-downgrade") }
     }
 
     def "redirects the tool cache under the shared cache dir"() {
@@ -73,7 +74,7 @@ class WithDotnetToolSpec extends DeclarativeJenkinsSpec {
         }
 
         then:
-        calls["bat"].collect { it.args[0] }.any { it instanceof String && it.contains("dotnet tool install MyTool") }
-        shArgs().every { !(it instanceof String && it.contains("dotnet tool install")) }
+        calls["bat"].collect { it.args[0] }.any { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
+        shArgs().every { !(it instanceof Map && it.script.contains("dotnet tool install")) }
     }
 }

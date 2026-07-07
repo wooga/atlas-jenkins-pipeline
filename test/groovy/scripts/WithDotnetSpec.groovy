@@ -8,6 +8,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
     def setup() {
         helper.registerAllowedMethod("libraryResource", [String]) { String path -> "" }
         helper.registerAllowedMethod("powershell", [String]) { String script -> null }
+        helper.registerAllowedMethod("powershell", [Map]) { Map args -> null }
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
@@ -115,9 +116,9 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
 
         then:
         ran
-        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        def nugetCall = shArgs().find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("custom_source")
+        nugetCall.script.contains("custom_source")
         usedEnvironments.find { it["NuGetPackageSourceCredentials_custom_source"] == "Username=custom-user;Password=custom-pass" } != null
     }
 

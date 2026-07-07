@@ -13,6 +13,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
     def setup() {
         helper.registerAllowedMethod("libraryResource", [String]) { String path -> "" }
         helper.registerAllowedMethod("powershell", [String]) { String script -> null }
+        helper.registerAllowedMethod("powershell", [Map]) { Map args -> null }
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
@@ -35,7 +36,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         inSandbox { runDotnetTool("MyTool", "mytool", ["--help", "--verbose"]) }
 
         then:
-        shArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") && it.contains("--create-manifest-if-needed") }
+        shArgs().any { it instanceof Map && it.script.contains("dotnet tool install MyTool") && it.script.contains("--create-manifest-if-needed") }
         shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help --verbose" }
     }
 
@@ -47,7 +48,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["run"], version: "1.2.3") }
 
         then:
-        shArgs().any { it instanceof String && it.contains("--version 1.2.3") && it.contains("--allow-downgrade") }
+        shArgs().any { it instanceof Map && it.script.contains("--version 1.2.3") && it.script.contains("--allow-downgrade") }
         shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- run" }
     }
 
@@ -72,7 +73,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         inSandbox { runDotnetTool("MyTool", "mytool", ["--help"]) }
 
         then:
-        batArgs().any { it instanceof String && it.contains("dotnet tool install MyTool") }
+        batArgs().any { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
         batArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_BAT} & dotnet tool run mytool -- --help" }
         shArgs().isEmpty()
     }

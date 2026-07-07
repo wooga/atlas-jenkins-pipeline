@@ -251,11 +251,11 @@ class DotnetSpec extends Specification {
 
         then:
         jenkins.calls.withCredentials.isEmpty()
-        def nugetCall = jenkins.calls.sh.find { it.toString().contains("nuget add source") }
+        def nugetCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("https://example.com/index.json")
-        nugetCall.contains("my_source")
-        nugetCall.contains("dotnet nuget list source") // checks before adding, for idempotency
+        nugetCall.script.contains("https://example.com/index.json")
+        nugetCall.script.contains("my_source")
+        nugetCall.script.contains("dotnet nuget list source") // checks before adding, for idempotency
         jenkins.calls.withEnv.find { it.any { e -> e.toString().startsWith("NuGetPackageSourceCredentials_") } } == null
     }
 
@@ -269,10 +269,10 @@ class DotnetSpec extends Specification {
 
         then:
         jenkins.calls.withCredentials == [[[credentialsId: "my_creds", usernameVariable: "JFROG_USER", passwordVariable: "JFROG_PASS"]]]
-        def nugetCall = jenkins.calls.sh.find { it.toString().contains("nuget add source") }
+        def nugetCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("https://example.com/index.json")
-        nugetCall.contains("my_source")
+        nugetCall.script.contains("https://example.com/index.json")
+        nugetCall.script.contains("my_source")
         jenkins.calls.withEnv[0].any { it.toString() == "NuGetPackageSourceCredentials_my_source=Username=fake-jfrog-user;Password=fake-jfrog-pass" }
     }
 
@@ -285,10 +285,10 @@ class DotnetSpec extends Specification {
         dotnet.withInstalledDotnet { }
 
         then:
-        def nugetCall = jenkins.calls.powershell.find { it.toString().contains("nuget add source") }
+        def nugetCall = jenkins.calls.powershell.find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("https://example.com/index.json")
-        nugetCall.contains("my_source")
+        nugetCall.script.contains("https://example.com/index.json")
+        nugetCall.script.contains("my_source")
     }
 
     def "toolCacheDir resolves under cacheDir on unix"() {
@@ -318,11 +318,11 @@ class DotnetSpec extends Specification {
 
         then:
         ran
-        def installCall = jenkins.calls.sh.find { it.toString().contains("dotnet tool install MyTool") }
+        def installCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
         installCall != null
-        installCall.contains("--create-manifest-if-needed")
-        !installCall.contains("--version")
-        !installCall.contains("--allow-downgrade")
+        installCall.script.contains("--create-manifest-if-needed")
+        !installCall.script.contains("--version")
+        !installCall.script.contains("--allow-downgrade")
     }
 
     def "withTool passes version and --allow-downgrade when a version is given"() {
@@ -334,9 +334,9 @@ class DotnetSpec extends Specification {
         dotnet.withTool("MyTool", "1.2.3") { }
 
         then:
-        def installCall = jenkins.calls.sh.find { it.toString().contains("dotnet tool install MyTool") }
-        installCall.contains("--version 1.2.3")
-        installCall.contains("--allow-downgrade")
+        def installCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
+        installCall.script.contains("--version 1.2.3")
+        installCall.script.contains("--allow-downgrade")
     }
 
     def "withTool redirects NUGET_PACKAGES and DOTNET_CLI_HOME under the tool cache dir"() {
@@ -389,7 +389,7 @@ class DotnetSpec extends Specification {
         dotnet.withTool("MyTool", null) { }
 
         then:
-        jenkins.calls.bat.find { it.toString().contains("dotnet tool install MyTool") } != null
+        jenkins.calls.bat.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") } != null
         jenkins.calls.sh.isEmpty()
     }
 

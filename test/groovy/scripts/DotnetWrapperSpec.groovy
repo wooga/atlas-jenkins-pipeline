@@ -8,6 +8,7 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
     def setup() {
         helper.registerAllowedMethod("libraryResource", [String]) { String path -> "" }
         helper.registerAllowedMethod("powershell", [String]) { String script -> null }
+        helper.registerAllowedMethod("powershell", [Map]) { Map args -> null }
         environment["HOME"] = "/home/tester"
         environment["LOCALAPPDATA"] = "C:\\Users\\tester\\AppData\\Local"
         environment["PATH"] = "/usr/bin"
@@ -118,9 +119,9 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         inSandbox { dotnetWrapper(command: "test") }
 
         then:
-        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        def nugetCall = shArgs().find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("wooga_nuget")
+        nugetCall.script.contains("wooga_nuget")
         usedEnvironments.find { it["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass" } != null
     }
 
@@ -147,10 +148,10 @@ class DotnetWrapperSpec extends DeclarativeJenkinsSpec {
         }
 
         then:
-        def nugetCall = shArgs().find { it instanceof String && it.contains("nuget add source") }
+        def nugetCall = shArgs().find { it instanceof Map && it.script.contains("nuget add source") }
         nugetCall != null
-        nugetCall.contains("custom_source")
-        nugetCall.contains("https://example.com/index.json")
+        nugetCall.script.contains("custom_source")
+        nugetCall.script.contains("https://example.com/index.json")
         usedEnvironments.find { it["NuGetPackageSourceCredentials_custom_source"] == "Username=custom-user;Password=custom-pass" } != null
     }
 

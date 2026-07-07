@@ -244,12 +244,25 @@ class Dotnet {
      * that invariant is ever broken by a future change, and the log line
      * records which DOTNET_CLI_HOME scope was used - useful when diagnosing
      * "package not found on my private feed" reports.
+     *
+     * label: is set to the actual `dotnet nuget add source` command (reusing
+     * the same string used in the script body, not a hand-written paraphrase,
+     * so the two can't drift apart) so the Jenkins UI's collapsed step
+     * summary shows the meaningful command instead of the guard clause -
+     * without it, Jenkins' fixed-width summary line shows the guard clause
+     * and truncates the real command off the end entirely.
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
-            jenkins.sh "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+            def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\""
+            jenkins.sh(
+                    label: addSourceCommand,
+                    script: "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || ${addSourceCommand}")
         } else {
-            jenkins.powershell "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' }"
+            def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}'"
+            jenkins.powershell(
+                    label: addSourceCommand,
+                    script: "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { ${addSourceCommand} }")
         }
     }
 
@@ -355,10 +368,15 @@ class Dotnet {
             // they ever reach the tool, printing `dotnet tool run`'s help instead of
             // forwarding the flag (confirmed by real execution).
             def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
+            // label: reuses the same command string shown in the script body
+            // (not a hand-written paraphrase) so the Jenkins UI's collapsed
+            // step summary shows the meaningful command instead of the guard
+            // clause, which would otherwise dominate the fixed-width summary
+            // line and truncate the real command off the end.
             if (isUnix()) {
-                return jenkins.sh(script: shScript(command, loginShell, umask, logCommandToStdErr), returnStatus: returnStatus)
+                return jenkins.sh(label: command, script: shScript(command, loginShell, umask, logCommandToStdErr), returnStatus: returnStatus)
             } else {
-                return jenkins.bat(script: "${requireDotnetCliHomeBat()} & ${command}", returnStatus: returnStatus)
+                return jenkins.bat(label: command, script: "${requireDotnetCliHomeBat()} & ${command}", returnStatus: returnStatus)
             }
         }
     }
@@ -390,10 +408,12 @@ class Dotnet {
     private void installTool(String packageId, String version) {
         def versionArgs = version ? " --version ${version} --allow-downgrade" : ""
         def command = "dotnet tool install ${packageId} --create-manifest-if-needed${versionArgs}"
+        // label: reuses the command string itself (see runTool()) rather than
+        // a paraphrase, for the same Jenkins-UI-summary reason.
         if (isUnix()) {
-            jenkins.sh "${requireDotnetCliHomeSh()}; ${command}"
+            jenkins.sh(label: command, script: "${requireDotnetCliHomeSh()}; ${command}")
         } else {
-            jenkins.bat "${requireDotnetCliHomeBat()} & ${command}"
+            jenkins.bat(label: command, script: "${requireDotnetCliHomeBat()} & ${command}")
         }
     }
 }
