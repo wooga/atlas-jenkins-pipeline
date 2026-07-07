@@ -1,0 +1,24 @@
+Provisions the requested .NET SDK (same as withDotnet: shared cache dir,
+wooga_nuget feed, artifactory_read credentials) and installs the given NuGet
+package as a local (manifest-based) dotnet tool in the current workspace -
+creating a tool manifest (`dotnet tool install --create-manifest-if-needed`)
+if one doesn't already exist. The tool's package cache is redirected under
+the shared per-agent cache directory (~/.cache/jenkins-pipeline/dotnet/tools on unix,
+%LOCALAPPDATA%\cache\jenkins-pipeline\dotnet\tools on Windows) via NUGET_PACKAGES/DOTNET_CLI_HOME,
+instead of the default ~/.nuget/packages / ~/.dotnet locations.
+
+Local tools are not exposed as a bare command on PATH - invoke them from the
+block via `dotnet tool run &lt;tool-binary&gt;` (or the `dotnet &lt;tool-binary&gt;`
+shorthand dotnet itself prints after install).
+
+usage: ```
+withDotnetTool("dotnet-ef") {
+    sh "dotnet tool run dotnet-ef -- database update"
+}
+
+// pin a specific version (passes --allow-downgrade so it also works when the
+// workspace's tool manifest already has a different version installed)
+withDotnetTool(packageId: "dotnet-ef", version: "8.0.4") {
+    sh "dotnet tool run dotnet-ef -- database update"
+}
+```

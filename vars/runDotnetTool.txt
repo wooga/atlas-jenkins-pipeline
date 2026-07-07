@@ -1,0 +1,50 @@
+Provisions the requested .NET SDK (same as withDotnet: shared cache dir,
+wooga_nuget feed, artifactory_read credentials), installs the given NuGet
+package as a local (manifest-based) dotnet tool - creating a tool manifest if
+one doesn't already exist - then runs it via `dotnet tool run &lt;tool-binary&gt;
+-- &lt;args&gt;` with the given args. A "--" separator is always inserted before
+the args so dotnet forwards option-like values (e.g. --help) to the tool
+instead of intercepting them as its own CLI options. The tool's package cache
+is redirected under the shared per-agent cache directory, same as
+withDotnetTool.
+
+Map-form-only, unix-only options (ignored on Windows - bat has no shebang,
+umask, or `set -x` equivalent):
+- loginShell (boolean, default false): run via a `#!/bin/bash -l` shebang
+  instead of Jenkins' default `sh -xe`, so the tool sees the same environment
+  a login shell would set up (e.g. profile-sourced PATH entries). A login
+  shell may re-source /etc/profile / ~/.bash_profile and overwrite PATH,
+  discarding the cache dir this library put on it - an
+  `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right after
+  the shebang to defend against that. This replaces Jenkins' default
+  invocation entirely, including its default -x tracing - pair with
+  logCommandToStdErr to opt back into that.
+- umask (string, optional): prepended as `umask &lt;value&gt;` before the
+  tool command.
+- logCommandToStdErr (boolean, default false): prepends `set -x` (echoes
+  each command to stderr before running it) - useful with loginShell since a
+  custom shebang loses Jenkins' own default tracing.
+
+usage: ```
+// simple form
+runDotnetTool("dotnet-ef", "dotnet-ef", ["database", "update"])
+
+// map form - explicit version (passes --allow-downgrade) and returnStatus
+runDotnetTool(
+    packageId: "dotnet-ef",
+    toolBinary: "dotnet-ef",
+    args: ["database", "update"],
+    version: "8.0.4",
+    returnStatus: true
+)
+
+// run via a login shell with explicit tracing and a shared-cache-safe umask
+runDotnetTool(
+    packageId: "dotnet-ef",
+    toolBinary: "dotnet-ef",
+    args: ["database", "update"],
+    loginShell: true,
+    logCommandToStdErr: true,
+    umask: "002"
+)
+```

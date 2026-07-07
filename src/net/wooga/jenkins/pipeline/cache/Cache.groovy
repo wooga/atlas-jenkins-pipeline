@@ -128,10 +128,16 @@ class Cache {
     static def tarCopy(Object j, String baseDir, String source, String destination) {
         //as unintuitive as it may sound, using gtar is __much__ faster than rsync to sync directories with a large amount of files.
         if (j.fileExists("$baseDir/$source")) {
-            def status = j.sh script: "umask 002 && gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --directory '$baseDir' -c '$source' | " +
-                    "gtar --atime-preserve='replace' --mode=u+rwxs,g+rwxs --group=nfs_share -xf - -C $destination", returnStatus: true
+            // macOS ships BSD tar as the default `tar`, so GNU tar is installed separately
+            // under the `gtar` name (Homebrew) there; Linux's own `tar` already is GNU tar,
+            // so no `gtar` binary exists on Linux agents at all - fall back to plain `tar`
+            // when `gtar` isn't on PATH, mirroring the rsync/rsync-new detection below.
+            def hasGtar = j.sh(script: "which gtar", returnStatus: true) == 0
+            def tarCommand = hasGtar ? "gtar" : "tar"
+            def status = j.sh script: "umask 002 && $tarCommand --atime-preserve='replace' --mode=u+rwxs,g+rwxs --directory '$baseDir' -c '$source' | " +
+                    "$tarCommand --atime-preserve='replace' --mode=u+rwxs,g+rwxs --group=nfs_share -xf - -C $destination", returnStatus: true
             if (status != 0) {
-                j.echo "Failed (exit code $status) to copy files from $source to $destination with gtar"
+                j.echo "Failed (exit code $status) to copy files from $source to $destination with $tarCommand"
                 return false
             }
             return true
