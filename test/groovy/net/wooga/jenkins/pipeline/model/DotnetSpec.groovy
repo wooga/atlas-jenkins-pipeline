@@ -194,7 +194,7 @@ class DotnetSpec extends Specification {
         jenkins.calls.powershell[0].toString().contains("-GlobalJson 'C:\\path\\o''brien\\global.json'")
     }
 
-    def "withEnvList exposes the cache dir on PATH/DOTNET_ROOT and always redirects NUGET_PACKAGES/DOTNET_CLI_HOME"() {
+    def "withEnvList exposes the cache dir on PATH/DOTNET_ROOT/DOTNET_BIN and always redirects NUGET_PACKAGES/DOTNET_CLI_HOME"() {
         given:
         def dotnet = new Dotnet(fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"]))
 
@@ -202,12 +202,13 @@ class DotnetSpec extends Specification {
         dotnet.withEnvList() == [
                 "DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet",
                 "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin",
+                "DOTNET_BIN=/home/tester/.cache/jenkins-pipeline/dotnet/dotnet",
                 "NUGET_PACKAGES=/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages",
                 "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools",
         ]
     }
 
-    def "withEnvList uses a semicolon PATH separator on Windows"() {
+    def "withEnvList uses a semicolon PATH separator and dotnet.exe on Windows"() {
         given:
         def dotnet = new Dotnet(fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"]))
 
@@ -215,6 +216,7 @@ class DotnetSpec extends Specification {
         dotnet.withEnvList() == [
                 "DOTNET_ROOT=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet",
                 "PATH=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet;C:\\Windows",
+                "DOTNET_BIN=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\dotnet.exe",
                 "NUGET_PACKAGES=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\tools\\packages",
                 "DOTNET_CLI_HOME=C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\tools",
         ]
@@ -236,6 +238,7 @@ class DotnetSpec extends Specification {
         jenkins.calls.withEnv == [[
                 "DOTNET_ROOT=/home/tester/.cache/jenkins-pipeline/dotnet",
                 "PATH=/home/tester/.cache/jenkins-pipeline/dotnet:/usr/bin",
+                "DOTNET_BIN=/home/tester/.cache/jenkins-pipeline/dotnet/dotnet",
                 "NUGET_PACKAGES=/home/tester/.cache/jenkins-pipeline/dotnet/tools/packages",
                 "DOTNET_CLI_HOME=/home/tester/.cache/jenkins-pipeline/dotnet/tools",
         ]]

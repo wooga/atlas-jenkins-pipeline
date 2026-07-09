@@ -183,17 +183,21 @@ class Dotnet {
 
     /**
      * Env entries exposing the installed SDK to a block or command: the
-     * cache dir set as DOTNET_ROOT and prepended to PATH, plus NUGET_PACKAGES
-     * and DOTNET_CLI_HOME unconditionally redirected under the shared cache
-     * tree (see nugetHomeEnv()) - applied for every call this class makes,
-     * not just tool-related ones, so nothing done through this class (or a
-     * caller's block) can ever write to the user's default ~/.nuget or
-     * ~/.dotnet locations.
+     * cache dir set as DOTNET_ROOT and prepended to PATH, DOTNET_BIN pointing
+     * at the dotnet executable itself (dotnet on unix, dotnet.exe on
+     * Windows) for callers that need the binary path rather than relying on
+     * PATH resolution, plus NUGET_PACKAGES and DOTNET_CLI_HOME
+     * unconditionally redirected under the shared cache tree (see
+     * nugetHomeEnv()) - applied for every call this class makes, not just
+     * tool-related ones, so nothing done through this class (or a caller's
+     * block) can ever write to the user's default ~/.nuget or ~/.dotnet
+     * locations.
      */
     List<String> withEnvList() {
         def dir = cacheDir()
         def pathSeparator = isUnix() ? ':' : ';'
-        return ["DOTNET_ROOT=${dir}", "PATH=${dir}${pathSeparator}${jenkins.env.PATH}"] + nugetHomeEnv()
+        def dotnetBin = isUnix() ? "${dir}/dotnet" : "${dir}\\dotnet.exe"
+        return ["DOTNET_ROOT=${dir}", "PATH=${dir}${pathSeparator}${jenkins.env.PATH}", "DOTNET_BIN=${dotnetBin}"] + nugetHomeEnv()
     }
 
     /**
