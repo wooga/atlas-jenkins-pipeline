@@ -19,7 +19,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         return calls["sh"].collect { it.args[0] }
     }
 
-    def "runs the block with the cache dir on PATH and DOTNET_ROOT set"() {
+    def "runs the block with the cache dir on PATH and DOTNET_ROOT/DOTNET_BIN set"() {
         given:
         def withDotnet = loadSandboxedScript(SCRIPT_PATH)
         def ran = false
@@ -37,6 +37,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         blockEnv != null
         blockEnv["DOTNET_ROOT"] == "/home/tester/.cache/jenkins-pipeline/dotnet"
         blockEnv["PATH"].startsWith("/home/tester/.cache/jenkins-pipeline/dotnet")
+        blockEnv["DOTNET_BIN"] == "/home/tester/.cache/jenkins-pipeline/dotnet/dotnet"
         blockEnv["NuGetPackageSourceCredentials_wooga_nuget"] == "Username=fake-jfrog-user;Password=fake-jfrog-pass"
         // NUGET_PACKAGES/DOTNET_CLI_HOME are always redirected under the shared
         // cache tree now, even for plain withDotnet (not just withDotnetTool),
@@ -99,6 +100,7 @@ class WithDotnetSpec extends DeclarativeJenkinsSpec {
         def blockEnv = usedEnvironments.find { it.containsKey("DOTNET_ROOT") }
         blockEnv != null
         blockEnv["DOTNET_ROOT"] == "C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet"
+        blockEnv["DOTNET_BIN"] == "C:\\Users\\tester\\AppData\\Local\\cache\\jenkins-pipeline\\dotnet\\dotnet.exe"
     }
 
     def "NuGet source and credentials can be overridden"() {
