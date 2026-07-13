@@ -6,17 +6,17 @@ class DotnetNugetConfigSpec extends Specification {
 
     def "mergeWithConfigMap keeps the defaults when the map has no overrides"() {
         given:
-        def merged = DotnetNugetConfig.standard.mergeWithConfigMap([:])
+        def merged = DotnetNugetConfig.standard().mergeWithConfigMap([:])
 
         expect:
-        merged.sourceName == DotnetNugetConfig.standard.sourceName
-        merged.sourceUrl == DotnetNugetConfig.standard.sourceUrl
-        merged.credentialsId == DotnetNugetConfig.standard.credentialsId
+        merged.sourceName == DotnetNugetConfig.standard().sourceName
+        merged.sourceUrl == DotnetNugetConfig.standard().sourceUrl
+        merged.credentialsId == DotnetNugetConfig.standard().credentialsId
     }
 
     def "mergeWithConfigMap overrides individual fields given in the map"() {
         given:
-        def merged = DotnetNugetConfig.standard.mergeWithConfigMap([
+        def merged = DotnetNugetConfig.standard().mergeWithConfigMap([
                 nugetSourceName   : "custom_source",
                 nugetSourceUrl    : "https://example.com/index.json",
                 nugetCredentialsId: "custom_creds",
@@ -30,7 +30,7 @@ class DotnetNugetConfigSpec extends Specification {
 
     def "mergeWithConfigMap returns an empty config when nuget: false"() {
         given:
-        def merged = DotnetNugetConfig.standard.mergeWithConfigMap([nuget: false, nugetSourceName: "ignored"])
+        def merged = DotnetNugetConfig.standard().mergeWithConfigMap([nuget: false, nugetSourceName: "ignored"])
 
         expect:
         merged.sourceName == null

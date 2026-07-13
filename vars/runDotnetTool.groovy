@@ -7,12 +7,12 @@ import net.wooga.jenkins.pipeline.config.DotnetNugetConfig
  * tool, and runs toolBinary against it via `dotnet tool run`
  */
 def call(String packageId, String toolBinary, List<String> args = []) {
-    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard.toDotnetArgs())
+    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard().toDotnetArgs())
     return dotnet.runTool(packageId, toolBinary, args, null, false)
 }
 
 def call(Map args) {
-    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard.toDotnetArgs())
+    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard().toDotnetArgs())
     return dotnet.runTool(
             args.packageId?.toString(),
             args.toolBinary?.toString(),

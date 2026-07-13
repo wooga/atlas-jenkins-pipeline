@@ -12,11 +12,19 @@ package net.wooga.jenkins.pipeline.config
  */
 class DotnetNugetConfig {
 
-    static final DotnetNugetConfig standard = new DotnetNugetConfig(
-            "wooga_nuget",
-            "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json",
-            "artifactory_read"
-    )
+    /**
+     * Lazily constructed rather than a static final field: a static initializer
+     * calling `new DotnetNugetConfig(...)` gets classloaded (and its `new` call
+     * sandbox-checked) the first time an untrusted Jenkinsfile triggers this
+     * class, which script-security rejects even though this library is trusted.
+     */
+    static DotnetNugetConfig standard() {
+        return new DotnetNugetConfig(
+                "wooga_nuget",
+                "https://wooga.jfrog.io/artifactory/api/nuget/v3/wooga_nuget/index.json",
+                "artifactory_read"
+        )
+    }
 
     final String sourceName
     final String sourceUrl
