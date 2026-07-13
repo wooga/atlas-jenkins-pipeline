@@ -7,11 +7,11 @@ import net.wooga.jenkins.pipeline.config.DotnetNugetConfig
  * tool, and runs the given block with it invocable via `dotnet tool run`
  */
 def call(String packageId, Closure block) {
-    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard.toDotnetArgs())
+    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard().toDotnetArgs())
     return dotnet.withTool(packageId, null, block)
 }
 
 def call(Map opts, Closure block) {
-    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard.toDotnetArgs())
+    def dotnet = Dotnet.fromJenkins(this, DotnetNugetConfig.standard().toDotnetArgs())
     return dotnet.withTool(opts.packageId?.toString(), opts.version as String, block)
 }
