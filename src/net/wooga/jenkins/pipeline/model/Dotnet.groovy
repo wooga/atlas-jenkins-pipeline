@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
 import com.cloudbees.groovy.cps.NonCPS
+import net.wooga.jenkins.pipeline.cache.LockDir
 
 /**
  * Installs the .NET SDK into a shared per-agent cache directory (via the
@@ -271,19 +272,38 @@ class Dotnet {
      * summary shows the meaningful command instead of the guard clause -
      * without it, Jenkins' fixed-width summary line shows the guard clause
      * and truncates the real command off the end entirely.
+     *
+     * On unix, the check-then-create-then-add sequence below is wrapped in a
+     * workspace-relative lock (LockDir on nugetConfigLockDir()) so concurrent
+     * invocations sharing a workspace can't race `dotnet new nugetconfig`
+     * (confirmed by real execution: exit code 73, refuses to overwrite an
+     * existing file). Windows is not covered here.
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
             def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
-            jenkins.sh(
-                    label: addSourceCommand,
-                    script: "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }")
+            new LockDir(jenkins, nugetConfigLockDir(), "NuGet config").withLock {
+                jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
+            }
         } else {
             def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' --configfile ./nuget.config"
             jenkins.powershell(
                     label: addSourceCommand,
                     script: "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { if (-not (Test-Path ./nuget.config)) { dotnet new nugetconfig }; ${addSourceCommand} }")
         }
+    }
+
+    private String ensureNuGetSourceScriptSh(String addSourceCommand) {
+        return [
+                requireDotnetCliHomeSh(),
+                "echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2",
+                "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }",
+        ].join("\n")
+    }
+
+    // Workspace-relative, sibling to the ./nuget.config it protects.
+    private String nugetConfigLockDir() {
+        return "./nuget.config.lock"
     }
 
     /**
@@ -431,9 +451,37 @@ class Dotnet {
         // label: reuses the command string itself (see runTool()) rather than
         // a paraphrase, for the same Jenkins-UI-summary reason.
         if (isUnix()) {
-            jenkins.sh(label: command, script: "${requireDotnetCliHomeSh()}; ${command}")
+            // Concurrent runs on one agent share NUGET_PACKAGES/DOTNET_CLI_HOME
+            // (see nugetHomeEnv()), so simultaneous `dotnet tool install`s can
+            // race restoring the same package into that shared packages folder
+            // (confirmed by real execution: "The process cannot access the
+            // file '....nupkg' because it is being used by another process").
+            // The lock is agent-wide (one dir, not per package/version), since
+            // NUGET_PACKAGES also holds shared transitive-dependency packages
+            // different tools could race on. Windows (bat) is not covered.
+            new LockDir(jenkins, toolInstallLockDir(), "tool install").withLock {
+                jenkins.sh(label: command, script: toolInstallScriptSh(command))
+            }
         } else {
             jenkins.bat(label: command, script: "${requireDotnetCliHomeBat()} & ${command}")
         }
+    }
+
+    // Agent-wide, a sibling of the shared tool cache it protects.
+    private String toolInstallLockDir() {
+        return "${toolCacheDir()}.tool-install.lock"
+    }
+
+    // TMPDIR is echoed as a diagnostic (not asserted on in tests) - dotnet's
+    // own package-extraction locking is TMPDIR-scoped, so seeing whether
+    // TMPDIR is workspace-scoped or shared agent-wide here explains why that
+    // locking alone didn't prevent the race the surrounding lock now guards
+    // against.
+    private String toolInstallScriptSh(String command) {
+        return [
+                requireDotnetCliHomeSh(),
+                'echo "[dotnet] TMPDIR=\'$TMPDIR\' WORKSPACE=\'$WORKSPACE\'" >&2',
+                command,
+        ].join("\n")
     }
 }
