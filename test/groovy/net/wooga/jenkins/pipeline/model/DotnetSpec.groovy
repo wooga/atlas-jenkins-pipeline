@@ -22,7 +22,9 @@ class DotnetSpec extends Specification {
             jenkins.calls.withEnv << envList
             body.call()
         }
-        jenkins.sh = { Object arg -> jenkins.calls.sh << arg }
+        // Return 0 for returnStatus calls (e.g. Lockfile's acquire) so the lock
+        // reports "acquired" and the wrapped work runs; null otherwise.
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; (arg instanceof Map && arg.returnStatus) ? 0 : null }
         jenkins.bat = { Object arg -> jenkins.calls.bat << arg }
         jenkins.powershell = { Object arg -> jenkins.calls.powershell << arg }
         jenkins.writeFile = { Map args -> jenkins.calls.writeFile << args }
@@ -305,10 +307,10 @@ class DotnetSpec extends Specification {
         nugetCall.script.contains("dotnet new nugetconfig")
         !nugetCall.script.contains("--username")
         !nugetCall.script.contains("--store-password-in-clear-text")
-        !nugetCall.script.contains("NUGETCFG_LOCK_DIR") // unix-only, matching the tool-install lock's scope
+        jenkins.calls.sh.isEmpty() // no unix sh lock on Windows (uses powershell/bat only)
     }
 
-    def "withInstalledDotnet serializes concurrent NuGet source registration with a lock"() {
+    def "withInstalledDotnet serializes concurrent NuGet source registration by acquiring a workspace lock"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins, null, null, null, "my_source", "https://example.com/index.json", null)
@@ -316,22 +318,22 @@ class DotnetSpec extends Specification {
         when:
         dotnet.withInstalledDotnet { }
 
-        then:
-        def nugetCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("nuget add source") }
-        nugetCall != null
-        def script = nugetCall.script
-        script.contains('DOTNET_NUGETCFG_LOCK_DIR="./nuget.config.lock"')
-        script.contains('while ! mkdir "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; do')
-        script.contains('trap \'if [ "$DOTNET_NUGETCFG_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2; fi\' EXIT INT TERM')
-        script.contains('Acquired NuGet config lock')
-        script.contains('Released NuGet config lock')
-        // no stale-lock timeout/self-heal logic - unlike the per-agent tool-install lock,
-        // this lock lives inside the workspace, which gets wiped wholesale on a stuck/killed
-        // build anyway, so an orphaned lock dir doesn't need its own recovery mechanism
-        !script.contains("LOCK_TIMEOUT")
-        !script.contains("stale lock")
-        // the lock wraps the whole check-then-create-then-add sequence, not just part of it
-        script.indexOf('DOTNET_NUGETCFG_LOCK_DIR=') < script.indexOf('dotnet nuget list source')
+        then: "acquisition is a separate sh (via Lockfile) running an atomic mkdir loop on a workspace-relative lock dir"
+        def acquire = jenkins.calls.sh.find { it instanceof Map && it.script.contains('_LOCK_DIR="./nuget.config.lock"') }
+        acquire != null
+        acquire.returnStatus == true
+        acquire.script.contains('while ! mkdir "$_LOCK_DIR" 2>/dev/null; do')
+        acquire.script.contains('breaking stale lock') // shared Lockfile gives this a stale-break timeout too now
+        acquire.script.contains('Acquired NuGet config lock')
+
+        and: "the check-then-create-then-add sequence runs unlocked (the lock is the surrounding Lockfile, not inline)"
+        def addCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet nuget list source") }
+        addCall != null
+        addCall.script.contains("dotnet new nugetconfig")
+        !addCall.script.contains("_LOCK_DIR")
+
+        and: "the lock is released afterward"
+        jenkins.calls.sh.any { it instanceof Map && it.script.contains("Released NuGet config lock") }
     }
 
     def "toolCacheDir resolves under cacheDir on unix"() {
@@ -436,7 +438,7 @@ class DotnetSpec extends Specification {
         jenkins.calls.sh.isEmpty()
     }
 
-    def "withTool serializes concurrent installs with a self-healing lock"() {
+    def "withTool serializes concurrent installs by acquiring an agent-wide lock"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins)
@@ -444,18 +446,22 @@ class DotnetSpec extends Specification {
         when:
         dotnet.withTool("MyTool", null) { }
 
-        then:
+        then: "acquisition is a separate sh (via Lockfile) running an atomic mkdir loop on an agent-wide lock dir"
+        def acquire = jenkins.calls.sh.find { it instanceof Map && it.script.contains('_LOCK_DIR="/home/tester/.cache/jenkins-pipeline/dotnet/tools.tool-install.lock"') }
+        acquire != null
+        acquire.returnStatus == true
+        acquire.script.contains('while ! mkdir "$_LOCK_DIR" 2>/dev/null; do')
+        acquire.script.contains('breaking stale lock')
+        acquire.script.contains('Acquired tool install lock')
+
+        and: "the install runs unlocked (the lock is the surrounding Lockfile, not inline)"
         def installCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
         installCall != null
-        def script = installCall.script
-        script.contains('DOTNET_TOOL_LOCK_DIR="/home/tester/.cache/jenkins-pipeline/dotnet/tools.tool-install.lock"')
-        script.contains('DOTNET_TOOL_LOCK_TIMEOUT="${DOTNET_TOOL_INSTALL_LOCK_TIMEOUT:-300}"')
-        script.contains('while ! mkdir "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; do')
-        script.contains('breaking stale lock')
-        script.contains('rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true')
-        script.contains('trap \'if [ "$DOTNET_TOOL_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released tool install lock: $DOTNET_TOOL_LOCK_DIR" >&2; fi\' EXIT INT TERM')
-        script.contains('Acquired tool install lock')
-        script.contains('Released tool install lock')
+        installCall.script.contains("--create-manifest-if-needed")
+        !installCall.script.contains("_LOCK_DIR")
+
+        and: "the lock is released afterward"
+        jenkins.calls.sh.any { it instanceof Map && it.script.contains("Released tool install lock") }
     }
 
     def "withTool does not lock on Windows"() {
@@ -469,8 +475,8 @@ class DotnetSpec extends Specification {
         then:
         def installCall = jenkins.calls.bat.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
         installCall != null
-        !installCall.script.contains("DOTNET_TOOL_LOCK_DIR")
         !installCall.script.contains("mkdir")
+        jenkins.calls.sh.isEmpty() // no unix sh lock on Windows
     }
 
     def "runTool runs the tool via dotnet tool run with args"() {

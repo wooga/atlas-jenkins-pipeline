@@ -1,6 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
 import com.cloudbees.groovy.cps.NonCPS
+import net.wooga.jenkins.pipeline.cache.Lockfile
 
 /**
  * Installs the .NET SDK into a shared per-agent cache directory (via the
@@ -273,7 +274,7 @@ class Dotnet {
      * and truncates the real command off the end entirely.
      *
      * On unix, the check-then-create-then-add sequence below is wrapped in a
-     * workspace-relative lock (see nugetConfigLockPreambleSh()) so concurrent
+     * workspace-relative lock (Lockfile on nugetConfigLockDir()) so concurrent
      * invocations sharing a workspace can't race `dotnet new nugetconfig`
      * (confirmed by real execution: exit code 73, refuses to overwrite an
      * existing file). Windows is not covered here.
@@ -281,7 +282,10 @@ class Dotnet {
     private void ensureNuGetSource() {
         if (isUnix()) {
             def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
-            jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
+            new Lockfile(jenkins, nugetConfigLockDir(), "NuGet config").withLock(
+                    mode: Lockfile.BREAK_STALE, timeoutSeconds: nugetConfigLockTimeoutSeconds()) {
+                jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
+            }
         } else {
             def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' --configfile ./nuget.config"
             jenkins.powershell(
@@ -294,7 +298,6 @@ class Dotnet {
         return [
                 requireDotnetCliHomeSh(),
                 "echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2",
-                nugetConfigLockPreambleSh(nugetConfigLockDir()),
                 "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }",
         ].join("\n")
     }
@@ -304,23 +307,9 @@ class Dotnet {
         return "./nuget.config.lock"
     }
 
-    // Same atomic mkdir-as-mutex shape as toolInstallLockPreambleSh(), minus
-    // its stale-lock timeout: this lock lives in the workspace, which gets
-    // wiped wholesale on a stuck/killed build anyway.
-    @NonCPS
-    private static String nugetConfigLockPreambleSh(String lockDir) {
-        return [
-                "DOTNET_NUGETCFG_LOCK_DIR=\"${lockDir}\"",
-                'DOTNET_NUGETCFG_OWNS_LOCK=0',
-                'mkdir -p "$(dirname "$DOTNET_NUGETCFG_LOCK_DIR")"',
-                'trap \'if [ "$DOTNET_NUGETCFG_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2; fi\' EXIT INT TERM',
-                'while ! mkdir "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; do',
-                '  echo "[dotnet] Waiting for NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\'..." >&2',
-                '  sleep 2',
-                'done',
-                'DOTNET_NUGETCFG_OWNS_LOCK=1',
-                'echo "[dotnet] Acquired NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2',
-        ].join("\n")
+    // Stale-lock timeout for the NuGet config lock, overridable via env.
+    private int nugetConfigLockTimeoutSeconds() {
+        return (jenkins.env.DOTNET_NUGET_CONFIG_LOCK_TIMEOUT ?: 300) as int
     }
 
     /**
@@ -468,70 +457,42 @@ class Dotnet {
         // label: reuses the command string itself (see runTool()) rather than
         // a paraphrase, for the same Jenkins-UI-summary reason.
         if (isUnix()) {
-            jenkins.sh(label: command, script: toolInstallScriptSh(command))
+            // Concurrent runs on one agent share NUGET_PACKAGES/DOTNET_CLI_HOME
+            // (see nugetHomeEnv()), so simultaneous `dotnet tool install`s can
+            // race restoring the same package into that shared packages folder
+            // (confirmed by real execution: "The process cannot access the
+            // file '....nupkg' because it is being used by another process").
+            // The lock is agent-wide (one dir, not per package/version), since
+            // NUGET_PACKAGES also holds shared transitive-dependency packages
+            // different tools could race on. Windows (bat) is not covered.
+            new Lockfile(jenkins, toolInstallLockDir(), "tool install").withLock(
+                    mode: Lockfile.BREAK_STALE, timeoutSeconds: toolInstallLockTimeoutSeconds()) {
+                jenkins.sh(label: command, script: toolInstallScriptSh(command))
+            }
         } else {
             jenkins.bat(label: command, script: "${requireDotnetCliHomeBat()} & ${command}")
         }
     }
 
-    // Every dotnet-tool-install-capable withInstalledDotnet() call on a given
-    // agent redirects NUGET_PACKAGES/DOTNET_CLI_HOME to the same shared
-    // toolCacheDir() (see nugetHomeEnv()) - so concurrent pipeline runs on
-    // that agent can race restoring the same package into that shared
-    // packages folder (confirmed by real execution: "The process cannot
-    // access the file '....nupkg' because it is being used by another
-    // process"). dotnet's own NuGet locking doesn't reliably serialize this
-    // across separate processes/pipelines, so we add our own agent-level
-    // lock - one lock dir per agent (not per package/version), since
-    // NUGET_PACKAGES also holds shared transitive-dependency packages that
-    // different tools could race on too. Windows is not covered here (bat
-    // has no trap/mkdir-as-mutex equivalent); the observed race is unix/macOS
-    // only.
+    // Agent-wide, a sibling of the shared tool cache it protects.
     private String toolInstallLockDir() {
         return "${toolCacheDir()}.tool-install.lock"
     }
 
-    // Mirrors the atomic mkdir-as-mutex, self-healing lock already proven in
-    // resources/dotnet/dotnet-install.sh's acquire_lock() for serializing SDK
-    // installs - same stale-lock-timeout-and-break behavior, ported to the
-    // Jenkins sh step's POSIX sh (not bash: no `local`, since Jenkins' sh step
-    // isn't guaranteed to run as bash). Guarded by an explicit ownership flag
-    // so a run killed while still waiting for the lock (never having acquired
-    // it) doesn't delete a lock another run legitimately holds.
-    @NonCPS
-    private static String toolInstallLockPreambleSh(String lockDir) {
-        return [
-                "DOTNET_TOOL_LOCK_DIR=\"${lockDir}\"",
-                'DOTNET_TOOL_LOCK_TIMEOUT="${DOTNET_TOOL_INSTALL_LOCK_TIMEOUT:-300}"',
-                'DOTNET_TOOL_OWNS_LOCK=0',
-                'mkdir -p "$(dirname "$DOTNET_TOOL_LOCK_DIR")"',
-                'trap \'if [ "$DOTNET_TOOL_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released tool install lock: $DOTNET_TOOL_LOCK_DIR" >&2; fi\' EXIT INT TERM',
-                'while ! mkdir "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; do',
-                '  _now="$(date +%s)"',
-                '  _mtime="$(stat -c %Y "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || stat -f %m "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || echo "$_now")"',
-                '  _age=$(( _now - _mtime ))',
-                '  if [ "$_age" -ge "$DOTNET_TOOL_LOCK_TIMEOUT" ]; then',
-                '    echo "[dotnet] tool install lock \'$DOTNET_TOOL_LOCK_DIR\' held ${_age}s (>= ${DOTNET_TOOL_LOCK_TIMEOUT}s); breaking stale lock" >&2',
-                '    rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true',
-                '    continue',
-                '  fi',
-                '  echo "[dotnet] Waiting for tool install lock \'$DOTNET_TOOL_LOCK_DIR\' (age ${_age}s)..." >&2',
-                '  sleep 2',
-                'done',
-                'DOTNET_TOOL_OWNS_LOCK=1',
-                'echo "[dotnet] Acquired tool install lock: $DOTNET_TOOL_LOCK_DIR" >&2',
-        ].join("\n")
+    // Stale-lock timeout for the tool install lock, overridable via env.
+    private int toolInstallLockTimeoutSeconds() {
+        return (jenkins.env.DOTNET_TOOL_INSTALL_LOCK_TIMEOUT ?: 300) as int
     }
 
     // TMPDIR is echoed as a diagnostic (not asserted on in tests) - dotnet's
     // own package-extraction locking is TMPDIR-scoped, so seeing whether
     // TMPDIR is workspace-scoped or shared agent-wide here explains why that
-    // locking alone didn't prevent the race this method now guards against.
+    // locking alone didn't prevent the race the surrounding lock now guards
+    // against.
     private String toolInstallScriptSh(String command) {
         return [
                 requireDotnetCliHomeSh(),
                 'echo "[dotnet] TMPDIR=\'$TMPDIR\' WORKSPACE=\'$WORKSPACE\'" >&2',
-                toolInstallLockPreambleSh(toolInstallLockDir()),
                 command,
         ].join("\n")
     }
