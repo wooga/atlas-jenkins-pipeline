@@ -409,6 +409,42 @@ class DotnetSpec extends Specification {
         jenkins.calls.sh.isEmpty()
     }
 
+    def "withTool serializes concurrent installs with a self-healing lock"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then:
+        def installCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
+        installCall != null
+        def script = installCall.script
+        script.contains('DOTNET_TOOL_LOCK_DIR="/home/tester/.cache/jenkins-pipeline/dotnet/tools.tool-install.lock"')
+        script.contains('DOTNET_TOOL_LOCK_TIMEOUT="${DOTNET_TOOL_INSTALL_LOCK_TIMEOUT:-300}"')
+        script.contains('while ! mkdir "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; do')
+        script.contains('breaking stale lock')
+        script.contains('rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true')
+        script.contains('trap \'[ "$DOTNET_TOOL_OWNS_LOCK" = 1 ] && rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true\' EXIT INT TERM')
+        script.contains('Acquired tool install lock')
+    }
+
+    def "withTool does not lock on Windows"() {
+        given:
+        def jenkins = fakeJenkins(false, [LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local", PATH: "C:\\Windows"])
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.withTool("MyTool", null) { }
+
+        then:
+        def installCall = jenkins.calls.bat.find { it instanceof Map && it.script.contains("dotnet tool install MyTool") }
+        installCall != null
+        !installCall.script.contains("DOTNET_TOOL_LOCK_DIR")
+        !installCall.script.contains("mkdir")
+    }
+
     def "runTool runs the tool via dotnet tool run with args"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
