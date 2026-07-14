@@ -468,7 +468,7 @@ class Dotnet {
                 'DOTNET_TOOL_LOCK_TIMEOUT="${DOTNET_TOOL_INSTALL_LOCK_TIMEOUT:-300}"',
                 'DOTNET_TOOL_OWNS_LOCK=0',
                 'mkdir -p "$(dirname "$DOTNET_TOOL_LOCK_DIR")"',
-                'trap \'[ "$DOTNET_TOOL_OWNS_LOCK" = 1 ] && rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true\' EXIT INT TERM',
+                'trap \'if [ "$DOTNET_TOOL_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released tool install lock: $DOTNET_TOOL_LOCK_DIR" >&2; fi\' EXIT INT TERM',
                 'while ! mkdir "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; do',
                 '  _now="$(date +%s)"',
                 '  _mtime="$(stat -c %Y "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || stat -f %m "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || echo "$_now")"',

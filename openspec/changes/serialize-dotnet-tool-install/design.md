@@ -53,7 +53,9 @@ entirely inside the generated shell script passed to `jenkins.sh(...)`, guarded 
 EXIT INT TERM` with an explicit ownership flag (`DOTNET_TOOL_OWNS_LOCK`). This means the lock's
 lifetime is exactly the `dotnet tool install` process's lifetime — released on success, failure,
 or the step being killed — with no separate Groovy-side cleanup step needed, and no risk of a
-waiting run deleting a lock it never acquired.
+waiting run deleting a lock it never acquired. The trap also echoes a "Released tool install
+lock" line (mirroring the existing "Acquired tool install lock" line) so the release is visible
+in the Jenkins console log, not just inferred from the lock dir's absence.
 
 **Windows is out of scope for this change.** The race was only observed on macOS agents, and
 `bat` has no `trap`/`mkdir`-as-mutex equivalent without a materially larger implementation

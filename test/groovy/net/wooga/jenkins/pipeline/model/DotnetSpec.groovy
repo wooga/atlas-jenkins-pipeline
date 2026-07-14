@@ -426,8 +426,9 @@ class DotnetSpec extends Specification {
         script.contains('while ! mkdir "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; do')
         script.contains('breaking stale lock')
         script.contains('rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true')
-        script.contains('trap \'[ "$DOTNET_TOOL_OWNS_LOCK" = 1 ] && rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null || true\' EXIT INT TERM')
+        script.contains('trap \'if [ "$DOTNET_TOOL_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_TOOL_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released tool install lock: $DOTNET_TOOL_LOCK_DIR" >&2; fi\' EXIT INT TERM')
         script.contains('Acquired tool install lock')
+        script.contains('Released tool install lock')
     }
 
     def "withTool does not lock on Windows"() {
