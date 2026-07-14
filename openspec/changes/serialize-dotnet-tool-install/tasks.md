@@ -11,6 +11,9 @@
       `TMPDIR`/`WORKSPACE` diagnostic echo, the lock preamble, then the install command.
 - [x] 1.4 Wire `installTool()`'s unix branch to `jenkins.sh(label: command, script:
       toolInstallScriptSh(command))`; leave the Windows `bat` branch unchanged.
+- [x] 1.5 Have the lock's `trap` also echo a `Released tool install lock` line (mirroring the
+      existing `Acquired tool install lock` line), so the full acquire/release lifecycle is
+      visible in the console log while verifying the fix on real Jenkins.
 
 ## 2. Tests
 
@@ -41,3 +44,35 @@
 - [ ] 4.3 Leave a stale `tools.tool-install.lock` dir behind, lower
       `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT`, and confirm the next install breaks it with a warning
       and proceeds.
+
+## 5. NuGet source registration lock (found during real-Jenkins verification of section 4)
+
+Real testing surfaced a second, structurally identical race: parallel stages of the same job
+sharing one workspace both called `ensureNuGetSource()`, which raced `dotnet new nugetconfig`
+and failed with exit code 73 ("Overwrite ./nuget.config ... run with '--force'").
+
+- [x] 5.1 Add `nugetConfigLockDir()`, returning a workspace-relative lock dir
+      (`./nuget.config.lock`, sibling to the file it protects) — distinct from the agent-wide
+      `toolInstallLockDir()`, since the contended resource here is workspace-scoped.
+- [x] 5.2 Add `nugetConfigLockPreambleSh(lockDir)`: the same atomic `mkdir`-based, self-healing
+      lock shape as `toolInstallLockPreambleSh()`, with its own variable names, its own timeout
+      override (`DOTNET_NUGET_CONFIG_LOCK_TIMEOUT`, default 300s), and its own acquire/release
+      log wording.
+- [x] 5.3 Add `ensureNuGetSourceScriptSh(addSourceCommand)`: assembles the `DOTNET_CLI_HOME`
+      guard, the existing "Ensuring NuGet source..." echo, the new lock preamble, then the
+      existing check-then-create-then-add sequence unchanged.
+- [x] 5.4 Wire `ensureNuGetSource()`'s unix branch to
+      `jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))`;
+      leave the Windows `powershell` branch unchanged.
+- [x] 5.5 Add `DotnetSpec`: "withInstalledDotnet serializes concurrent NuGet source
+      registration with a self-healing lock" — asserts the lock dir, timeout default, stale-lock
+      break, ownership-guarded trap, and that the lock wraps the whole check-then-create-then-add
+      sequence (not just part of it).
+- [x] 5.6 Strengthen the existing "withInstalledDotnet registers the NuGet source via powershell
+      on Windows" test with an assertion that the Windows script has no lock preamble.
+- [x] 5.7 Update `proposal.md`, `design.md`, and the `specs/dotnet-tool-steps/spec.md` delta to
+      cover the new "Concurrent NuGet source registration is serialized" requirement; re-validate
+      the change.
+- [ ] 5.8 Verify on real Jenkins: reproduce the original parallel-stages-sharing-a-workspace
+      scenario and confirm the `exit code 73` failure no longer occurs, with
+      `Acquired`/`Released NuGet config lock` visible in the console log for the two runs.

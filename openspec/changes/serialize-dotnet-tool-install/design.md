@@ -9,11 +9,22 @@ invocations on the same agent can both try to write into the same package folder
 installs with a self-healing `mkdir` lock (`resources/dotnet/dotnet-install.sh:acquire_lock`);
 this change ports the same pattern to tool installs.
 
+A second, structurally identical race surfaced during real-Jenkins verification of that fix:
+`ensureNuGetSource()` registers the org's NuGet feed into a workspace-relative `./nuget.config`,
+creating it via `dotnet new nugetconfig` if missing. Two runs sharing a workspace (confirmed by
+the requester: parallel stages of the same job, same workspace) can both see the file missing
+and both attempt `dotnet new nugetconfig`, which refuses to overwrite an existing file — the
+loser fails with exit code 73. Same check-then-act shape as the tool-install race, different
+contended resource (a workspace-relative file rather than the per-agent shared cache), so it
+gets its own lock rather than being folded into the tool-install one.
+
 ## Goals / Non-Goals
 
 **Goals:**
 - Serialize concurrent `dotnet tool install` invocations on the same unix/macOS agent so they
   cannot race on the shared tool packages folder.
+- Serialize concurrent NuGet source registration (`ensureNuGetSource()`) when the workspace is
+  shared, so parallel invocations cannot race `dotnet new nugetconfig`.
 - Self-heal from a stale lock left behind by a crashed run, matching the SDK lock's behavior
   (timeout-based break with a warning), so a dead run cannot permanently wedge future builds.
 - Add a low-noise diagnostic (`TMPDIR`/`WORKSPACE`) to help confirm whether `dotnet`'s own
@@ -21,13 +32,18 @@ this change ports the same pattern to tool installs.
   didn't already prevent this race.
 
 **Non-Goals:**
-- Locking the Windows (`bat`) tool-install path — the observed race is unix/macOS only, and
-  `bat` has no equivalent to a `trap`-guarded shell lock without a larger rewrite.
-- Per-package/version locking. A single package/version pair for the same tool is already
-  idempotent in `dotnet tool install` itself (see the existing comment above `installTool()`);
-  the actual risk is cross-invocation contention on the *shared* packages folder, which a
-  finer-grained lock wouldn't fully cover (a different tool's transitive dependency can land
-  in the same folder).
+- Locking the Windows (`bat`/`powershell`) paths — the observed races are unix/macOS only, and
+  neither has an equivalent to a `trap`-guarded shell lock without a larger rewrite.
+- Per-package/version locking for the tool-install lock. A single package/version pair for the
+  same tool is already idempotent in `dotnet tool install` itself (see the existing comment
+  above `installTool()`); the actual risk is cross-invocation contention on the *shared*
+  packages folder, which a finer-grained lock wouldn't fully cover (a different tool's
+  transitive dependency can land in the same folder).
+- A single, shared lock covering both concerns. The tool-install lock and the NuGet-config lock
+  protect different resources at different scopes (per-agent cache vs. per-workspace file) and
+  are acquired at different points in the flow (`ensureNuGetSource()` runs before `installTool()`
+  in `withInstalledDotnet()`/`withTool()`); collapsing them into one lock would over-serialize
+  agent-wide work that doesn't actually contend on the same resource.
 - Changing the SDK-install lock (`dotnet-sdk-provisioning`) itself — it already works and is
   out of scope here.
 
@@ -58,9 +74,27 @@ lock" line (mirroring the existing "Acquired tool install lock" line) so the rel
 in the Jenkins console log, not just inferred from the lock dir's absence.
 
 **Windows is out of scope for this change.** The race was only observed on macOS agents, and
-`bat` has no `trap`/`mkdir`-as-mutex equivalent without a materially larger implementation
-(e.g. a `.lock` file + retry loop in `.bat`, or delegating to PowerShell). Extending coverage
-to Windows can be a follow-up if the race is ever observed there.
+`bat`/`powershell` have no `trap`/`mkdir`-as-mutex equivalent without a materially larger
+implementation (e.g. a `.lock` file + retry loop in `.bat`, or a distinct PowerShell lock
+helper). Extending coverage to Windows can be a follow-up if either race is ever observed there.
+
+**NuGet-config lock is workspace-relative, not per-agent.** The tool-install lock lives under
+the shared per-agent cache (`toolCacheDir()`) because that's what it protects. The NuGet-config
+lock instead uses `./nuget.config.lock` — relative to the current working directory, exactly
+like the `./nuget.config` file it protects — because that file's scope, and therefore the race,
+is per-workspace, not per-agent. Using the agent-wide tool-install lock for this instead would
+"work" by accident (a strict superset), but would incorrectly serialize NuGet source
+registration across every job on the agent, including ones that don't share a workspace and
+therefore can't actually race on `./nuget.config` — unwarranted contention for jobs that were
+never at risk.
+
+**Duplicated lock-preamble code, not a shared generic helper.** `nugetConfigLockPreambleSh()`
+mirrors `toolInstallLockPreambleSh()` line-for-line (same atomic mkdir/trap/stale-timeout shape)
+but with its own variable names and log wording, rather than one function parameterized by lock
+dir + label. This matches the class's existing convention of separate `sh`/`ps`/`bat` variants
+over one generic templated method (`requireDotnetCliHomeSh`/`Ps`/`Bat`) — parameterizing label
+text into the trap's single-quoted bash literal is exactly the kind of escaping-heavy
+cleverness that convention avoids.
 
 ## Risks / Trade-offs
 
@@ -71,9 +105,14 @@ to Windows can be a follow-up if the race is ever observed there.
 - **[Stale lock false-positive]** A very slow (but not crashed) install could exceed the
   default 300s timeout and have its lock broken by another waiting run, causing two installs
   to run concurrently after all. → Mitigated by making the timeout configurable via
-  `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT`, matching the SDK lock's existing escape hatch.
-- **[No Windows coverage]** The race remains possible on Windows agents if content builds ever
+  `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT` (tool install) / `DOTNET_NUGET_CONFIG_LOCK_TIMEOUT` (NuGet
+  config), matching the SDK lock's existing escape hatch.
+- **[No Windows coverage]** Both races remain possible on Windows agents if content builds ever
   run there concurrently. → Out of scope per Non-Goals; revisit if observed.
+- **[Two similar-looking lock implementations]** Having two structurally identical but
+  independently-maintained lock preambles risks one being fixed/tuned without the other. →
+  Accepted per the duplication-over-parameterization decision above; the two are covered by
+  parallel test cases in `DotnetSpec.groovy` so a regression in either is caught independently.
 
 ## Migration Plan
 

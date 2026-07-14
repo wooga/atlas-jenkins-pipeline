@@ -271,19 +271,75 @@ class Dotnet {
      * summary shows the meaningful command instead of the guard clause -
      * without it, Jenkins' fixed-width summary line shows the guard clause
      * and truncates the real command off the end entirely.
+     *
+     * On unix, the check-then-create-then-add sequence below is wrapped in a
+     * workspace-relative lock (see nugetConfigLockPreambleSh()) - if the
+     * workspace is shared by concurrent invocations (e.g. parallel stages of
+     * the same job sharing one workspace), two runs can otherwise both see
+     * `./nuget.config` missing and race `dotnet new nugetconfig`, which
+     * refuses to overwrite an existing file (confirmed by real execution:
+     * exit code 73, "Creating this template will make changes to existing
+     * files"). Windows is not covered here, matching the unix-only scope of
+     * the tool-install lock (see toolInstallLockPreambleSh()).
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
             def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
-            jenkins.sh(
-                    label: addSourceCommand,
-                    script: "${requireDotnetCliHomeSh()}; echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2; dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }")
+            jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
         } else {
             def addSourceCommand = "dotnet nuget add source '${nugetSourceUrl}' --name '${nugetSourceName}' --configfile ./nuget.config"
             jenkins.powershell(
                     label: addSourceCommand,
                     script: "${requireDotnetCliHomePs()}; Write-Host \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$env:DOTNET_CLI_HOME')\"; if (-not ((dotnet nuget list source --format Short 2>\$null) | Select-String -SimpleMatch '${nugetSourceUrl}')) { if (-not (Test-Path ./nuget.config)) { dotnet new nugetconfig }; ${addSourceCommand} }")
         }
+    }
+
+    private String ensureNuGetSourceScriptSh(String addSourceCommand) {
+        return [
+                requireDotnetCliHomeSh(),
+                "echo \"[dotnet] Ensuring NuGet source '${nugetSourceName}' is registered in ./nuget.config (DOTNET_CLI_HOME='\$DOTNET_CLI_HOME')\" >&2",
+                nugetConfigLockPreambleSh(nugetConfigLockDir()),
+                "dotnet nuget list source --format Short 2>/dev/null | grep -qF \"${nugetSourceUrl}\" || { [ -f ./nuget.config ] || dotnet new nugetconfig; ${addSourceCommand}; }",
+        ].join("\n")
+    }
+
+    // Workspace-relative, sibling to the ./nuget.config it protects - unlike
+    // toolInstallLockDir() (per-agent, under the shared cache), this lock's
+    // contended resource (./nuget.config) lives in the current working
+    // directory, so the lock must too.
+    private String nugetConfigLockDir() {
+        return "./nuget.config.lock"
+    }
+
+    // Same atomic mkdir-as-mutex, self-healing lock shape as
+    // toolInstallLockPreambleSh() (see its comment for the general rationale),
+    // duplicated with distinct variable names/wording rather than
+    // parameterized, matching this class's existing style of separate
+    // sh/ps/bat variants over one generic templated helper (see
+    // requireDotnetCliHomeSh/Ps/Bat).
+    @NonCPS
+    private static String nugetConfigLockPreambleSh(String lockDir) {
+        return [
+                "DOTNET_NUGETCFG_LOCK_DIR=\"${lockDir}\"",
+                'DOTNET_NUGETCFG_LOCK_TIMEOUT="${DOTNET_NUGET_CONFIG_LOCK_TIMEOUT:-300}"',
+                'DOTNET_NUGETCFG_OWNS_LOCK=0',
+                'mkdir -p "$(dirname "$DOTNET_NUGETCFG_LOCK_DIR")"',
+                'trap \'if [ "$DOTNET_NUGETCFG_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2; fi\' EXIT INT TERM',
+                'while ! mkdir "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; do',
+                '  _now="$(date +%s)"',
+                '  _mtime="$(stat -c %Y "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || stat -f %m "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || echo "$_now")"',
+                '  _age=$(( _now - _mtime ))',
+                '  if [ "$_age" -ge "$DOTNET_NUGETCFG_LOCK_TIMEOUT" ]; then',
+                '    echo "[dotnet] NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\' held ${_age}s (>= ${DOTNET_NUGETCFG_LOCK_TIMEOUT}s); breaking stale lock" >&2',
+                '    rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || true',
+                '    continue',
+                '  fi',
+                '  echo "[dotnet] Waiting for NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\' (age ${_age}s)..." >&2',
+                '  sleep 2',
+                'done',
+                'DOTNET_NUGETCFG_OWNS_LOCK=1',
+                'echo "[dotnet] Acquired NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2',
+        ].join("\n")
     }
 
     /**

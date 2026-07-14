@@ -22,3 +22,31 @@ applies to unix/macOS agents only; the Windows (`bat`) tool-install path is unaf
 - **WHEN** a tool install lock has been held longer than the configured timeout (default 300s,
   overridable via `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT`) because a previous run crashed
 - **THEN** the lock is broken with a warning and the tool install continues
+
+### Requirement: Concurrent NuGet source registration is serialized
+
+The system SHALL serialize concurrent NuGet source registration (the check-then-create-then-add
+sequence that ensures the configured feed is registered in a workspace-relative `./nuget.config`,
+creating that file via `dotnet new nugetconfig` if it doesn't already exist) using a self-healing
+lock, so that simultaneous invocations sharing the same workspace (e.g. parallel stages of the
+same job) do not race `dotnet new nugetconfig`, which fails if the file already exists. The lock
+SHALL be scoped to the workspace (not the per-agent tool cache), since the resource it protects
+— the workspace-relative `./nuget.config` — is itself workspace-scoped. A lock held beyond a
+configurable timeout SHALL be treated as stale and broken with a warning. This requirement
+applies to unix/macOS agents only; the Windows (`powershell`) NuGet-source-registration path is
+unaffected.
+
+#### Scenario: Two invocations race to register the NuGet source in a shared workspace
+
+- **WHEN** two invocations sharing the same workspace on the same unix/macOS agent both need to
+  register the configured NuGet source at the same time
+- **THEN** one acquires the NuGet config lock and completes the check-then-create-then-add
+  sequence while the other waits
+- **AND** the waiting invocation proceeds once the lock is released, finding the source already
+  registered
+
+#### Scenario: Stale NuGet config lock recovery
+
+- **WHEN** a NuGet config lock has been held longer than the configured timeout (default 300s,
+  overridable via `DOTNET_NUGET_CONFIG_LOCK_TIMEOUT`) because a previous run crashed
+- **THEN** the lock is broken with a warning and NuGet source registration continues
