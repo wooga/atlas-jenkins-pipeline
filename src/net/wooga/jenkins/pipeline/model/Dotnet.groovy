@@ -1,7 +1,7 @@
 package net.wooga.jenkins.pipeline.model
 
 import com.cloudbees.groovy.cps.NonCPS
-import net.wooga.jenkins.pipeline.cache.Lockfile
+import net.wooga.jenkins.pipeline.cache.LockDir
 
 /**
  * Installs the .NET SDK into a shared per-agent cache directory (via the
@@ -274,7 +274,7 @@ class Dotnet {
      * and truncates the real command off the end entirely.
      *
      * On unix, the check-then-create-then-add sequence below is wrapped in a
-     * workspace-relative lock (Lockfile on nugetConfigLockDir()) so concurrent
+     * workspace-relative lock (LockDir on nugetConfigLockDir()) so concurrent
      * invocations sharing a workspace can't race `dotnet new nugetconfig`
      * (confirmed by real execution: exit code 73, refuses to overwrite an
      * existing file). Windows is not covered here.
@@ -282,7 +282,7 @@ class Dotnet {
     private void ensureNuGetSource() {
         if (isUnix()) {
             def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
-            new Lockfile(jenkins, nugetConfigLockDir(), "NuGet config").withLock(mode: Lockfile.BREAK_STALE) {
+            new LockDir(jenkins, nugetConfigLockDir(), "NuGet config").withLock {
                 jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
             }
         } else {
@@ -459,7 +459,7 @@ class Dotnet {
             // The lock is agent-wide (one dir, not per package/version), since
             // NUGET_PACKAGES also holds shared transitive-dependency packages
             // different tools could race on. Windows (bat) is not covered.
-            new Lockfile(jenkins, toolInstallLockDir(), "tool install").withLock(mode: Lockfile.BREAK_STALE) {
+            new LockDir(jenkins, toolInstallLockDir(), "tool install").withLock {
                 jenkins.sh(label: command, script: toolInstallScriptSh(command))
             }
         } else {

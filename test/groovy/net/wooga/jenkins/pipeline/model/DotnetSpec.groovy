@@ -22,9 +22,7 @@ class DotnetSpec extends Specification {
             jenkins.calls.withEnv << envList
             body.call()
         }
-        // Return 0 for returnStatus calls (e.g. Lockfile's acquire) so the lock
-        // reports "acquired" and the wrapped work runs; null otherwise.
-        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; (arg instanceof Map && arg.returnStatus) ? 0 : null }
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg }
         jenkins.bat = { Object arg -> jenkins.calls.bat << arg }
         jenkins.powershell = { Object arg -> jenkins.calls.powershell << arg }
         jenkins.writeFile = { Map args -> jenkins.calls.writeFile << args }
@@ -321,7 +319,6 @@ class DotnetSpec extends Specification {
         then: "acquisition is a separate sh (via Lockfile) running an atomic mkdir loop on a workspace-relative lock dir"
         def acquire = jenkins.calls.sh.find { it instanceof Map && it.script.contains('_LOCK_DIR="./nuget.config.lock"') }
         acquire != null
-        acquire.returnStatus == true
         acquire.script.contains('while ! mkdir "$_LOCK_DIR" 2>/dev/null; do')
         acquire.script.contains('breaking stale lock') // shared Lockfile gives this a stale-break timeout too now
         acquire.script.contains('Acquired NuGet config lock')
@@ -449,7 +446,6 @@ class DotnetSpec extends Specification {
         then: "acquisition is a separate sh (via Lockfile) running an atomic mkdir loop on an agent-wide lock dir"
         def acquire = jenkins.calls.sh.find { it instanceof Map && it.script.contains('_LOCK_DIR="/home/tester/.cache/jenkins-pipeline/dotnet/tools.tool-install.lock"') }
         acquire != null
-        acquire.returnStatus == true
         acquire.script.contains('while ! mkdir "$_LOCK_DIR" 2>/dev/null; do')
         acquire.script.contains('breaking stale lock')
         acquire.script.contains('Acquired tool install lock')

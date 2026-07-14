@@ -23,13 +23,13 @@ class Cache {
         if (perBranch) {
              cacheLocation = "$basePath/$cacheProjectName/$jenkins.env.BRANCH_NAME"
         }
-        this.renewLock = new Lockfile(jenkins, "$cacheLocation/.renew_lock", "cache renew")
+        this.renewLock = new Lockfile(jenkins, "$cacheLocation/.renew_lock")
         this.lastModified = new LastModifiedFile(jenkins, "$cacheLocation/.last_renew")
     }
 
     boolean renewProjectCache(String relativePathFolderToBeCached, long cacheMaxAgeMs, Closure generateAssets) {
         def success = false
-        def timeout = renewLock.withLock(mode: Lockfile.SKIP_ON_TIMEOUT, timeoutSeconds: 600) {
+        def timeout = renewLock.withLock(10) {
             def cacheAge = lastModified.ageMs
             if (lastModified.ageMs < cacheMaxAgeMs) {
                 jenkins.echo "Unity Assets already cached ${cacheAge / 1000 / 60 / 60} hours ago skipping cache stage."
@@ -42,7 +42,7 @@ class Cache {
             }
         }
         if(timeout) {
-            jenkins.echo "Timeout while waiting for cache lock (${renewLock.lockDir}), skipping cache update."
+            jenkins.echo "Timeout while waiting for cache lock (${renewLock.lockFile}), skipping cache update."
         }
         return success
     }
