@@ -81,8 +81,8 @@ per-agent tool cache using a self-healing lock, so that simultaneous pipeline ru
 agent do not corrupt or collide on the shared `NUGET_PACKAGES` packages folder. The lock SHALL
 be agent-wide (not scoped to a single package/version), since the shared packages folder also
 holds transitive-dependency packages that different tools can race on. A lock held beyond a
-configurable timeout SHALL be treated as stale and broken with a warning. This requirement
-applies to unix/macOS agents only; the Windows (`bat`) tool-install path is unaffected.
+timeout SHALL be treated as stale and broken. This requirement applies to unix/macOS agents
+only; the Windows (`bat`) tool-install path is unaffected.
 
 #### Scenario: Two tool installs race for the same shared tool cache
 
@@ -93,9 +93,9 @@ applies to unix/macOS agents only; the Windows (`bat`) tool-install path is unaf
 
 #### Scenario: Stale tool install lock recovery
 
-- **WHEN** a tool install lock has been held longer than the configured timeout (default 300s,
-  overridable via `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT`) because a previous run crashed
-- **THEN** the lock is broken with a warning and the tool install continues
+- **WHEN** a tool install lock has been held longer than the lock's timeout because a previous
+  run crashed
+- **THEN** the lock is broken and the tool install continues
 
 ### Requirement: Concurrent NuGet source registration is serialized
 
@@ -106,8 +106,8 @@ lock, so that simultaneous invocations sharing the same workspace (e.g. parallel
 same job) do not race `dotnet new nugetconfig`, which fails if the file already exists. The lock
 SHALL be scoped to the workspace (not the per-agent tool cache), since the resource it protects —
 the workspace-relative `./nuget.config` — is itself workspace-scoped. A lock held beyond a
-configurable timeout SHALL be treated as stale and broken. This requirement applies to unix/macOS
-agents only; the Windows (`powershell`) NuGet-source-registration path is unaffected.
+timeout SHALL be treated as stale and broken. This requirement applies to unix/macOS agents
+only; the Windows (`powershell`) NuGet-source-registration path is unaffected.
 
 #### Scenario: Two invocations race to register the NuGet source in a shared workspace
 
@@ -120,6 +120,6 @@ agents only; the Windows (`powershell`) NuGet-source-registration path is unaffe
 
 #### Scenario: Stale NuGet config lock recovery
 
-- **WHEN** a NuGet config lock has been held longer than the configured timeout (default 300s,
-  overridable via `DOTNET_NUGET_CONFIG_LOCK_TIMEOUT`) because a previous run crashed
+- **WHEN** a NuGet config lock has been held longer than the lock's timeout because a previous
+  run crashed
 - **THEN** the lock is broken and NuGet source registration continues

@@ -282,8 +282,7 @@ class Dotnet {
     private void ensureNuGetSource() {
         if (isUnix()) {
             def addSourceCommand = "dotnet nuget add source \"${nugetSourceUrl}\" --name \"${nugetSourceName}\" --configfile ./nuget.config"
-            new Lockfile(jenkins, nugetConfigLockDir(), "NuGet config").withLock(
-                    mode: Lockfile.BREAK_STALE, timeoutSeconds: nugetConfigLockTimeoutSeconds()) {
+            new Lockfile(jenkins, nugetConfigLockDir(), "NuGet config").withLock(mode: Lockfile.BREAK_STALE) {
                 jenkins.sh(label: addSourceCommand, script: ensureNuGetSourceScriptSh(addSourceCommand))
             }
         } else {
@@ -305,11 +304,6 @@ class Dotnet {
     // Workspace-relative, sibling to the ./nuget.config it protects.
     private String nugetConfigLockDir() {
         return "./nuget.config.lock"
-    }
-
-    // Stale-lock timeout for the NuGet config lock, overridable via env.
-    private int nugetConfigLockTimeoutSeconds() {
-        return (jenkins.env.DOTNET_NUGET_CONFIG_LOCK_TIMEOUT ?: 300) as int
     }
 
     /**
@@ -465,8 +459,7 @@ class Dotnet {
             // The lock is agent-wide (one dir, not per package/version), since
             // NUGET_PACKAGES also holds shared transitive-dependency packages
             // different tools could race on. Windows (bat) is not covered.
-            new Lockfile(jenkins, toolInstallLockDir(), "tool install").withLock(
-                    mode: Lockfile.BREAK_STALE, timeoutSeconds: toolInstallLockTimeoutSeconds()) {
+            new Lockfile(jenkins, toolInstallLockDir(), "tool install").withLock(mode: Lockfile.BREAK_STALE) {
                 jenkins.sh(label: command, script: toolInstallScriptSh(command))
             }
         } else {
@@ -477,11 +470,6 @@ class Dotnet {
     // Agent-wide, a sibling of the shared tool cache it protects.
     private String toolInstallLockDir() {
         return "${toolCacheDir()}.tool-install.lock"
-    }
-
-    // Stale-lock timeout for the tool install lock, overridable via env.
-    private int toolInstallLockTimeoutSeconds() {
-        return (jenkins.env.DOTNET_TOOL_INSTALL_LOCK_TIMEOUT ?: 300) as int
     }
 
     // TMPDIR is echoed as a diagnostic (not asserted on in tests) - dotnet's
