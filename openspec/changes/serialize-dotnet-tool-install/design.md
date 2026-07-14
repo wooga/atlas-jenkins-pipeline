@@ -25,8 +25,9 @@ gets its own lock rather than being folded into the tool-install one.
   cannot race on the shared tool packages folder.
 - Serialize concurrent NuGet source registration (`ensureNuGetSource()`) when the workspace is
   shared, so parallel invocations cannot race `dotnet new nugetconfig`.
-- Self-heal from a stale lock left behind by a crashed run, matching the SDK lock's behavior
-  (timeout-based break with a warning), so a dead run cannot permanently wedge future builds.
+- For the tool-install lock specifically, self-heal from a stale lock left behind by a crashed
+  run, matching the SDK lock's behavior (timeout-based break with a warning), so a dead run
+  cannot permanently wedge future builds on that agent's shared cache.
 - Add a low-noise diagnostic (`TMPDIR`/`WORKSPACE`) to help confirm whether `dotnet`'s own
   TMPDIR-scoped locking is workspace- or agent-scoped, since that's a plausible reason it
   didn't already prevent this race.
@@ -88,13 +89,26 @@ registration across every job on the agent, including ones that don't share a wo
 therefore can't actually race on `./nuget.config` — unwarranted contention for jobs that were
 never at risk.
 
+**No stale-lock timeout for the NuGet-config lock.** The tool-install lock's stale-lock
+timeout/self-heal exists because it lives under the shared per-agent cache, which persists
+indefinitely — an orphaned lock there would wedge every future build on that agent until
+manually cleared. The NuGet-config lock lives inside the workspace instead, and a
+stuck/killed build's workspace is commonly wiped wholesale (`git clean`, a fresh checkout, or
+an explicit workspace-clean step) before the next build reuses it — that wipe already clears
+an orphaned `./nuget.config.lock` along with everything else, so the timeout/age-tracking
+machinery (the `date`/`stat` calls, the timeout env var, the stale-break branch) would be
+unused complexity here. Confirmed with the requester: invest in self-healing only where a
+lock can actually outlive the thing that would normally clear it.
+
 **Duplicated lock-preamble code, not a shared generic helper.** `nugetConfigLockPreambleSh()`
-mirrors `toolInstallLockPreambleSh()` line-for-line (same atomic mkdir/trap/stale-timeout shape)
-but with its own variable names and log wording, rather than one function parameterized by lock
-dir + label. This matches the class's existing convention of separate `sh`/`ps`/`bat` variants
-over one generic templated method (`requireDotnetCliHomeSh`/`Ps`/`Bat`) — parameterizing label
-text into the trap's single-quoted bash literal is exactly the kind of escaping-heavy
-cleverness that convention avoids.
+mirrors `toolInstallLockPreambleSh()`'s atomic mkdir/trap shape, minus the stale-lock timeout
+logic per the decision above, with its own variable names and log wording — rather than one
+function parameterized by lock dir + label + "include timeout logic or not". This matches the
+class's existing convention of separate `sh`/`ps`/`bat` variants over one generic templated
+method (`requireDotnetCliHomeSh`/`Ps`/`Bat`) — parameterizing label text and conditional
+timeout logic into the trap's single-quoted bash literal is exactly the kind of escaping-heavy
+cleverness that convention avoids, and would leave one function harder to read than two short,
+independently-obvious ones.
 
 ## Risks / Trade-offs
 
@@ -102,17 +116,23 @@ cleverness that convention avoids.
   tools that wouldn't actually collide. → Acceptable: installs are fast once cached (`dotnet
   tool install` is a no-op for an already-installed version), so the added wait is small
   relative to the cost of a failed build from the race.
-- **[Stale lock false-positive]** A very slow (but not crashed) install could exceed the
-  default 300s timeout and have its lock broken by another waiting run, causing two installs
-  to run concurrently after all. → Mitigated by making the timeout configurable via
-  `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT` (tool install) / `DOTNET_NUGET_CONFIG_LOCK_TIMEOUT` (NuGet
-  config), matching the SDK lock's existing escape hatch.
+- **[Tool-install stale lock false-positive]** A very slow (but not crashed) install could
+  exceed the default 300s timeout and have its lock broken by another waiting run, causing two
+  installs to run concurrently after all. → Mitigated by making the timeout configurable via
+  `DOTNET_TOOL_INSTALL_LOCK_TIMEOUT`, matching the SDK lock's existing escape hatch.
+- **[NuGet-config lock has no timeout]** If a workspace is somehow reused across builds without
+  ever being wiped (e.g. a long-lived custom workspace that's never cleaned) and a build holding
+  the lock is hard-killed, the lock could persist and wedge that workspace until it's manually
+  removed. → Accepted: this is the same tradeoff already made, and evidently acceptable, for the
+  pre-existing `Lockfile.groovy` cache-renewal lock in this codebase, and the requester
+  explicitly preferred simplicity here over guarding against an edge case within an edge case.
 - **[No Windows coverage]** Both races remain possible on Windows agents if content builds ever
   run there concurrently. → Out of scope per Non-Goals; revisit if observed.
-- **[Two similar-looking lock implementations]** Having two structurally identical but
-  independently-maintained lock preambles risks one being fixed/tuned without the other. →
-  Accepted per the duplication-over-parameterization decision above; the two are covered by
-  parallel test cases in `DotnetSpec.groovy` so a regression in either is caught independently.
+- **[Two similar-looking lock implementations]** Having two structurally similar but
+  independently-maintained lock preambles (one with a stale-lock timeout, one without) risks a
+  future change to one being forgotten for the other. → Accepted per the duplication-over-
+  parameterization decision above; the two are covered by parallel test cases in
+  `DotnetSpec.groovy` so a regression in either is caught independently.
 
 ## Migration Plan
 

@@ -308,7 +308,7 @@ class DotnetSpec extends Specification {
         !nugetCall.script.contains("NUGETCFG_LOCK_DIR") // unix-only, matching the tool-install lock's scope
     }
 
-    def "withInstalledDotnet serializes concurrent NuGet source registration with a self-healing lock"() {
+    def "withInstalledDotnet serializes concurrent NuGet source registration with a lock"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         def dotnet = new Dotnet(jenkins, null, null, null, "my_source", "https://example.com/index.json", null)
@@ -321,12 +321,15 @@ class DotnetSpec extends Specification {
         nugetCall != null
         def script = nugetCall.script
         script.contains('DOTNET_NUGETCFG_LOCK_DIR="./nuget.config.lock"')
-        script.contains('DOTNET_NUGETCFG_LOCK_TIMEOUT="${DOTNET_NUGET_CONFIG_LOCK_TIMEOUT:-300}"')
         script.contains('while ! mkdir "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; do')
-        script.contains('breaking stale lock')
         script.contains('trap \'if [ "$DOTNET_NUGETCFG_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2; fi\' EXIT INT TERM')
         script.contains('Acquired NuGet config lock')
         script.contains('Released NuGet config lock')
+        // no stale-lock timeout/self-heal logic - unlike the per-agent tool-install lock,
+        // this lock lives inside the workspace, which gets wiped wholesale on a stuck/killed
+        // build anyway, so an orphaned lock dir doesn't need its own recovery mechanism
+        !script.contains("LOCK_TIMEOUT")
+        !script.contains("stale lock")
         // the lock wraps the whole check-then-create-then-add sequence, not just part of it
         script.indexOf('DOTNET_NUGETCFG_LOCK_DIR=') < script.indexOf('dotnet nuget list source')
     }

@@ -49,10 +49,12 @@ workspace-scoped resource, so it's fixed the same way.
   behavior.
 - `ensureNuGetSource()`'s check-then-create-then-add sequence (list existing sources, create
   `./nuget.config` if missing, add the source) is now similarly serialized on unix/macOS agents,
-  using a self-healing, workspace-relative `mkdir`-based lock (`./nuget.config.lock`, sibling to
-  the file it protects) with its own timeout override (`DOTNET_NUGET_CONFIG_LOCK_TIMEOUT`,
-  default 300s), so parallel stages/pipelines sharing a workspace no longer race
-  `dotnet new nugetconfig`.
+  using a workspace-relative `mkdir`-based lock (`./nuget.config.lock`, sibling to the file it
+  protects), so parallel stages/pipelines sharing a workspace no longer race
+  `dotnet new nugetconfig`. Unlike the tool-install lock, this one has no stale-lock
+  timeout/self-heal logic: a workspace is commonly wiped wholesale after a stuck/killed build,
+  which already clears an orphaned lock along with everything else, so the extra machinery
+  would be unused complexity here.
 - Both new locks release a `Released <lock name> lock` log line from the same `trap` that
   removes the lock directory, so the full acquire/release lifecycle is visible in the Jenkins
   console log (not just "Acquired").
@@ -72,7 +74,7 @@ workspace-scoped resource, so it's fixed the same way.
   invocations on the same agent are serialized via a self-healing, agent-wide lock (mirroring
   the `dotnet-sdk-provisioning` capability's existing "Concurrent installs are serialized"
   requirement), and concurrent NuGet source registration into a shared workspace is serialized
-  via a self-healing, workspace-relative lock.
+  via a workspace-relative lock (no self-heal timeout — see Why).
 
 ## Impact
 

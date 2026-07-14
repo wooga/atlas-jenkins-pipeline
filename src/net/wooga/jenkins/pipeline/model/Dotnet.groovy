@@ -273,14 +273,10 @@ class Dotnet {
      * and truncates the real command off the end entirely.
      *
      * On unix, the check-then-create-then-add sequence below is wrapped in a
-     * workspace-relative lock (see nugetConfigLockPreambleSh()) - if the
-     * workspace is shared by concurrent invocations (e.g. parallel stages of
-     * the same job sharing one workspace), two runs can otherwise both see
-     * `./nuget.config` missing and race `dotnet new nugetconfig`, which
-     * refuses to overwrite an existing file (confirmed by real execution:
-     * exit code 73, "Creating this template will make changes to existing
-     * files"). Windows is not covered here, matching the unix-only scope of
-     * the tool-install lock (see toolInstallLockPreambleSh()).
+     * workspace-relative lock (see nugetConfigLockPreambleSh()) so concurrent
+     * invocations sharing a workspace can't race `dotnet new nugetconfig`
+     * (confirmed by real execution: exit code 73, refuses to overwrite an
+     * existing file). Windows is not covered here.
      */
     private void ensureNuGetSource() {
         if (isUnix()) {
@@ -303,38 +299,23 @@ class Dotnet {
         ].join("\n")
     }
 
-    // Workspace-relative, sibling to the ./nuget.config it protects - unlike
-    // toolInstallLockDir() (per-agent, under the shared cache), this lock's
-    // contended resource (./nuget.config) lives in the current working
-    // directory, so the lock must too.
+    // Workspace-relative, sibling to the ./nuget.config it protects.
     private String nugetConfigLockDir() {
         return "./nuget.config.lock"
     }
 
-    // Same atomic mkdir-as-mutex, self-healing lock shape as
-    // toolInstallLockPreambleSh() (see its comment for the general rationale),
-    // duplicated with distinct variable names/wording rather than
-    // parameterized, matching this class's existing style of separate
-    // sh/ps/bat variants over one generic templated helper (see
-    // requireDotnetCliHomeSh/Ps/Bat).
+    // Same atomic mkdir-as-mutex shape as toolInstallLockPreambleSh(), minus
+    // its stale-lock timeout: this lock lives in the workspace, which gets
+    // wiped wholesale on a stuck/killed build anyway.
     @NonCPS
     private static String nugetConfigLockPreambleSh(String lockDir) {
         return [
                 "DOTNET_NUGETCFG_LOCK_DIR=\"${lockDir}\"",
-                'DOTNET_NUGETCFG_LOCK_TIMEOUT="${DOTNET_NUGET_CONFIG_LOCK_TIMEOUT:-300}"',
                 'DOTNET_NUGETCFG_OWNS_LOCK=0',
                 'mkdir -p "$(dirname "$DOTNET_NUGETCFG_LOCK_DIR")"',
                 'trap \'if [ "$DOTNET_NUGETCFG_OWNS_LOCK" = 1 ]; then rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; echo "[dotnet] Released NuGet config lock: $DOTNET_NUGETCFG_LOCK_DIR" >&2; fi\' EXIT INT TERM',
                 'while ! mkdir "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null; do',
-                '  _now="$(date +%s)"',
-                '  _mtime="$(stat -c %Y "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || stat -f %m "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || echo "$_now")"',
-                '  _age=$(( _now - _mtime ))',
-                '  if [ "$_age" -ge "$DOTNET_NUGETCFG_LOCK_TIMEOUT" ]; then',
-                '    echo "[dotnet] NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\' held ${_age}s (>= ${DOTNET_NUGETCFG_LOCK_TIMEOUT}s); breaking stale lock" >&2',
-                '    rm -rf "$DOTNET_NUGETCFG_LOCK_DIR" 2>/dev/null || true',
-                '    continue',
-                '  fi',
-                '  echo "[dotnet] Waiting for NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\' (age ${_age}s)..." >&2',
+                '  echo "[dotnet] Waiting for NuGet config lock \'$DOTNET_NUGETCFG_LOCK_DIR\'..." >&2',
                 '  sleep 2',
                 'done',
                 'DOTNET_NUGETCFG_OWNS_LOCK=1',
