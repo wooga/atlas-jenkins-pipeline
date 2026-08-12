@@ -653,9 +653,17 @@ class Dotnet {
     // hasn't returned by then, degrading to truncated output rather than
     // hanging the step (and eventually the whole build, until some
     // surrounding `timeout()` fires) - confirmed by real execution to unblock
-    // correctly on a genuinely hung child while adding no measurable delay to
-    // the normal case, since the watchdog is itself killed immediately once
-    // `wait` returns on its own.
+    // correctly on a genuinely hung child.
+    //
+    // In the normal (non-hung) case the watchdog itself is killed once `wait`
+    // returns on its own - but `kill "$_watchdog_pid"` alone only terminates
+    // the subshell, not the `sleep` it's blocked inside, which then gets
+    // orphaned and lives out its full timeout: confirmed by real execution
+    // (leaked, running `sleep` processes after the script exited, on both
+    // bash 3.2 and 5.3). `pkill -P "$_watchdog_pid"` kills the subshell's
+    // child (the `sleep`) first, before `kill "$_watchdog_pid"` takes the
+    // subshell itself - confirmed by real execution to leave nothing behind.
+    // `pkill -P` isn't POSIX but is present on both Linux and macOS agents.
     //
     // The `rm -f` immediately before `mkfifo` removes any leftover artifact at
     // either path from a previous crashed/killed run. Confirmed by real
@@ -682,7 +690,7 @@ class Dotnet {
         lines << "( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &"
         lines << '_watchdog_pid=$!'
         lines << 'wait "$_stdout_tee_pid" "$_stderr_tee_pid"'
-        lines << 'kill "$_watchdog_pid" 2>/dev/null'
+        lines << 'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null'
         lines << "rm -f \"${stdoutFifo}\" \"${stderrFifo}\""
         lines << 'exit $_exit_code'
         return lines.join("\n")

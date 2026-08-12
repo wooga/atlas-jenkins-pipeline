@@ -1,5 +1,6 @@
 package scripts
 
+import net.wooga.jenkins.pipeline.model.Dotnet
 import tools.DeclarativeJenkinsSpec
 
 class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
@@ -115,10 +116,10 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
                     'dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo"',
                     '_exit_code=$?',
                     'exec 3>&- 4>&-',
-                    '( sleep 300; kill "$_stdout_tee_pid" "$_stderr_tee_pid" 2>/dev/null ) &',
+                    "( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &",
                     '_watchdog_pid=$!',
                     'wait "$_stdout_tee_pid" "$_stderr_tee_pid"',
-                    'kill "$_watchdog_pid" 2>/dev/null',
+                    'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null',
                     'rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
                     'exit $_exit_code',
             ].join("\n"))

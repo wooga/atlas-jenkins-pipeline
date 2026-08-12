@@ -243,11 +243,17 @@ now block `wait` forever, confirmed by real execution. This wasn't possible with
 process-substitution version, precisely because its `wait` never actually waited for anything - so
 this is a genuinely new risk introduced by fixing the sync bug, not a pre-existing one carried over.
 A background job (`( sleep <timeout>; kill <tee pids> ) &`) is started right before `wait`, killed
-immediately once `wait` returns on its own, and otherwise fires after
+once `wait` returns on its own, and otherwise fires after
 `CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS` (300s) to force both `tee` processes to exit - degrading
 to truncated captured output rather than hanging the step, and eventually the whole build, until
 some surrounding `timeout()` (if any) fires. Confirmed by real execution to unblock correctly on a
-genuinely hung child while adding no measurable delay to the normal case.
+genuinely hung child. In the normal case, killing only the watchdog *subshell* (`kill
+"$_watchdog_pid"`) leaves the `sleep` it's blocked inside orphaned to run out its full timeout -
+confirmed by real execution (a leaked, still-running `sleep` process after the script exited, on
+both bash versions), not merely a theoretical gap. `pkill -P "$_watchdog_pid"` (kills the
+subshell's child first) before `kill "$_watchdog_pid"` (then the subshell itself) leaves nothing
+behind - confirmed by real execution. `pkill -P` isn't POSIX but is present on both Linux and macOS
+agents.
 
 **The forced shebang escapes Jenkins' default `sh -xe`, and this is load-bearing, not stylistic -
 an earlier version of this document got this wrong.** The FIFO mechanism itself (`mkfifo`,
@@ -288,6 +294,16 @@ class, layered on top of the escape-`-e` requirement, not instead of it.
   leave lingering children; this is a defensive bound against a failure mode the .NET ecosystem
   does have precedent for (e.g. MSBuild node reuse / compiler-server processes outliving a parent),
   not a response to an observed incident.
+- **[The lingering-child scenario itself is untested on real Jenkins]** Everything about the
+  watchdog above (it fires, it unblocks `wait`, cleanup afterward leaves nothing running) was
+  confirmed with local bash, not a real Jenkins agent - and this is the one part of this whole
+  change where that distinction plausibly matters, not just formally. A background process that
+  outlives the step depends on how the Durable Task Plugin backs the step's stdout/stderr; if it's
+  a file rather than a pipe (as it's believed to be), an orphan inheriting those descriptors
+  shouldn't hold the step open the way it would with a pipe - but this is a plausible-not-verified
+  claim, unlike everything else in this document, which was verified. Worth specifically checking
+  in the real-Jenkins run already planned in `tasks.md` (§6.2), not just re-confirming the
+  already-verified parts.
 - **[`Dotnet.runTool()`'s signature change from positional trailing parameters to a single
   `options` Map is source-breaking for any caller using the old positional form directly]** This is
   *not* the same claim as "purely additive" made elsewhere in this document about the `captureOutput`
@@ -307,22 +323,10 @@ The public `runDotnetTool` step is purely additive: its Map-based call signature
 are unchanged for any existing caller that doesn't pass `captureOutput`, no rollback concerns
 beyond reverting this change, no data migration.
 
-`Dotnet.runTool()` is not purely additive in the same sense - its signature changed shape
-(positional `loginShell`/`umask`/`logCommandToStdErr` trailing parameters collapsed into a single
-`options` Map, during review; see `tasks.md` §3a.9), which is source-breaking for any caller still
-using the old positional form directly, not just an added optional parameter. This is true
-regardless of whether such a caller currently exists - see below for what was actually verified
-about that.
-
-The `Dotnet.runTool()` internal signature change (collapsing `loginShell`/`umask`/
-`logCommandToStdErr`/`captureOutput` into a single `options` Map, made during review - see
-`tasks.md` §3a.9) is a different kind of change: it touches an existing method's *shape*, not just
-adds a parameter, so it was worth confirming its actual blast radius rather than assuming
-"internal" meant "safe." Verified org-wide, not assumed: a GitHub code search across every `wooga`
-repo for both `net.wooga.jenkins.pipeline.model.Dotnet` (the class) and `runTool(` (the method) found
-no caller anywhere outside this library's own `vars/runDotnetTool.groovy` and its test file - both
-already updated to the new signature. `Dotnet` is genuinely reachable only through the `vars/`
-steps; nothing external imports or calls it directly.
+`Dotnet.runTool()` itself is not purely additive - see the matching Risks bullet above for why, and
+for what was actually verified (an org-wide `gh search code`) about whether a direct caller of the
+old positional form exists today. In short: no caller was found anywhere outside this library's own
+`vars/runDotnetTool.groovy` and its test file, both already updated.
 
 Separately, `runDotnetTool` (the *public* step, whose Map-based call signature and return shape
 did not change at all) has exactly one other real external caller found via the same search:

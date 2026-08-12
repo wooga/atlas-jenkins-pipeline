@@ -663,11 +663,17 @@ class DotnetSpec extends Specification {
         runCall.script.contains('exec 3>&- 4>&-')
         // watchdog bounds how long a lingering child can block wait - confirmed by
         // real execution that a bare wait would otherwise hang forever if a child
-        // keeps the FIFO's write end open after <command> itself exits.
-        runCall.script.contains('( sleep 300; kill "$_stdout_tee_pid" "$_stderr_tee_pid" 2>/dev/null ) &')
+        // keeps the FIFO's write end open after <command> itself exits. Interpolates
+        // the real constant rather than a hardcoded literal, so changing the
+        // timeout doesn't silently desync this assertion from the actual behavior.
+        runCall.script.contains("( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &")
         runCall.script.contains('_watchdog_pid=$!')
         runCall.script.contains('wait "$_stdout_tee_pid" "$_stderr_tee_pid"')
-        runCall.script.contains('kill "$_watchdog_pid" 2>/dev/null')
+        // pkill -P kills the watchdog subshell's child (the sleep) before kill takes
+        // the subshell itself - without this order, the sleep gets orphaned and
+        // lives out its full timeout, confirmed by real execution (a leaked, still-
+        // running process after the script exited).
+        runCall.script.contains('pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null')
         runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nexit $_exit_code')
         runCall.returnStatus == true
         jenkins.calls.readFile == [".dotnet-tool-stdout-mytool.log", ".dotnet-tool-stderr-mytool.log"]

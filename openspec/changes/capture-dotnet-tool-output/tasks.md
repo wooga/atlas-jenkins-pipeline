@@ -199,6 +199,34 @@ loud error, which is the worst failure shape for something a Slack notification 
 - [x] 3b.8 Full suite re-run after all fixes: 485 tests, same single pre-existing unrelated
       `CacheSpec` failure.
 
+## 3c. Review fixes (PR #353, third review round)
+
+One new finding, introduced by §3b.2's own watchdog fix, plus two nits.
+
+- [x] 3c.1 **`kill "$_watchdog_pid"` alone leaks an orphaned `sleep` process on the normal
+      (non-hung) path.** It terminates the watchdog subshell but not the `sleep` it's blocked
+      inside, which gets orphaned and lives out its full `CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS`
+      (300s). Confirmed by real execution - worse than initially reported: every one of 5
+      consecutive runs left a live, `ppid`-1 `sleep 300` process behind on bash 5.3. Fixed:
+      `pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null` (kills the
+      subshell's child first, then the subshell) - confirmed by real execution across 5 more runs
+      to leave nothing behind, on both bash 3.2 and 5.3. `pkill -P` isn't POSIX but is present on
+      both Linux and macOS agents. Added a `design.md` Risks bullet flagging that the
+      lingering-child scenario itself (does the watchdog actually fire and unblock cleanly under
+      Jenkins' real Durable Task Plugin, not just local bash) is still unverified on real Jenkins -
+      tied to the already-planned real-Jenkins run in §6.2, not a new task.
+- [x] 3c.2 Nit: the watchdog script-content test assertions hardcoded the literal `sleep 300`
+      instead of interpolating `Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS` (a public
+      `static final` constant) - a future change to the constant would fail the test with a
+      string-diff instead of the test tracking it. Fixed in both `DotnetSpec` and
+      `RunDotnetToolSpec` (the latter needed a new `import net.wooga.jenkins.pipeline.model.Dotnet`,
+      being in a different package).
+- [x] 3c.3 Nit: `design.md` stated the `Dotnet.runTool()` signature-break point three times (a
+      Risks bullet, then two near-identical Migration Plan paragraphs). Collapsed Migration Plan to
+      one sentence pointing at the Risks bullet plus the concrete search result, instead of
+      restating the full rationale twice.
+- [x] 3c.4 Full suite re-run: 485 tests, same single pre-existing unrelated `CacheSpec` failure.
+
 ## 4. OpenSpec change artifacts
 
 - [x] 4.1 `proposal.md` — why/what/capabilities/impact.
