@@ -635,7 +635,19 @@ class DotnetSpec extends Specification {
         then:
         result == [exitCode: 1, stdout: "Executing validator: Foo\n", stderr: "Error: boom\n"]
         def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run mytool -- validate") }
-        runCall.script.contains("> .dotnet-tool-stdout-mytool.log 2> .dotnet-tool-stderr-mytool.log")
+        // tee (not a plain redirect) so the run still streams live to the Jenkins
+        // console while also being captured to file - see captureOutputScriptSh().
+        // fd3/fd4 save the original stdout/stderr *before* the command's own
+        // redirection reassigns fd1/fd2 - confirmed by real execution required to
+        // stop the second tee's passthrough copy from silently inheriting the
+        // first redirection's already-reassigned fd instead of the real console.
+        runCall.script.startsWith("#!/bin/bash\n")
+        runCall.script.contains('exec 3>&1 4>&2')
+        runCall.script.contains('dotnet tool run mytool -- validate > >(tee ".dotnet-tool-stdout-mytool.log" >&3) 2> >(tee ".dotnet-tool-stderr-mytool.log" >&4)')
+        runCall.script.contains('_exit_code=$?')
+        runCall.script.contains('exec 3>&- 4>&-')
+        runCall.script.contains("wait")
+        runCall.script.contains('exit $_exit_code')
         runCall.returnStatus == true
         jenkins.calls.readFile == [".dotnet-tool-stdout-mytool.log", ".dotnet-tool-stderr-mytool.log"]
     }
@@ -655,6 +667,20 @@ class DotnetSpec extends Specification {
 
         then:
         result == [exitCode: 0, stdout: "all good\n", stderr: ""]
+    }
+
+    def "runTool with captureOutput and loginShell uses a login bash shebang and re-exports PATH"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", [], null, false, true, null, false, true)
+
+        then:
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run mytool") }
+        runCall.script.startsWith("#!/bin/bash -l\nexport PATH=\"\$DOTNET_ROOT:\$PATH\"\n")
     }
 
     def "runTool returns an empty stderr string for a tool that only writes to stdout"() {

@@ -3,13 +3,21 @@
 ### Requirement: Tool stdout and stderr can be captured separately, alongside its exit code
 
 The system SHALL provide a `captureOutput` option on `runDotnetTool`/`Dotnet.runTool` that, when
-`true`, redirects the tool's stdout and stderr to two separate temporary files, reads each back
-after the tool exits, and returns a `[exitCode: <int>, stdout: <string>, stderr: <string>]` Map
-instead of the bare status/throw behavior the existing `returnStatus` option gives. Both
-captured files SHALL be removed after being read regardless of whether the tool succeeded or
-failed. The system makes no requirement on how a given tool splits its own output between the
-two streams — it captures and returns whatever each stream already contains. This requirement
-applies to unix/macOS agents only.
+`true`, duplicates the tool's stdout and stderr to two separate temporary files (while still
+passing each stream through live to the console), reads each file back after the tool exits, and
+returns a `[exitCode: <int>, stdout: <string>, stderr: <string>]` Map instead of the bare
+status/throw behavior the existing `returnStatus` option gives. Both captured files SHALL be
+removed after being read regardless of whether the tool succeeded or failed. The system makes no
+requirement on how a given tool splits its own output between the two streams — it captures and
+returns whatever each stream already contains. This requirement applies to unix/macOS agents
+only.
+
+#### Scenario: Output still streams live to the console while being captured
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` against a tool that prints
+  output with a delay between lines
+- **THEN** each line appears in the live Jenkins console log as the tool prints it, not all at
+  once only after the tool finishes
 
 #### Scenario: Capturing a failing tool's output
 

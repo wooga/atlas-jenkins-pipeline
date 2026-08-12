@@ -5,9 +5,14 @@
       `.dotnet-tool-stderr-${toolBinary}.log`) — not random/UUID names, since those aren't safely
       usable inside the Jenkins CPS sandbox without extra script approval.
 - [x] 1.2 Add `captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr)`:
-      the same shebang/PATH-restore/`set -x`/`umask`/`DOTNET_CLI_HOME`-guard preamble as the
-      existing `shScript()`, followed by `${command} > ${stdoutFile} 2> ${stderrFile}` instead of
-      the bare command.
+      an unconditional `#!/bin/bash` shebang (process substitution requires real bash, not POSIX
+      `sh`), the `set -x`/`umask`/`DOTNET_CLI_HOME`-guard preamble, `exec 3>&1 4>&2` to save the
+      original stdout/stderr, `${command} > >(tee "${stdoutFile}" >&3) 2> >(tee "${stderrFile}" >&4)`
+      so output is duplicated to the capture files *and* still streams live to the console,
+      `_exit_code=$?` captured immediately, `exec 3>&- 4>&-` + `wait` so the `tee` subshells finish
+      flushing before the script exits, then `exit $_exit_code`. Revised from an initial plain
+      `>`/`2>` redirect version after real-execution testing showed that version made the run go
+      silent in Jenkins and (separately) cross-contaminated the two streams — see `design.md`.
 - [x] 1.3 Add `runTool(...)` parameter `Boolean captureOutput = false`; validate at the top of the
       method (mirroring `validateSelectors`/`validateNugetConfig`'s guard-clause style) that
       `captureOutput` and `returnStatus` aren't both `true`, and that `captureOutput` isn't `true`
@@ -67,22 +72,39 @@
 
 - [ ] 5.1 Open an issue/Slack thread describing the proposed change ahead of the PR, per this
       repo's `.github/CONTRIBUTING.md` guidance — Raul Gigea (original author of
-      `Dotnet.groovy`/`runDotnetTool`) is on leave for two weeks; post async so he can weigh in
-      when back without blocking this.
-- [ ] 5.2 Open the PR against `master`, request review from an active maintainer in this area
-      (e.g. `pletoss` or `Joaquimmnetto`, both of whom merged/reviewed the prior `dotnet-tool-steps`
-      PRs; `jhett12321` has also reviewed in this area).
+      `Dotnet.groovy`/`runDotnetTool`, GitHub handle `pletoss`) is on leave for two weeks; post
+      async so he can weigh in when back without blocking this.
+- [x] 5.2 Opened wooga/atlas-jenkins-pipeline#353 against `master`, marked ready for review.
+      Note: `pletoss` (tagged in an earlier draft of the PR description as a prospective reviewer)
+      is Raul himself, not a distinct maintainer — fixed to request review from `Joaquimmnetto`
+      and `jhett12321` instead, both of whom have reviewed/merged in this exact area before.
 
-## 6. Downstream consumer
+## 6. Verification (real Jenkins)
 
-- [ ] 6.1 In `adventure5-configs`'s `Wooga.Adv5.Configs.Validation` project, change
+- [x] 6.1 Local bash verification: ran the exact `tee`/fd3-fd4/`wait` script shape against a
+      fixture tool (delayed prints to both streams, nonzero exit) with a modern bash (5.3,
+      matching Linux Jenkins agents far more closely than macOS's frozen bash 3.2) — confirmed
+      live output appears progressively (timestamped, matching injected delays), the correct exit
+      code propagates, and stdout/stderr are captured without cross-contamination, across 5
+      repeated runs. This caught two real bugs an initial version had (silent during the run;
+      stream cross-contamination) that unit tests alone couldn't have caught, since they assert
+      on the generated script string, not real shell execution.
+- [ ] 6.2 Real-Jenkins run: once mergeable, trigger an actual pipeline using
+      `runDotnetTool(..., captureOutput: true)` against a real tool on a real unix/macOS agent,
+      and confirm the same three things (live console output, correct exit code, correctly split
+      streams) hold there too — local bash isn't a full substitute for Jenkins' own Durable Task
+      Plugin process handling, even though the script itself is agent-agnostic.
+
+## 7. Downstream consumer
+
+- [ ] 7.1 In `adventure5-configs`'s `Wooga.Adv5.Configs.Validation` project, change
       `Program.cs`'s `PrintValidationMessages` to write via `Console.Error.WriteLine` instead of
       `Console.WriteLine`, so actual findings go to stderr; leave the per-validator
       `"Executing validator: X"` progress line in `RunValidations` on stdout, unchanged. This is a
       small, independently-justified change (correct stream usage for a CLI tool) that happens to
       also be exactly what this feature needs — not a Slack- or Jenkins-specific change to the
       tool.
-- [ ] 6.2 Once `captureOutput` is merged and released under the `1.x` line, update
+- [ ] 7.2 Once `captureOutput` is merged and released under the `1.x` line, update
       `adventure5-tools`'s `configs/release_configs_to_sbs/Jenkinsfile` to run "Validate Configs"
       with `captureOutput: true`, then decouple notifying from failing — the two are not the same
       condition, since `Program.cs`'s exit code only reflects Error-severity messages

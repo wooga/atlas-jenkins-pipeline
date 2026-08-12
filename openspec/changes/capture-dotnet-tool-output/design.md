@@ -27,6 +27,9 @@ that nothing would catch if either side changed independently.
   code, from one `runTool`/`runDotnetTool` call, on unix/macOS agents — so a caller that wants
   "just the tool's diagnostics/findings" can use whichever stream the tool already reserves for
   that, with no text parsing.
+- Preserve live console output: a human watching the build must still see the tool's output as it
+  runs, exactly as with the non-capturing path today - `captureOutput` must not make a stage go
+  silent for the duration of the run.
 - Make the new option's failure modes loud, not silent — combining it with `returnStatus`, or
   using it on Windows, is a call-time error, not a silent no-op or a return-shape surprise.
 - Keep the change purely additive: no existing caller's behavior changes when `captureOutput` is
@@ -44,12 +47,13 @@ that nothing would catch if either side changed independently.
   current or requested consumer runs tool validation on Windows agents, and mirrors the existing
   Windows-out-of-scope precedent set by both prior `dotnet-tool-steps` changes
   (`add-dotnet-steps`, `serialize-dotnet-tool-install`).
-- Streaming captured output live to the console as it's produced. The file-redirect approach
-  described below only reads each file back after the command exits; a caller still sees the
-  tool's normal output in the Jenkins console log as it runs (redirecting a file descriptor
-  inside the script doesn't remove Jenkins' own console capture of the underlying process), so
-  nothing is lost for a human watching the build live — this Non-Goal is about not building a
-  second, separate live-tailing mechanism on top of that.
+- A separate, purpose-built live-tailing mechanism beyond what `tee` already provides for free.
+  Live streaming is a Goal (above), not something dropped - but it's achieved by duplicating the
+  tool's output to both the capture file and the script's original stdout/stderr (see Decisions),
+  not by building any new console-streaming machinery of our own. An earlier draft of this
+  section incorrectly assumed a plain `>` file redirect alone would leave live streaming intact;
+  that's wrong (a plain redirect *diverts* output to the file instead of the console - confirmed
+  by real execution) and is why `tee` is required at all, not optional polish.
 - Interleaving/reordering stdout and stderr relative to each other. Capturing them into separate
   files means any information about *when*, relative to each other, a given stdout line and a
   given stderr line were printed is lost — each stream is returned as its own ordered text, not
@@ -60,18 +64,67 @@ that nothing would catch if either side changed independently.
 
 **Capture stdout and stderr into two separate files, not one combined stream.** Reverses the
 combined-capture approach from the earlier draft of this design (see Context) specifically to
-avoid coupling a caller's parsing logic to a tool's message-formatting choices. Two `>`/`2>`
-redirects in the generated script (`${command} > ${stdoutFile} 2> ${stderrFile}`) cost nothing
-extra over one; the caller gets both back and picks whichever it needs, or both.
+avoid coupling a caller's parsing logic to a tool's message-formatting choices. Two `tee`s in the
+generated script cost nothing extra over one; the caller gets both back and picks whichever it
+needs, or both.
 
-**Capture via file redirection inside the generated script, not `sh`'s own `returnStdout`.**
-Since `sh(returnStdout: true, returnStatus: true)` isn't a legal combination, and we need both
-the text and a non-throwing exit code in one call, the script itself redirects its own output
-and the call uses `returnStatus: true` under the hood; each file is then read back with
-`jenkins.readFile()`. This keeps `sh`'s own step contract untouched and puts the "give me status
-*and* text" behavior entirely inside `Dotnet.groovy`, where it can be tested directly against the
-generated script string, rather than depending on an assumption about how Jenkins' `sh` step
-might evolve.
+**`tee` via process substitution (`> >(tee file >&N)`), not a plain `>`/`2>` file redirect.** A
+plain redirect *diverts* the command's stdout/stderr to the file instead of the parent shell's own
+stdout/stderr - the exact thing Jenkins' `sh` step watches to build the live console log - so a
+plain redirect would make the whole run go silent in Jenkins until it finished. `tee` duplicates
+each stream to the file *and* passes it through, so a human watching the build sees the tool's
+output exactly as it runs, same as the non-capturing path. Confirmed by real execution (see
+Verification below) - an earlier version of this design incorrectly assumed the plain-redirect
+approach preserved live output; it doesn't, and this was caught only by actually running the
+generated script with real bash, not by reasoning about it.
+
+**`exec 3>&1 4>&2` saves the original stdout/stderr before the command's own redirection reassigns
+fd1/fd2, and each `tee` explicitly targets the corresponding saved fd (`>&3`/`>&4`).** Also
+confirmed necessary by real execution, not obvious from reasoning alone: without saving the fds
+first, the *second* `tee`'s own passthrough copy silently inherits whatever fd1 had *already* been
+reassigned to by the *first* redirection on the same line, cross-contaminating the stdout capture
+file with stderr content (or vice versa) instead of writing to the real console. Explicitly
+targeting the saved fds removes the ambiguity regardless of redirection order.
+
+**`>(...)` targets aren't part of a pipeline with the command, so this doesn't reintroduce the
+"pipe corrupts $?" problem the args-smuggling alternative (see proposal.md) would have hit.** `$?`
+immediately after the redirected command line still reflects the command's own exit status, not
+`tee`'s - confirmed by real execution across repeated runs with a nonzero exit fixture. This is
+captured into a variable (`_exit_code=$?`) on its own line before anything else (`wait`, closing
+the saved fds) can touch `$?`. The saved fds are then explicitly closed (`exec 3>&- 4>&-`) so the
+`tee` subshells see EOF and terminate, `wait` (no args) blocks until they finish flushing - without
+both of those, the script (and the `sh()` call wrapping it) could return before `tee` has finished
+writing the files, truncating what `Dotnet.groovy` reads back - and the script finally does
+`exit $_exit_code`, since `wait`'s own exit status would otherwise become the script's.
+
+**Capture via a script that returns status through `sh(returnStatus: true)`, not `sh`'s own
+`returnStdout`.** Since `sh(returnStdout: true, returnStatus: true)` isn't a legal combination, and
+we need both the text and a non-throwing exit code in one call, the script itself does the
+capturing (via the `tee`/fd mechanism above) and the `sh()` call underneath only ever asks for the
+exit status; each file is then read back with `jenkins.readFile()`. This keeps `sh`'s own step
+contract untouched and puts the "give me status *and* text" behavior entirely inside
+`Dotnet.groovy`, where it can be tested directly against the generated script string, rather than
+depending on an assumption about how Jenkins' `sh` step might evolve.
+
+**Bash, not POSIX `sh`, is required for the capture script - unconditionally, not gated behind
+`loginShell` like `shScript()`'s shebang.** `>(...)` process substitution is a bash extension, not
+POSIX. `shScript()`'s existing shebang is opt-in because plain commands work fine under Jenkins'
+default `sh -xe` invocation; the capture path has no such fallback, since there's no POSIX-`sh` way
+to get both "capture to a file" and "still visible live" at once - so `captureOutputScriptSh()`
+always emits `#!/bin/bash` (with `-l` appended when `loginShell` is requested, same as the plain
+path), rather than reusing `scriptPreambleLines()`'s conditional shebang.
+
+**Verification.** Unit tests assert on the generated script string, not on real bash execution
+semantics (Groovy mocks stand in for `jenkins.sh`/`readFile`) - they cannot by themselves catch a
+subtle real-shell bug like the fd-inheritance issue above. That bug, and the corrected version's
+correctness (live output visible, correct exit code, correctly separated streams), were confirmed
+by literally running the generated script shape with a real bash (5.3, matching Linux Jenkins
+agents far more closely than macOS's frozen bash 3.2) against a fixture tool that prints to both
+streams with deliberate delays between lines and exits non-zero - across 5 repeated runs, with
+timestamps confirming output appeared progressively rather than being buffered until the process
+exited. See `tasks.md` for a note that a real-Jenkins run (as opposed to local bash) is still
+worth doing once this is deployed, mirroring how `serialize-dotnet-tool-install` had its own
+separate real-Jenkins verification section.
 
 **Deterministic, `toolBinary`-keyed file names, not random ones.** `UUID.randomUUID()` and
 `Math.random()` aren't safely callable inside the Jenkins CPS sandbox without extra script
@@ -132,6 +185,12 @@ script or the surrounding Groovy, not conditioned on the tool's own exit code.
   answer), not a flaw in the capture mechanism itself.
 - **[Lost cross-stream ordering]** Per the Non-Goals above; accepted, no current consumer needs
   it.
+- **[Requires a real bash, not just any POSIX `sh`]** `>(...)` process substitution doesn't exist
+  in plain POSIX `sh` (e.g. dash). Every unix/macOS Jenkins agent this library already assumes
+  has a `bash` available for `loginShell`'s existing shebang, so this isn't a new environmental
+  requirement - but it means `captureOutput` would fail outright (a shell syntax error, not a
+  silent fallback) on a hypothetical unix agent with no `bash` on `PATH` at all. No such agent is
+  known to exist in this fleet.
 
 ## Migration Plan
 

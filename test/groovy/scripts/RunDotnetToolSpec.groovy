@@ -101,7 +101,7 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any {
-            it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- validate > .dotnet-tool-stdout-mytool.log 2> .dotnet-tool-stderr-mytool.log"
+            it instanceof Map && it.script == "#!/bin/bash\n${CLI_HOME_GUARD_SH}\nexec 3>&1 4>&2\ndotnet tool run mytool -- validate > >(tee \".dotnet-tool-stdout-mytool.log\" >&3) 2> >(tee \".dotnet-tool-stderr-mytool.log\" >&4)\n_exit_code=\$?\nexec 3>&- 4>&-\nwait\nexit \$_exit_code"
         }
         shArgs().any { it instanceof Map && it.script == "rm -f .dotnet-tool-stdout-mytool.log .dotnet-tool-stderr-mytool.log" }
     }

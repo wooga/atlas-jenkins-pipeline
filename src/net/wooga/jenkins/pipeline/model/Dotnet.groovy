@@ -495,8 +495,11 @@ class Dotnet {
     // have already clobbered PATH by the time the script body starts running.
     // The DOTNET_CLI_HOME guard comes last, immediately before the actual
     // command, since it's a precondition check for that command specifically.
-    // Shared between the plain and capture-output script variants so both stay
-    // in sync automatically instead of duplicating this preamble.
+    // Used only by shScript() - captureOutputScriptSh() needs an unconditional
+    // bash shebang (for `>(...)` process substitution) rather than this one's
+    // loginShell-conditional shebang, so it builds its own preamble instead of
+    // sharing this one; duplicating a few lines here is simpler than a shared
+    // helper parameterized by "does the shebang depend on loginShell or not".
     private static List<String> scriptPreambleLines(Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         List<String> lines = []
         if (loginShell) {
@@ -513,14 +516,62 @@ class Dotnet {
         return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [command]).join("\n")
     }
 
-    // Redirects stdout/stderr to their own files rather than passing redirection
+    // Tees stdout/stderr to their own files rather than passing redirection
     // through the caller-supplied args list, which would rely on Dotnet.runTool's
     // current (accidental, unquoted) arg-joining behavior instead of a documented
     // feature.
+    //
+    // Uses `tee` via process substitution (`> >(tee file)`), not a plain `>` file
+    // redirect: a plain redirect *diverts* the command's stdout/stderr to the file
+    // instead of the parent shell's own stdout/stderr - which is exactly what
+    // Jenkins' sh() step watches to build the live console log - so a plain
+    // redirect would make the whole run go silent in Jenkins until it finished.
+    // `tee` duplicates each stream to the file *and* passes it through to the
+    // script's own (console-connected) stdout/stderr, so a human watching the
+    // build sees the tool's output exactly as it runs, same as the non-capturing
+    // path. This requires an actual bash shell (`>(...)` process substitution is
+    // a bash-ism, not POSIX sh) - unlike shScript()'s shebang, which is opt-in via
+    // loginShell, this one is unconditional: there's no non-bash way to get both
+    // "capture" and "still visible live" at once.
+    //
+    // `exec 3>&1 4>&2` saves the script's original stdout/stderr *before* either
+    // gets reassigned by the command's own `>`/`2>` redirection - required, not
+    // optional: confirmed by real execution that without it, the second `tee`
+    // (stderr's) own passthrough copy inherits whatever fd1 had *already* been
+    // reassigned to by the first redirection, silently duplicating stdout's
+    // content into the stderr capture file (or vice versa depending on
+    // ordering) instead of writing to the real terminal/console. Each `tee`
+    // explicitly targets the corresponding saved fd (`>&3`/`>&4`) so its
+    // passthrough copy is unambiguous regardless of what fd1/fd2 have already
+    // been reassigned to earlier on the same line.
+    //
+    // `>(...)` targets aren't part of a pipeline with <command>, so `$?`
+    // immediately after the redirected command still reflects <command>'s own
+    // exit status, not tee's - captured into _exit_code before anything else can
+    // clobber it. The saved fds are then explicitly closed (`exec 3>&- 4>&-`)
+    // so the tee subshells see EOF on their read end and terminate, and `wait`
+    // (no args) blocks until they finish flushing - without both of those, this
+    // script (and the sh() call wrapping it) could return before tee has
+    // finished writing the files, truncating what Dotnet.groovy reads back
+    // afterward. The final `exit $_exit_code` is required because `wait`'s own
+    // exit status (not <command>'s) would otherwise become the script's exit
+    // status.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
-        String redirectedCommand = "${command} > ${stdoutFile} 2> ${stderrFile}"
-        return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [redirectedCommand]).join("\n")
+        List<String> lines = ["#!/bin/bash${loginShell ? ' -l' : ''}"]
+        if (loginShell) {
+            lines << 'export PATH="$DOTNET_ROOT:$PATH"'
+        }
+        if (logCommandToStdErr) { lines << "set -x" }
+        if (umask) { lines << "umask ${umask}" }
+        lines << requireDotnetCliHomeSh()
+        lines << 'exec 3>&1 4>&2'
+        lines << "${command} > >(tee \"${stdoutFile}\" >&3) 2> >(tee \"${stderrFile}\" >&4)"
+        lines << '_exit_code=$?'
+        lines << 'exec 3>&- 4>&-'
+        lines << "wait"
+        lines << 'exit $_exit_code'
+        return lines.join("\n")
     }
 
     // dotnet tool install is idempotent on its own for a local/manifest tool:
