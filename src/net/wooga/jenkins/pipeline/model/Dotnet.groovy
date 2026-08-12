@@ -24,10 +24,8 @@ class Dotnet {
 
     /**
      * Bounds how long a captureOutput call can be blocked by a hung/lingering
-     * child of the tool (see captureOutputScriptSh()) before giving up waiting
-     * and returning truncated output, rather than hanging the step - and
-     * eventually the whole build, until some surrounding timeout() fires -
-     * indefinitely.
+     * child of the tool (see captureOutputScriptSh()) before giving up and
+     * returning truncated output rather than hanging the step indefinitely.
      */
     static final int CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS = 300
 
@@ -388,20 +386,13 @@ class Dotnet {
      * Installs the SDK/NuGet feed/tool (as withTool), then runs <toolBinary>
      * via `dotnet tool run` with the given args.
      *
-     * `options` (all optional; grouped into one Map rather than more trailing
-     * positional parameters, which had already grown three deep before
-     * captureOutput and would only get harder to read at call sites with each
-     * new unix-only knob added). Note this must be passed as an explicit Map
-     * literal (`runTool(p, b, a, v, false, [captureOutput: true])`), not
-     * Groovy's bare trailing named-argument sugar
-     * (`runTool(p, b, a, v, false, captureOutput: true)`, no brackets) - that
-     * sugar always collapses into a Map passed as the *first* argument to the
-     * call regardless of where a Map-typed parameter appears in the target
-     * method's signature, so it does not "reach" this trailing `options`
-     * parameter; it silently fails to match any overload here instead
-     * (confirmed by real execution: `MissingMethodException`, not a Map ending
-     * up in `options`). Every call site in this file/its tests uses the
-     * explicit-literal form for exactly this reason.
+     * `options` groups the optional unix-only knobs, which had grown past
+     * readable as trailing positional parameters. It must be passed as an
+     * explicit Map literal (`runTool(p, b, a, v, false, [captureOutput: true])`):
+     * Groovy's bare named-argument sugar (`..., captureOutput: true`, no
+     * brackets) always collapses into a Map passed as the call's *first*
+     * argument, never reaching a trailing Map parameter - it throws
+     * MissingMethodException instead (confirmed by real execution).
      *
      * - loginShell/umask/logCommandToStdErr only apply on unix (bat has no
      *   shebang, umask, or `set -x` equivalent) and are ignored on Windows:
@@ -458,16 +449,13 @@ class Dotnet {
         }
     }
 
-    // captureOutput and returnStatus don't compose: captureOutput's result Map
-    // already carries the exit code, so asking for returnStatus too is almost
-    // certainly a caller expecting the old bare-status return shape - fail loudly
-    // rather than silently pick one (mirrors Jenkins' own sh() step, which rejects
-    // returnStdout+returnStatus together). captureOutput on Windows is rejected
-    // outright rather than silently ignored (unlike loginShell/umask/
-    // logCommandToStdErr): those don't change the return type, but captureOutput
-    // does (a Map instead of a bare status), so silently ignoring it on Windows
-    // would surface as a confusing MissingPropertyException far from the actual
-    // mistake instead of a clear error at the call site.
+    // captureOutput's result Map already carries the exit code, so combining it
+    // with returnStatus is almost certainly a caller expecting the old
+    // bare-status return shape - fail loudly rather than silently pick one
+    // (mirrors sh()'s own returnStdout+returnStatus rejection). Windows is
+    // rejected rather than ignored (unlike loginShell/umask/logCommandToStdErr):
+    // those don't change the return type, but captureOutput does, so ignoring it
+    // would surface as a confusing MissingPropertyException far from the mistake.
     @NonCPS
     private static void validateCaptureOutput(Boolean captureOutput, Boolean returnStatus, boolean unix) {
         if (!captureOutput) {
@@ -482,14 +470,9 @@ class Dotnet {
         }
     }
 
-    // Runs the tool with its stdout/stderr each duplicated into their own file
-    // inside the generated script, then reads both back - Jenkins' sh() step
-    // can't return captured stdout and a non-throwing exit status from the same
-    // call, so this routes around that limitation by never asking sh() for
-    // anything but the exit status (returnStatus: true) and instead capturing
-    // text via the script itself. Both files are removed in a finally so a
-    // captured-output call never leaves stray files behind, whether the tool
-    // succeeded, failed, or the sh()/readFile() calls themselves threw.
+    // Jenkins' sh() step can't return captured stdout and a non-throwing exit
+    // status from one call, so the generated script does the capturing itself
+    // and sh() is only ever asked for the exit status.
     private Map runToolCapturingOutput(String command, String toolBinary, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFile = toolStdoutFile(toolBinary)
         String stderrFile = toolStderrFile(toolBinary)
@@ -500,53 +483,35 @@ class Dotnet {
                     label: command,
                     script: captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr),
                     returnStatus: true)
-            // A script exit *before* <command> ever ran - e.g. requireDotnetCliHomeSh()'s
-            // own guard clause failing, which runs before any of the capturing setup -
-            // never creates these files at all. readFile() on a missing file throws,
-            // which would silently break the "captureOutput never throws on a bad exit"
-            // contract with a confusing file-not-found far from the actual cause -
-            // exactly the kind of footgun already avoided for the Windows case.
+            // A script exit before <command> ever ran (e.g. the DOTNET_CLI_HOME
+            // guard failing) never creates these files, and readFile() on a
+            // missing file throws - breaking the "never throws on a bad exit"
+            // contract with a confusing error far from the actual cause.
             String stdout = jenkins.fileExists(stdoutFile) ? jenkins.readFile(file: stdoutFile, encoding: 'UTF-8') : ""
             String stderr = jenkins.fileExists(stderrFile) ? jenkins.readFile(file: stderrFile, encoding: 'UTF-8') : ""
             return [exitCode: exitCode, stdout: stdout, stderr: stderr]
         } finally {
             try {
-                // The script's own trailing `rm -f` on the FIFOs only runs on a clean exit
-                // through the whole script - an abort/kill (or, before the shebang fix, an
-                // early death under Jenkins' default `sh -e`) skips it and leaks the FIFO
-                // paths into the workspace. Removing them here too, alongside the actual
-                // capture files, is the only place cleanup is guaranteed to run regardless
-                // of how the script itself terminated.
+                // The script's own trailing `rm -f` on the FIFOs only runs on a
+                // clean exit - an abort or kill skips it - so this is the only
+                // cleanup guaranteed to run however the script terminated.
                 jenkins.sh(script: "rm -f \"${stdoutFile}\" \"${stderrFile}\" \"${stdoutFifo}\" \"${stderrFifo}\"", returnStatus: true)
             } catch (Exception ignored) {
-                // Swallow: a cleanup failure must never mask whatever exception (if any)
-                // is already propagating from the try block above - e.g. an agent
-                // disconnect during the capturing sh() call itself. Losing four stray
-                // capture/FIFO files is a far smaller problem than losing the real cause of
-                // a build failure to an unrelated cleanup error.
+                // A cleanup failure must never mask an exception already
+                // propagating from the try block (e.g. an agent disconnect) -
+                // stray temp files are the far smaller problem.
             }
         }
     }
 
-    // Workspace-relative, deterministic (not a random/UUID name - those aren't
-    // safely callable inside the Jenkins CPS sandbox without extra script
-    // approval), keyed by toolBinary and (when available) the current stage
-    // name, so two different tools - or the same tool run from two different
-    // stages - in the same workspace don't collide. Two concurrent captureOutput
-    // calls for the *same* toolBinary in the *same* stage in the *same*
-    // workspace can still collide on these paths - not addressed here, mirrors
-    // the same accepted scoping assumption already made for the
-    // workspace-relative NuGet-config lock, just narrowed by the stage-name key
-    // rather than left wide open to the whole workspace. The failure mode if it
-    // is ever hit is silent cross-contamination of text that gets forwarded
-    // wherever a caller sends captured output (e.g. Slack), not a crash.
-    //
-    // toolBinary is sanitized too, not just stageKeySuffix()'s stage name - the
-    // same reasoning applies verbatim, since both end up interpolated into the
-    // same shell-embedded double-quoted paths in the generated script. The risk
-    // is lower here (a developer-written literal, not build-time data like a
-    // stage name), but the sanitizer already exists; routing toolBinary through
-    // it too removes the inconsistency for one extra call.
+    // Workspace-relative and deterministic - random/UUID names aren't safely
+    // callable in the CPS sandbox without extra script approval. Keyed by
+    // toolBinary and (when set) stage name so distinct tools or stages sharing
+    // a workspace don't collide; the same tool in the same stage and workspace
+    // still can (accepted - mirrors the NuGet-config lock's scoping assumption;
+    // the failure mode is cross-contaminated captured text, not a crash). Both
+    // keys are sanitized, since both end up in the same shell-embedded
+    // double-quoted paths - see sanitizeForFilename().
     private String toolStdoutFile(String toolBinary) {
         return ".dotnet-tool-stdout-${sanitizeForFilename(toolBinary)}${stageKeySuffix()}.log"
     }
@@ -560,13 +525,10 @@ class Dotnet {
         return stageName ? "-${sanitizeForFilename(stageName)}" : ""
     }
 
-    // Sanitized, not used raw: a `/` breaks mkfifo (no such directory) and
-    // silently produces [exitCode: 1, stdout: "", stderr: ""] - indistinguishable
-    // from a tool that genuinely failed while printing nothing (confirmed by
-    // real execution, for a stage name). `$`/backticks are worse - since the
-    // value is interpolated directly into the generated shell script, not just
-    // used as a literal path segment, they'd expand inside the double-quoted
-    // paths, an injection surface for whatever the value contains. Anything
+    // A raw `/` breaks mkfifo and silently yields [exitCode: 1, stdout: "",
+    // stderr: ""] - indistinguishable from a real tool failure - and
+    // `$`/backticks would expand inside the generated script's double-quoted
+    // paths, an injection surface (both confirmed by real execution). Anything
     // outside a conservative safe set becomes `_`.
     private static String sanitizeForFilename(String value) {
         return value.replaceAll(/[^A-Za-z0-9._-]/, '_')
@@ -599,117 +561,46 @@ class Dotnet {
         return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [command]).join("\n")
     }
 
-    // Tees stdout/stderr to their own files rather than passing redirection
-    // through the caller-supplied args list, which would rely on Dotnet.runTool's
-    // current (accidental, unquoted) arg-joining behavior instead of a documented
-    // feature.
+    // Duplicates each stream to its own capture file while still passing it
+    // through to the live console, rather than smuggling redirection through the
+    // caller-supplied args list (which would rely on the current accidental
+    // unquoted arg-joining). Every non-obvious choice below was confirmed by
+    // real execution on bash 3.2 and 5.3, not just reasoning; the full decision
+    // history is in openspec/changes/capture-dotnet-tool-output/design.md.
     //
-    // Uses `tee` reading from named FIFOs, run as *real background jobs*
-    // (`command &` + `$!`) - not `tee` via process substitution (`> >(tee file)`,
-    // an earlier version of this). Process-substitution subshells are never
-    // added to the shell's job table, so a bare `wait` (or `wait $!`) never
-    // actually waits for them - confirmed by real execution: with a
-    // deliberately slow tee, `wait` returned immediately and the capture file
-    // did not exist yet, on both bash 3.2 and 5.3. Named FIFOs plus a genuine
-    // background job give a real PID that `wait <pid>` does block on -
-    // confirmed by the same kind of test, this time correctly blocking for the
-    // tee's actual duration and producing a complete file.
-    //
-    // A plain `>`/`2>` file redirect (rejected even earlier than the
-    // process-substitution version) is wrong for a different reason: it
-    // *diverts* the command's stdout/stderr to the file instead of the parent
-    // shell's own stdout/stderr - exactly what Jenkins' sh() step watches to
-    // build the live console log - so the whole run would go silent in
-    // Jenkins until it finished. `tee` duplicates each stream to the file
-    // *and* passes it through to the script's own (console-connected)
-    // stdout/stderr, so a human watching the build sees the tool's output as
-    // it runs, same as the non-capturing path.
-    //
-    // `exec 3>&1 4>&2` saves the script's original stdout/stderr *before*
-    // anything reassigns fd1/fd2, and each `tee` explicitly targets the
-    // corresponding saved fd (`>&3`/`>&4`) - required, not optional: confirmed
-    // by real execution that without it, the second tee's own passthrough copy
-    // can inherit whatever fd1 had already been reassigned to by the first
-    // redirection, silently duplicating one stream's content into the other's
-    // capture file instead of writing to the real console.
-    //
-    // <command>'s own redirects target the FIFOs directly - not a pipe, and
-    // not the tee processes themselves - so `$?` immediately after it still
-    // reflects <command>'s own exit status, captured into _exit_code before
-    // anything else (closing the saved fds, `wait`) can clobber it. The final
-    // `exit $_exit_code` is required because `wait`'s own exit status (not
-    // <command>'s) would otherwise become the script's.
-    //
-    // Building/tearing down FIFOs, background jobs, and `$!`/`wait <pid>` are
-    // all POSIX, not bash-specific. The shebang is still forced unconditionally
-    // (via scriptPreambleLines' forceBash) - but *not* merely for consistency
-    // with the rest of this class's unix-path conventions, and this is
-    // load-bearing, not stylistic: confirmed by real execution that this exact
-    // script shape, run *without* any shebang under `sh -e` (what Jenkins uses
-    // when no custom shebang overrides it), dies the instant <command> exits
-    // non-zero - before _exit_code=$?, wait, or any cleanup ever runs, leaking
-    // both FIFOs and reverting the capture to winning-by-luck (exactly the
-    // race the FIFO switch above exists to fix). Some shebang - not
-    // specifically bash - would suffice to escape `-e`; bash is kept for
-    // consistency with `loginShell`'s own bash requirement elsewhere in this
-    // class, on top of the escape-`-e` requirement this comment used to
-    // (incorrectly) claim was the only reason for a shebang at all.
-    //
-    // A hung/lingering child that keeps a FIFO's write end open after
-    // <command> itself has already exited (e.g. a detached grandchild process
-    // inheriting stdout/stderr) means the corresponding `tee` never sees EOF,
-    // so a bare `wait "$_stdout_tee_pid" "$_stderr_tee_pid"` would block
-    // forever - confirmed by real execution. A background watchdog kills both
-    // `tee` PIDs after CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS if `wait`
-    // hasn't returned by then, degrading to truncated output rather than
-    // hanging the step (and eventually the whole build, until some
-    // surrounding `timeout()` fires) - confirmed by real execution to unblock
-    // correctly on a genuinely hung child.
-    //
-    // In the normal (non-hung) case the watchdog itself is killed once `wait`
-    // returns on its own - but `kill "$_watchdog_pid"` alone only terminates
-    // the subshell, not the `sleep` it's blocked inside, which then gets
-    // orphaned and lives out its full timeout: confirmed by real execution
-    // (leaked, running `sleep` processes after the script exited, on both
-    // bash 3.2 and 5.3). `pkill -P "$_watchdog_pid"` kills the subshell's
-    // child (the `sleep`) first, before `kill "$_watchdog_pid"` takes the
-    // subshell itself - confirmed by real execution to leave nothing behind.
-    // `pkill -P` isn't POSIX but is present on both Linux and macOS agents.
-    //
-    // The `rm -f` immediately before `mkfifo` removes any leftover artifact at
-    // either path from a previous crashed/killed run. Confirmed by real
-    // execution that a stale *regular* file (as opposed to no file, or a stale
-    // FIFO) at that path silently breaks capture entirely: `tee` reading from
-    // a regular file hits EOF immediately and exits, then <command>'s own
-    // redirect writes straight into that now-unpiped file - no capture, no
-    // live console passthrough, and the exit code still looks unremarkable.
-    //
-    // `mkfifo ... || exit 125` fails fast rather than letting a setup failure
-    // (disk full, permissions) cascade into a confusing tee/redirect failure
-    // that would otherwise land in the same acknowledged
-    // indistinguishable-from-tool-failure shape as other setup-time failures -
-    // confirmed by real execution (a directory obstructing one of the FIFO
-    // paths) that the script now stops immediately with exit 125, a
-    // recognizable "setup failed" sentinel distinct from any exit code the
-    // tool itself could plausibly produce, instead of proceeding into the
-    // cascade. This is possible at all only because the forced shebang already
-    // escapes Jenkins' default `sh -e` - `-e` alone would have made this
-    // redundant by stopping the script here anyway, but relying on that would
-    // silently regress if the shebang requirement above were ever "simplified
-    // away" the way its own comment used to (incorrectly) invite.
-    //
-    // The command's own invocation explicitly closes fds 3/4 (`3>&- 4>&-`) so
-    // neither it nor any child it spawns retains a handle to the *real* saved
-    // console descriptors - confirmed by real execution that without this, a
-    // child does have access to fd 3/4 by default (ordinary fd inheritance).
-    // This is specifically about the one thing this document flags as
-    // plausible-but-unverified: whether a lingering child holding the step's
-    // console descriptors open could keep the Durable Task Plugin's step open
-    // regardless of how it backs stdout/stderr. Removing the *command's* own
-    // access to those two fds removes that entire class of exposure outright,
-    // independently of however that plugin question resolves - the watchdog
-    // (below) remains as the backstop for the FIFO write ends specifically,
-    // which this doesn't address.
+    // - `tee` reads from named FIFOs as real background jobs, not `> >(tee ...)`:
+    //   process-substitution subshells never enter the job table, so `wait`
+    //   returns without them having flushed. A plain `>`/`2>` redirect is wrong
+    //   differently - it diverts output away from the console-connected fds
+    //   Jenkins watches, so the run would go silent until it finished.
+    // - `exec 3>&1 4>&2` saves the console fds before anything reassigns
+    //   fd1/fd2, and each tee targets its saved fd explicitly - otherwise the
+    //   second tee's passthrough can inherit the first redirection's target,
+    //   cross-contaminating the capture files.
+    // - The `rm -f` before `mkfifo` clears leftovers from a crashed/killed run:
+    //   a stale *regular* file at a FIFO path makes tee hit EOF instantly and
+    //   capture nothing, with an unremarkable exit code. `|| exit 125` makes a
+    //   genuine mkfifo failure (disk full, permissions) loud instead of letting
+    //   it cascade into the same silent shape - 125 is a recognizable
+    //   setup-failed sentinel, distinct from plausible tool exit codes.
+    // - <command> redirects straight into the FIFOs (no pipe), so `$?` is its
+    //   own exit status - captured into _exit_code before the fd-closes and
+    //   `wait` can clobber it, and restored by the final `exit`. It also closes
+    //   fds 3/4 (`3>&- 4>&-`) so neither it nor any child it spawns keeps a
+    //   handle to the console descriptors, which a lingering child could
+    //   otherwise hold open against the Durable Task step.
+    // - The forced shebang is load-bearing, not stylistic: without one, Jenkins
+    //   runs this under `sh -e`, which kills the script the moment <command>
+    //   exits non-zero - before _exit_code, wait, or cleanup - and leaks the
+    //   FIFOs. Any shebang escapes `-e` (and makes the explicit `exit 125`
+    //   necessary); bash specifically is just consistency with loginShell.
+    // - The watchdog bounds `wait`: a child that outlives <command> while
+    //   holding a FIFO's write end open means that tee never sees EOF and
+    //   `wait` blocks forever - killing the tees after the timeout degrades to
+    //   truncated capture instead of a hung step. On the normal path,
+    //   `pkill -P` must take the watchdog's `sleep` before `kill` takes the
+    //   subshell, or the sleep is orphaned for its full timeout. `pkill -P`
+    //   isn't POSIX but is present on both Linux and macOS agents.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFifo = "${stdoutFile}.fifo"

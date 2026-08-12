@@ -17,10 +17,8 @@ class DotnetSpec extends Specification {
         jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: [], readFile: [], isUnix: 0]
         jenkins.isUnix = { -> jenkins.calls.isUnix++; unix }
         jenkins.env = env
-        // Capture-output files are treated as existing by default so the default
-        // readFile mock below (empty string) is reachable in tests that don't care
-        // about specific captured content - tests asserting on the missing-file
-        // path override this explicitly instead.
+        // Capture files "exist" by default so the readFile mock below is
+        // reachable; tests asserting on the missing-file path override this.
         jenkins.fileExists = { String path -> (path == 'global.json' && hasGlobalJson) || path.startsWith('.dotnet-tool-') }
         jenkins.withEnv = { List envList, Closure body ->
             jenkins.calls.withEnv << envList
@@ -31,8 +29,8 @@ class DotnetSpec extends Specification {
         jenkins.powershell = { Object arg -> jenkins.calls.powershell << arg }
         jenkins.writeFile = { Map args -> jenkins.calls.writeFile << args }
         jenkins.libraryResource = { String path -> jenkins.calls.libraryResource << path; return "" }
-        // Dotnet.groovy calls readFile(file: ..., encoding: ...) - a Map arg, not a
-        // plain String - since it now pins UTF-8 explicitly (see runToolCapturingOutput()).
+        // readFile receives a Map, not a plain String path, since Dotnet.groovy
+        // pins encoding: 'UTF-8' explicitly.
         jenkins.readFile = { Map args -> jenkins.calls.readFile << args.file; return "" }
         jenkins.usernamePassword = { Map args -> args }
         jenkins.withCredentials = { List bindings, Closure body ->
@@ -641,47 +639,23 @@ class DotnetSpec extends Specification {
         then:
         result == [exitCode: 1, stdout: "Executing validator: Foo\n", stderr: "Error: boom\n"]
         def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run mytool -- validate") }
-        // tee reading from named FIFOs, run as real background jobs - not tee via
-        // process substitution, which a bare `wait` doesn't actually wait for (see
-        // captureOutputScriptSh()). fd3/fd4 save the original stdout/stderr *before*
-        // the command's own redirection reassigns fd1/fd2 - confirmed by real
-        // execution required to stop the second tee's passthrough copy from
-        // silently inheriting the first redirection's already-reassigned fd instead
-        // of the real console.
+        // These assertions pin the generated script shape line by line - see
+        // captureOutputScriptSh() for why each line is load-bearing.
         runCall.script.startsWith("#!/bin/bash\n")
         runCall.script.contains('exec 3>&1 4>&2')
-        // stale artifact from a previous crashed/killed run removed before mkfifo -
-        // a stale regular file at that path would otherwise silently break capture
-        // entirely (confirmed by real execution). "|| exit 125" fails fast on a
-        // genuine mkfifo failure (disk full, permissions) rather than cascading
-        // into a confusing downstream failure - confirmed by real execution
-        // (a directory obstructing the path) that the script stops here with a
-        // distinguishable exit code instead of proceeding.
         runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nmkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo" || exit 125')
         runCall.script.contains('tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &')
         runCall.script.contains('_stdout_tee_pid=$!')
         runCall.script.contains('tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &')
         runCall.script.contains('_stderr_tee_pid=$!')
-        // 3>&- 4>&- on the command's own invocation removes its (and any child's)
-        // access to the real saved console fds entirely - confirmed by real
-        // execution that a child otherwise does inherit fd 3/4 by default -
-        // independently of the watchdog below, which only backstops the FIFO
-        // write ends specifically.
         runCall.script.contains('dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo" 3>&- 4>&-')
         runCall.script.contains('_exit_code=$?')
         runCall.script.contains('exec 3>&- 4>&-')
-        // watchdog bounds how long a lingering child can block wait - confirmed by
-        // real execution that a bare wait would otherwise hang forever if a child
-        // keeps the FIFO's write end open after <command> itself exits. Interpolates
-        // the real constant rather than a hardcoded literal, so changing the
-        // timeout doesn't silently desync this assertion from the actual behavior.
+        // Interpolates the real constant rather than a hardcoded literal, so a
+        // timeout change can't silently desync this assertion from the behavior.
         runCall.script.contains("( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &")
         runCall.script.contains('_watchdog_pid=$!')
         runCall.script.contains('wait "$_stdout_tee_pid" "$_stderr_tee_pid"')
-        // pkill -P kills the watchdog subshell's child (the sleep) before kill takes
-        // the subshell itself - without this order, the sleep gets orphaned and
-        // lives out its full timeout, confirmed by real execution (a leaked, still-
-        // running process after the script exited).
         runCall.script.contains('pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null')
         runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nexit $_exit_code')
         runCall.returnStatus == true
@@ -714,9 +688,8 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
-        // a raw "/" would make mkfifo fail outright (no such directory) - and
-        // raw "$"/backticks would expand inside the generated script's
-        // double-quoted paths - confirmed by real execution, not just reasoning.
+        // a raw "/" breaks mkfifo; raw "$"/backticks would expand inside the
+        // generated script's double-quoted paths.
         def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run") }
         runCall.script.contains(".dotnet-tool-stdout-mytool${expectedSuffix}.log.fifo")
         !runCall.script.contains(unsafeFragment)
@@ -730,12 +703,8 @@ class DotnetSpec extends Specification {
 
     @Unroll
     def "runTool sanitizes a toolBinary containing #description into a filesystem-safe filename"() {
-        given: "the same reasoning as stage-name sanitization applies verbatim to the filename" +
-                " derivation - both end up in the same shell-embedded double-quoted paths. This is" +
-                " deliberately narrower than sanitizing toolBinary everywhere: the raw value still" +
-                " (and correctly) appears in the dotnet tool run <toolBinary> invocation itself -" +
-                " that's the actual binary name to invoke, pre-existing and out of scope here, not" +
-                " a filename."
+        given: "sanitization covers the filename derivation only - the raw toolBinary still" +
+                " (correctly) appears in the dotnet tool run invocation itself"
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
         jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
         def dotnet = new Dotnet(jenkins)
