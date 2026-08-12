@@ -85,6 +85,14 @@ only.
 - **AND** the unsafe characters are replaced rather than passed through literally into the
   generated script
 
+#### Scenario: Capture filenames are sanitized when derived from toolBinary
+
+- **WHEN** a pipeline calls `runDotnetTool(toolBinary: <value containing a character unsafe for a
+  shell-embedded path>, ..., captureOutput: true)`
+- **THEN** the capture mechanism still works
+- **AND** the unsafe characters are replaced in the filenames used to capture output, without
+  affecting the literal `toolBinary` value used to invoke the tool itself
+
 #### Scenario: A hung/lingering child of the tool does not block the call forever
 
 - **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` against a tool that exits
@@ -101,3 +109,17 @@ only.
   crashed or killed run
 - **THEN** the stale artifact does not cause this call to silently capture nothing while still
   reporting an unremarkable exit code
+
+#### Scenario: A failure setting up the capture mechanism itself is reported distinguishably
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` and setting up the capture
+  mechanism fails for a reason unrelated to the tool itself (e.g. the agent's disk is full or
+  permissions prevent creating a file at the capture path)
+- **THEN** the call reports a distinguishable failure, rather than proceeding into an unrelated
+  cascade of failures that would otherwise look the same as the tool itself failing
+
+#### Scenario: The tool does not retain access to the saved console file descriptors
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)`
+- **THEN** neither the tool's own process nor any child it spawns has access to the file
+  descriptors this mechanism uses internally to pass output through to the live console

@@ -540,25 +540,36 @@ class Dotnet {
     // rather than left wide open to the whole workspace. The failure mode if it
     // is ever hit is silent cross-contamination of text that gets forwarded
     // wherever a caller sends captured output (e.g. Slack), not a crash.
+    //
+    // toolBinary is sanitized too, not just stageKeySuffix()'s stage name - the
+    // same reasoning applies verbatim, since both end up interpolated into the
+    // same shell-embedded double-quoted paths in the generated script. The risk
+    // is lower here (a developer-written literal, not build-time data like a
+    // stage name), but the sanitizer already exists; routing toolBinary through
+    // it too removes the inconsistency for one extra call.
     private String toolStdoutFile(String toolBinary) {
-        return ".dotnet-tool-stdout-${toolBinary}${stageKeySuffix()}.log"
+        return ".dotnet-tool-stdout-${sanitizeForFilename(toolBinary)}${stageKeySuffix()}.log"
     }
 
     private String toolStderrFile(String toolBinary) {
-        return ".dotnet-tool-stderr-${toolBinary}${stageKeySuffix()}.log"
+        return ".dotnet-tool-stderr-${sanitizeForFilename(toolBinary)}${stageKeySuffix()}.log"
     }
 
-    // Sanitized, not used raw: a `/` in a stage name breaks mkfifo (no such
-    // directory) and silently produces [exitCode: 1, stdout: "", stderr: ""] -
-    // indistinguishable from a tool that genuinely failed while printing
-    // nothing (confirmed by real execution). `$`/backticks are worse - since
-    // the stage name is interpolated directly into the generated shell script,
-    // not just used as a literal path segment, they'd expand inside the
-    // double-quoted paths, an injection surface for whatever the stage name
-    // contains. Anything outside a conservative safe set becomes `_`.
     private String stageKeySuffix() {
         String stageName = jenkins.env?.STAGE_NAME
-        return stageName ? "-${stageName.replaceAll(/[^A-Za-z0-9._-]/, '_')}" : ""
+        return stageName ? "-${sanitizeForFilename(stageName)}" : ""
+    }
+
+    // Sanitized, not used raw: a `/` breaks mkfifo (no such directory) and
+    // silently produces [exitCode: 1, stdout: "", stderr: ""] - indistinguishable
+    // from a tool that genuinely failed while printing nothing (confirmed by
+    // real execution, for a stage name). `$`/backticks are worse - since the
+    // value is interpolated directly into the generated shell script, not just
+    // used as a literal path segment, they'd expand inside the double-quoted
+    // paths, an injection surface for whatever the value contains. Anything
+    // outside a conservative safe set becomes `_`.
+    private static String sanitizeForFilename(String value) {
+        return value.replaceAll(/[^A-Za-z0-9._-]/, '_')
     }
 
     // A custom shebang must be the very first line of the script for Jenkins'
@@ -672,6 +683,33 @@ class Dotnet {
     // a regular file hits EOF immediately and exits, then <command>'s own
     // redirect writes straight into that now-unpiped file - no capture, no
     // live console passthrough, and the exit code still looks unremarkable.
+    //
+    // `mkfifo ... || exit 125` fails fast rather than letting a setup failure
+    // (disk full, permissions) cascade into a confusing tee/redirect failure
+    // that would otherwise land in the same acknowledged
+    // indistinguishable-from-tool-failure shape as other setup-time failures -
+    // confirmed by real execution (a directory obstructing one of the FIFO
+    // paths) that the script now stops immediately with exit 125, a
+    // recognizable "setup failed" sentinel distinct from any exit code the
+    // tool itself could plausibly produce, instead of proceeding into the
+    // cascade. This is possible at all only because the forced shebang already
+    // escapes Jenkins' default `sh -e` - `-e` alone would have made this
+    // redundant by stopping the script here anyway, but relying on that would
+    // silently regress if the shebang requirement above were ever "simplified
+    // away" the way its own comment used to (incorrectly) invite.
+    //
+    // The command's own invocation explicitly closes fds 3/4 (`3>&- 4>&-`) so
+    // neither it nor any child it spawns retains a handle to the *real* saved
+    // console descriptors - confirmed by real execution that without this, a
+    // child does have access to fd 3/4 by default (ordinary fd inheritance).
+    // This is specifically about the one thing this document flags as
+    // plausible-but-unverified: whether a lingering child holding the step's
+    // console descriptors open could keep the Durable Task Plugin's step open
+    // regardless of how it backs stdout/stderr. Removing the *command's* own
+    // access to those two fds removes that entire class of exposure outright,
+    // independently of however that plugin question resolves - the watchdog
+    // (below) remains as the backstop for the FIFO write ends specifically,
+    // which this doesn't address.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFifo = "${stdoutFile}.fifo"
@@ -679,12 +717,12 @@ class Dotnet {
         List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true)
         lines << 'exec 3>&1 4>&2'
         lines << "rm -f \"${stdoutFifo}\" \"${stderrFifo}\""
-        lines << "mkfifo \"${stdoutFifo}\" \"${stderrFifo}\""
+        lines << "mkfifo \"${stdoutFifo}\" \"${stderrFifo}\" || exit 125"
         lines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFifo}\" &"
         lines << '_stdout_tee_pid=$!'
         lines << "tee \"${stderrFile}\" >&4 < \"${stderrFifo}\" &"
         lines << '_stderr_tee_pid=$!'
-        lines << "${command} > \"${stdoutFifo}\" 2> \"${stderrFifo}\""
+        lines << "${command} > \"${stdoutFifo}\" 2> \"${stderrFifo}\" 3>&- 4>&-"
         lines << '_exit_code=$?'
         lines << 'exec 3>&- 4>&-'
         lines << "( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &"

@@ -106,6 +106,27 @@ This is captured into a variable (`_exit_code=$?`) on its own line before anythi
 saved fds, `wait`) can touch `$?`, and the script finally does `exit $_exit_code`, since `wait`'s
 own exit status would otherwise become the script's.
 
+**The command's own invocation explicitly closes fds 3/4 (`3>&- 4>&-`), on top of the already-saved
+fds being closed at the script level later.** Confirmed by real execution that without this, the
+command (and any child it spawns) inherits fd 3/4 by default - ordinary fd inheritance, not
+anything specific to this mechanism. This directly addresses the one thing this document flags as
+plausible-but-unverified (see Risks): whether a lingering child holding the step's console
+descriptors open could keep the Durable Task Plugin's step open, regardless of how it backs
+stdout/stderr. Removing the command's own access to fds 3/4 removes that entire class of exposure
+outright, independently of how that plugin question eventually resolves. This doesn't replace the
+watchdog below - the watchdog backstops a lingering child still holding the *FIFO's write end*
+open (fd 1/2, redirected), which closing fd 3/4 doesn't touch.
+
+**`mkfifo ... || exit 125` fails fast on a genuine setup failure, rather than letting it cascade.**
+Confirmed by real execution (a directory obstructing one of the FIFO paths) that without this, a
+failed `mkfifo` doesn't stop the script - the forced shebang already escapes Jenkins' default
+`sh -e`, so nothing else would stop it either - and it proceeds into a `tee`/redirect cascade that
+lands in the same acknowledged indistinguishable-from-tool-failure shape as other setup-time
+failures. `exit 125` is a recognizable "setup failed" sentinel, distinct from any exit code the
+tool itself could plausibly produce, so at least this specific failure is now loud rather than
+silent. Confirmed by real execution that the script now stops immediately with that exit code
+instead of cascading.
+
 **Capture via a script that returns status through `sh(returnStatus: true)`, not `sh`'s own
 `returnStdout`.** Since `sh(returnStdout: true, returnStatus: true)` isn't a legal combination, and
 we need both the text and a non-throwing exit code in one call, the script itself does the
@@ -167,6 +188,19 @@ sandbox approval, and narrow the collision window from "the whole workspace" to 
 from the same stage in the same workspace" - cheap insurance against the specific case of a
 Jenkinsfile validating two config sets in a `parallel {}` block sharing one workspace, which is not
 a known current pattern but is a plausible future one.
+
+**Both `toolBinary` and `STAGE_NAME` are sanitized before being used in a filename, via the same
+`sanitizeForFilename()` helper.** `toolBinary` was interpolated raw in an earlier version of this
+change - an inconsistency, not a different risk: it ends up in exactly the same shell-embedded
+double-quoted paths as `STAGE_NAME`, so the same failure modes apply (a `/` breaks `mkfifo`; a `$`
+or backtick would expand). The risk is lower in practice - `toolBinary` is a developer-written
+literal in a Jenkinsfile, not build-time data like a stage name - but the sanitizer already existed,
+so routing `toolBinary` through it too removes the inconsistency for one extra call. This is
+deliberately scoped to the *filename* derivation only: `toolBinary` still (correctly) appears raw
+in the `dotnet tool run <toolBinary>` invocation itself, since that's the actual binary name to
+invoke, not a filename - sanitizing it there would break legitimate binary names and isn't a new
+exposure introduced by this change; it predates `captureOutput` entirely and applies equally to the
+non-capturing path.
 
 **Accepted risk: two concurrent `captureOutput` calls for the *same* `toolBinary` in the *same*
 stage in the *same* shared workspace can still collide on these files.** Not fully addressed by this
@@ -297,13 +331,21 @@ class, layered on top of the escape-`-e` requirement, not instead of it.
 - **[The lingering-child scenario itself is untested on real Jenkins]** Everything about the
   watchdog above (it fires, it unblocks `wait`, cleanup afterward leaves nothing running) was
   confirmed with local bash, not a real Jenkins agent - and this is the one part of this whole
-  change where that distinction plausibly matters, not just formally. A background process that
-  outlives the step depends on how the Durable Task Plugin backs the step's stdout/stderr; if it's
-  a file rather than a pipe (as it's believed to be), an orphan inheriting those descriptors
-  shouldn't hold the step open the way it would with a pipe - but this is a plausible-not-verified
-  claim, unlike everything else in this document, which was verified. Worth specifically checking
-  in the real-Jenkins run already planned in `tasks.md` (§6.2), not just re-confirming the
-  already-verified parts.
+  change where that distinction plausibly matters, not just formally. Closing fds 3/4 on the
+  command's own invocation (see Decisions) removes one specific path by which a lingering child
+  could hold the step's console descriptors open, regardless of how the Durable Task Plugin backs
+  them - but it doesn't address a child still holding open the *FIFO's write end* (fd 1/2), which
+  is what the watchdog exists for; whether that specifically keeps a real Jenkins step open the way
+  it might with a pipe-backed stdout/stderr (as opposed to the file-backed implementation it's
+  believed to use) is still a plausible-not-verified claim, unlike everything else in this
+  document. Worth specifically checking in the real-Jenkins run already planned in `tasks.md`
+  (§6.2), not just re-confirming the already-verified parts.
+- **[A watchdog killing an already-exited tee's PID could theoretically hit a reused PID under the
+  same agent user, in the narrow case where only one of the two tees lingers]** Accepted, not worth
+  building anything for: the window is the watchdog's own timeout (300s), the failure is a
+  suppressed error (`2>/dev/null` on the `kill`) rather than anything observable going wrong, and
+  no current or plausible near-term consumer's usage pattern makes this likely enough to justify
+  machinery narrower than "accept it."
 - **[`Dotnet.runTool()`'s signature change from positional trailing parameters to a single
   `options` Map is source-breaking for any caller using the old positional form directly]** This is
   *not* the same claim as "purely additive" made elsewhere in this document about the `captureOutput`

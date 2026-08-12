@@ -652,13 +652,22 @@ class DotnetSpec extends Specification {
         runCall.script.contains('exec 3>&1 4>&2')
         // stale artifact from a previous crashed/killed run removed before mkfifo -
         // a stale regular file at that path would otherwise silently break capture
-        // entirely (confirmed by real execution).
-        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nmkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
+        // entirely (confirmed by real execution). "|| exit 125" fails fast on a
+        // genuine mkfifo failure (disk full, permissions) rather than cascading
+        // into a confusing downstream failure - confirmed by real execution
+        // (a directory obstructing the path) that the script stops here with a
+        // distinguishable exit code instead of proceeding.
+        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nmkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo" || exit 125')
         runCall.script.contains('tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &')
         runCall.script.contains('_stdout_tee_pid=$!')
         runCall.script.contains('tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &')
         runCall.script.contains('_stderr_tee_pid=$!')
-        runCall.script.contains('dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo"')
+        // 3>&- 4>&- on the command's own invocation removes its (and any child's)
+        // access to the real saved console fds entirely - confirmed by real
+        // execution that a child otherwise does inherit fd 3/4 by default -
+        // independently of the watchdog below, which only backstops the FIFO
+        // write ends specifically.
+        runCall.script.contains('dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo" 3>&- 4>&-')
         runCall.script.contains('_exit_code=$?')
         runCall.script.contains('exec 3>&- 4>&-')
         // watchdog bounds how long a lingering child can block wait - confirmed by
@@ -717,6 +726,32 @@ class DotnetSpec extends Specification {
         "a slash"           | "Validate/Configs" | "-Validate_Configs" | "Validate/Configs"
         "a dollar sign"      | 'Deploy $HOME'     | "-Deploy__HOME"     | '$HOME'
         "a backtick"         | 'Deploy `whoami`'  | "-Deploy__whoami_"  | '`whoami`'
+    }
+
+    @Unroll
+    def "runTool sanitizes a toolBinary containing #description into a filesystem-safe filename"() {
+        given: "the same reasoning as stage-name sanitization applies verbatim to the filename" +
+                " derivation - both end up in the same shell-embedded double-quoted paths. This is" +
+                " deliberately narrower than sanitizing toolBinary everywhere: the raw value still" +
+                " (and correctly) appears in the dotnet tool run <toolBinary> invocation itself -" +
+                " that's the actual binary name to invoke, pre-existing and out of scope here, not" +
+                " a filename."
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", toolBinary, [], null, false, [captureOutput: true])
+
+        then:
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run") }
+        runCall.script.contains(".dotnet-tool-stdout-${expectedName}.log.fifo")
+        !runCall.script.contains(".dotnet-tool-stdout-${toolBinary}.log")
+
+        where:
+        description    | toolBinary | expectedName
+        "a slash"       | "my/tool"  | "my_tool"
+        "a dollar sign" | 'my$tool'  | "my_tool"
     }
 
     def "runTool captures stdout/stderr when the tool succeeds"() {

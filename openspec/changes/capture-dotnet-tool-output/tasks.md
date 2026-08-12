@@ -227,6 +227,41 @@ One new finding, introduced by §3b.2's own watchdog fix, plus two nits.
       restating the full rationale twice.
 - [x] 3c.4 Full suite re-run: 485 tests, same single pre-existing unrelated `CacheSpec` failure.
 
+## 3d. Review fixes (PR #353, fourth review round)
+
+Three findings, one genuine gap and two hardening improvements, plus one accepted micro-edge with
+no action taken.
+
+- [x] 3d.1 **`toolBinary` interpolated unsanitized into the capture filenames** - the same
+      reasoning that motivated sanitizing `STAGE_NAME` (§3b.1) applies verbatim, since both end up
+      in the same shell-embedded double-quoted paths. Fixed: extracted a shared
+      `sanitizeForFilename()` helper, used by both `toolStdoutFile()`/`toolStderrFile()` (for
+      `toolBinary`) and `stageKeySuffix()` (for `STAGE_NAME`). Deliberately scoped to the filename
+      derivation only - `toolBinary` still (correctly) appears raw in the `dotnet tool run
+      <toolBinary>` invocation itself, which predates `captureOutput` and applies equally to the
+      non-capturing path, not a new exposure. Added a two-case `@Unroll` test (`/`, `$`).
+- [x] 3d.2 Hardening: `mkfifo ... || exit 125` fails fast on a genuine setup failure (disk full,
+      permissions) rather than letting it cascade into the tee/redirect chain and land in the same
+      acknowledged indistinguishable-from-tool-failure shape. Confirmed by real execution (a
+      directory obstructing one of the FIFO paths) that the script now stops immediately with a
+      distinguishable exit code instead of proceeding. Possible only because the forced shebang
+      already escapes Jenkins' default `sh -e` - noted in the comment as a reason not to
+      "simplify away" that shebang later.
+- [x] 3d.3 Hardening: the command's own invocation now explicitly closes fds 3/4
+      (`3>&- 4>&-`), so neither it nor any child it spawns retains access to the saved console
+      descriptors - confirmed by real execution that a child does inherit fd 3/4 by default without
+      this. Directly narrows the one thing this change flags as plausible-but-unverified (whether a
+      lingering child holding console descriptors could keep a real Jenkins step open) by removing
+      this specific exposure outright, independently of how that question resolves; doesn't replace
+      the watchdog, which backstops a different exposure (a child holding the FIFO's write end,
+      fd 1/2, open).
+- [x] 3d.4 Accepted, no action: a watchdog `kill` targeting an already-exited tee's PID could
+      theoretically hit a reused PID under the same agent user, in the narrow case where only one
+      of two tees lingers. Suppressed error, bounded by the watchdog's own timeout, no plausible
+      current usage pattern makes it likely - not worth machinery narrower than accepting it. Noted
+      in `design.md`'s Risks, not silently dropped.
+- [x] 3d.5 Full suite re-run: 487 tests, same single pre-existing unrelated `CacheSpec` failure.
+
 ## 4. OpenSpec change artifacts
 
 - [x] 4.1 `proposal.md` — why/what/capabilities/impact.
