@@ -379,30 +379,42 @@ class Dotnet {
      * Installs the SDK/NuGet feed/tool (as withTool), then runs <toolBinary>
      * via `dotnet tool run` with the given args.
      *
-     * loginShell/umask/logCommandToStdErr only apply on unix (bat has no
-     * shebang, umask, or `set -x` equivalent) and are ignored on Windows:
-     * - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
-     *   default `sh -xe`, so the tool sees the same environment a login shell
-     *   would set up (e.g. profile-sourced PATH entries). A login shell
-     *   re-sources /etc/profile and ~/.bash_profile, which on some agents
-     *   unconditionally overwrites PATH, discarding the cache dir
-     *   withInstalledDotnet put on it - DOTNET_ROOT survives this (it's a
-     *   plain Jenkins-set env var, not something profile scripts touch), so
-     *   an `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right
-     *   after the shebang to defend against that (same fix documented as a
-     *   manual caveat for withDotnet). This also replaces Jenkins' default
-     *   invocation entirely, including its default `-x` tracing - use
-     *   logCommandToStdErr to opt back into that explicitly.
-     * - umask: prepended as `umask <value>` before the command, matching the
-     *   umask convention used elsewhere in this library for shared-cache-safe
-     *   file permissions.
-     * - logCommandToStdErr: prepends `set -x` (echoes each command to stderr
-     *   before running it), since a custom loginShell shebang above loses
-     *   Jenkins' own default `-xe` tracing.
+     * `options` (all optional; grouped into one Map rather than more trailing
+     * positional parameters, which had already grown three deep before
+     * captureOutput and would only get harder to read at call sites with each
+     * new unix-only knob added):
+     * - loginShell/umask/logCommandToStdErr only apply on unix (bat has no
+     *   shebang, umask, or `set -x` equivalent) and are ignored on Windows:
+     *   - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
+     *     default `sh -xe`, so the tool sees the same environment a login shell
+     *     would set up (e.g. profile-sourced PATH entries). A login shell
+     *     re-sources /etc/profile and ~/.bash_profile, which on some agents
+     *     unconditionally overwrites PATH, discarding the cache dir
+     *     withInstalledDotnet put on it - DOTNET_ROOT survives this (it's a
+     *     plain Jenkins-set env var, not something profile scripts touch), so
+     *     an `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right
+     *     after the shebang to defend against that (same fix documented as a
+     *     manual caveat for withDotnet). This also replaces Jenkins' default
+     *     invocation entirely, including its default `-x` tracing - use
+     *     logCommandToStdErr to opt back into that explicitly.
+     *   - umask: prepended as `umask <value>` before the command, matching the
+     *     umask convention used elsewhere in this library for shared-cache-safe
+     *     file permissions.
+     *   - logCommandToStdErr: prepends `set -x` (echoes each command to stderr
+     *     before running it), since a custom loginShell shebang above loses
+     *     Jenkins' own default `-xe` tracing.
+     * - captureOutput: unix/macOS only - see runToolCapturingOutput(). Note
+     *   this always forces a bash shebang internally regardless of
+     *   loginShell/logCommandToStdErr, so Jenkins' default `-x` tracing is
+     *   dropped even when loginShell isn't set - pass logCommandToStdErr too
+     *   if that tracing is wanted back.
      */
-    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus,
-                Boolean loginShell = false, String umask = null, Boolean logCommandToStdErr = false,
-                Boolean captureOutput = false) {
+    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus, Map options = [:]) {
+        Boolean loginShell = (options.loginShell ?: false) as Boolean
+        String umask = options.umask as String
+        Boolean logCommandToStdErr = (options.logCommandToStdErr ?: false) as Boolean
+        Boolean captureOutput = (options.captureOutput ?: false) as Boolean
+
         validateCaptureOutput(captureOutput, returnStatus, isUnix())
         return withTool(packageId, version) {
             // The "--" separator is required: without it, dotnet's own CLI parser
@@ -450,14 +462,14 @@ class Dotnet {
         }
     }
 
-    // Runs the tool with its stdout/stderr each redirected to their own file inside
-    // the generated script, then reads both back - Jenkins' sh() step can't return
-    // captured stdout and a non-throwing exit status from the same call, so this
-    // routes around that limitation by never asking sh() for anything but the exit
-    // status (returnStatus: true) and instead capturing text via the redirect
-    // itself. Both files are removed in a finally so a captured-output call never
-    // leaves stray files behind, whether the tool succeeded, failed, or the sh()/
-    // readFile() calls themselves threw.
+    // Runs the tool with its stdout/stderr each duplicated into their own file
+    // inside the generated script, then reads both back - Jenkins' sh() step
+    // can't return captured stdout and a non-throwing exit status from the same
+    // call, so this routes around that limitation by never asking sh() for
+    // anything but the exit status (returnStatus: true) and instead capturing
+    // text via the script itself. Both files are removed in a finally so a
+    // captured-output call never leaves stray files behind, whether the tool
+    // succeeded, failed, or the sh()/readFile() calls themselves threw.
     private Map runToolCapturingOutput(String command, String toolBinary, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFile = toolStdoutFile(toolBinary)
         String stderrFile = toolStderrFile(toolBinary)
@@ -466,27 +478,51 @@ class Dotnet {
                     label: command,
                     script: captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr),
                     returnStatus: true)
-            String stdout = jenkins.readFile(stdoutFile)
-            String stderr = jenkins.readFile(stderrFile)
+            // A script exit *before* <command> ever ran - e.g. requireDotnetCliHomeSh()'s
+            // own guard clause failing, which runs before any of the capturing setup -
+            // never creates these files at all. readFile() on a missing file throws,
+            // which would silently break the "captureOutput never throws on a bad exit"
+            // contract with a confusing file-not-found far from the actual cause -
+            // exactly the kind of footgun already avoided for the Windows case.
+            String stdout = jenkins.fileExists(stdoutFile) ? jenkins.readFile(file: stdoutFile, encoding: 'UTF-8') : ""
+            String stderr = jenkins.fileExists(stderrFile) ? jenkins.readFile(file: stderrFile, encoding: 'UTF-8') : ""
             return [exitCode: exitCode, stdout: stdout, stderr: stderr]
         } finally {
-            jenkins.sh(script: "rm -f ${stdoutFile} ${stderrFile}", returnStatus: true)
+            try {
+                jenkins.sh(script: "rm -f \"${stdoutFile}\" \"${stderrFile}\"", returnStatus: true)
+            } catch (Exception ignored) {
+                // Swallow: a cleanup failure must never mask whatever exception (if any)
+                // is already propagating from the try block above - e.g. an agent
+                // disconnect during the capturing sh() call itself. Losing two stray
+                // capture files is a far smaller problem than losing the real cause of
+                // a build failure to an unrelated cleanup error.
+            }
         }
     }
 
     // Workspace-relative, deterministic (not a random/UUID name - those aren't
     // safely callable inside the Jenkins CPS sandbox without extra script
-    // approval), keyed by toolBinary so two different tools running in the same
-    // workspace don't collide. Two concurrent captureOutput calls for the *same*
-    // toolBinary in the *same* workspace can still collide on these paths - not
-    // addressed here, mirrors the same accepted scoping assumption already made
-    // for the workspace-relative NuGet-config lock.
-    private static String toolStdoutFile(String toolBinary) {
-        return ".dotnet-tool-stdout-${toolBinary}.log"
+    // approval), keyed by toolBinary and (when available) the current stage
+    // name, so two different tools - or the same tool run from two different
+    // stages - in the same workspace don't collide. Two concurrent captureOutput
+    // calls for the *same* toolBinary in the *same* stage in the *same*
+    // workspace can still collide on these paths - not addressed here, mirrors
+    // the same accepted scoping assumption already made for the
+    // workspace-relative NuGet-config lock, just narrowed by the stage-name key
+    // rather than left wide open to the whole workspace. The failure mode if it
+    // is ever hit is silent cross-contamination of text that gets forwarded
+    // wherever a caller sends captured output (e.g. Slack), not a crash.
+    private String toolStdoutFile(String toolBinary) {
+        return ".dotnet-tool-stdout-${toolBinary}${stageKeySuffix()}.log"
     }
 
-    private static String toolStderrFile(String toolBinary) {
-        return ".dotnet-tool-stderr-${toolBinary}.log"
+    private String toolStderrFile(String toolBinary) {
+        return ".dotnet-tool-stderr-${toolBinary}${stageKeySuffix()}.log"
+    }
+
+    private String stageKeySuffix() {
+        String stageName = jenkins.env?.STAGE_NAME
+        return stageName ? "-${stageName}" : ""
     }
 
     // A custom shebang must be the very first line of the script for Jenkins'
@@ -495,16 +531,16 @@ class Dotnet {
     // have already clobbered PATH by the time the script body starts running.
     // The DOTNET_CLI_HOME guard comes last, immediately before the actual
     // command, since it's a precondition check for that command specifically.
-    // Used only by shScript() - captureOutputScriptSh() needs an unconditional
-    // bash shebang (for `>(...)` process substitution) rather than this one's
-    // loginShell-conditional shebang, so it builds its own preamble instead of
-    // sharing this one; duplicating a few lines here is simpler than a shared
-    // helper parameterized by "does the shebang depend on loginShell or not".
-    private static List<String> scriptPreambleLines(Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+    // Shared between shScript() and captureOutputScriptSh() (via forceBash) so
+    // any future preamble addition applies to both automatically instead of
+    // risking one variant getting updated and the other silently left behind.
+    private static List<String> scriptPreambleLines(Boolean loginShell, String umask, Boolean logCommandToStdErr, Boolean forceBash = false) {
         List<String> lines = []
         if (loginShell) {
             lines << "#!/bin/bash -l"
             lines << 'export PATH="$DOTNET_ROOT:$PATH"'
+        } else if (forceBash) {
+            lines << "#!/bin/bash"
         }
         if (logCommandToStdErr) { lines << "set -x" }
         if (umask) { lines << "umask ${umask}" }
@@ -521,55 +557,64 @@ class Dotnet {
     // current (accidental, unquoted) arg-joining behavior instead of a documented
     // feature.
     //
-    // Uses `tee` via process substitution (`> >(tee file)`), not a plain `>` file
-    // redirect: a plain redirect *diverts* the command's stdout/stderr to the file
-    // instead of the parent shell's own stdout/stderr - which is exactly what
-    // Jenkins' sh() step watches to build the live console log - so a plain
-    // redirect would make the whole run go silent in Jenkins until it finished.
-    // `tee` duplicates each stream to the file *and* passes it through to the
-    // script's own (console-connected) stdout/stderr, so a human watching the
-    // build sees the tool's output exactly as it runs, same as the non-capturing
-    // path. This requires an actual bash shell (`>(...)` process substitution is
-    // a bash-ism, not POSIX sh) - unlike shScript()'s shebang, which is opt-in via
-    // loginShell, this one is unconditional: there's no non-bash way to get both
-    // "capture" and "still visible live" at once.
+    // Uses `tee` reading from named FIFOs, run as *real background jobs*
+    // (`command &` + `$!`) - not `tee` via process substitution (`> >(tee file)`,
+    // an earlier version of this). Process-substitution subshells are never
+    // added to the shell's job table, so a bare `wait` (or `wait $!`) never
+    // actually waits for them - confirmed by real execution: with a
+    // deliberately slow tee, `wait` returned immediately and the capture file
+    // did not exist yet, on both bash 3.2 and 5.3. Named FIFOs plus a genuine
+    // background job give a real PID that `wait <pid>` does block on -
+    // confirmed by the same kind of test, this time correctly blocking for the
+    // tee's actual duration and producing a complete file.
     //
-    // `exec 3>&1 4>&2` saves the script's original stdout/stderr *before* either
-    // gets reassigned by the command's own `>`/`2>` redirection - required, not
-    // optional: confirmed by real execution that without it, the second `tee`
-    // (stderr's) own passthrough copy inherits whatever fd1 had *already* been
-    // reassigned to by the first redirection, silently duplicating stdout's
-    // content into the stderr capture file (or vice versa depending on
-    // ordering) instead of writing to the real terminal/console. Each `tee`
-    // explicitly targets the corresponding saved fd (`>&3`/`>&4`) so its
-    // passthrough copy is unambiguous regardless of what fd1/fd2 have already
-    // been reassigned to earlier on the same line.
+    // A plain `>`/`2>` file redirect (rejected even earlier than the
+    // process-substitution version) is wrong for a different reason: it
+    // *diverts* the command's stdout/stderr to the file instead of the parent
+    // shell's own stdout/stderr - exactly what Jenkins' sh() step watches to
+    // build the live console log - so the whole run would go silent in
+    // Jenkins until it finished. `tee` duplicates each stream to the file
+    // *and* passes it through to the script's own (console-connected)
+    // stdout/stderr, so a human watching the build sees the tool's output as
+    // it runs, same as the non-capturing path.
     //
-    // `>(...)` targets aren't part of a pipeline with <command>, so `$?`
-    // immediately after the redirected command still reflects <command>'s own
-    // exit status, not tee's - captured into _exit_code before anything else can
-    // clobber it. The saved fds are then explicitly closed (`exec 3>&- 4>&-`)
-    // so the tee subshells see EOF on their read end and terminate, and `wait`
-    // (no args) blocks until they finish flushing - without both of those, this
-    // script (and the sh() call wrapping it) could return before tee has
-    // finished writing the files, truncating what Dotnet.groovy reads back
-    // afterward. The final `exit $_exit_code` is required because `wait`'s own
-    // exit status (not <command>'s) would otherwise become the script's exit
-    // status.
+    // `exec 3>&1 4>&2` saves the script's original stdout/stderr *before*
+    // anything reassigns fd1/fd2, and each `tee` explicitly targets the
+    // corresponding saved fd (`>&3`/`>&4`) - required, not optional: confirmed
+    // by real execution that without it, the second tee's own passthrough copy
+    // can inherit whatever fd1 had already been reassigned to by the first
+    // redirection, silently duplicating one stream's content into the other's
+    // capture file instead of writing to the real console.
+    //
+    // <command>'s own redirects target the FIFOs directly - not a pipe, and
+    // not the tee processes themselves - so `$?` immediately after it still
+    // reflects <command>'s own exit status, captured into _exit_code before
+    // anything else (closing the saved fds, `wait`) can clobber it. The final
+    // `exit $_exit_code` is required because `wait`'s own exit status (not
+    // <command>'s) would otherwise become the script's.
+    //
+    // Building/tearing down FIFOs, background jobs, and `$!`/`wait <pid>` are
+    // all POSIX, not bash-specific - this mechanism doesn't actually require
+    // bash the way process substitution did. The shebang is still forced to
+    // bash unconditionally (via scriptPreambleLines' forceBash) purely for
+    // consistency with the rest of this class's unix-path conventions, not
+    // because this specific mechanism demands it.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
-        List<String> lines = ["#!/bin/bash${loginShell ? ' -l' : ''}"]
-        if (loginShell) {
-            lines << 'export PATH="$DOTNET_ROOT:$PATH"'
-        }
-        if (logCommandToStdErr) { lines << "set -x" }
-        if (umask) { lines << "umask ${umask}" }
-        lines << requireDotnetCliHomeSh()
+        String stdoutFifo = "${stdoutFile}.fifo"
+        String stderrFifo = "${stderrFile}.fifo"
+        List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true)
         lines << 'exec 3>&1 4>&2'
-        lines << "${command} > >(tee \"${stdoutFile}\" >&3) 2> >(tee \"${stderrFile}\" >&4)"
+        lines << "mkfifo \"${stdoutFifo}\" \"${stderrFifo}\""
+        lines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFifo}\" &"
+        lines << '_stdout_tee_pid=$!'
+        lines << "tee \"${stderrFile}\" >&4 < \"${stderrFifo}\" &"
+        lines << '_stderr_tee_pid=$!'
+        lines << "${command} > \"${stdoutFifo}\" 2> \"${stderrFifo}\""
         lines << '_exit_code=$?'
         lines << 'exec 3>&- 4>&-'
-        lines << "wait"
+        lines << 'wait "$_stdout_tee_pid" "$_stderr_tee_pid"'
+        lines << "rm -f \"${stdoutFifo}\" \"${stderrFifo}\""
         lines << 'exit $_exit_code'
         return lines.join("\n")
     }

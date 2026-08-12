@@ -68,79 +68,124 @@ avoid coupling a caller's parsing logic to a tool's message-formatting choices. 
 generated script cost nothing extra over one; the caller gets both back and picks whichever it
 needs, or both.
 
-**`tee` via process substitution (`> >(tee file >&N)`), not a plain `>`/`2>` file redirect.** A
-plain redirect *diverts* the command's stdout/stderr to the file instead of the parent shell's own
-stdout/stderr - the exact thing Jenkins' `sh` step watches to build the live console log - so a
-plain redirect would make the whole run go silent in Jenkins until it finished. `tee` duplicates
-each stream to the file *and* passes it through, so a human watching the build sees the tool's
-output exactly as it runs, same as the non-capturing path. Confirmed by real execution (see
-Verification below) - an earlier version of this design incorrectly assumed the plain-redirect
-approach preserved live output; it doesn't, and this was caught only by actually running the
-generated script with real bash, not by reasoning about it.
+**`tee` reading from named FIFOs, run as real background jobs (`command &` + `$!`), not `tee` via
+process substitution (`> >(tee file)`).** This is the second iteration of this mechanism, and the
+change was again forced by real execution, not reasoning: process-substitution subshells are never
+added to the shell's job table, so a bare `wait` (or `wait $!`) never actually waits for them.
+Confirmed directly: with a `tee` deliberately slowed down (`sleep 2` before it runs), `wait`
+returned immediately on both bash 3.2 and 5.3, and the capture file did not exist yet at that point
+- the original 5-repeated-runs verification only "passed" because `tee`'s own work happened to
+finish before the next line ran, by luck, not because `wait` enforced anything. Named FIFOs plus a
+genuine background job give a real PID that `wait <pid>` does block on - confirmed by the same kind
+of test, this time blocking for the full injected delay and producing a complete file, on both bash
+versions.
 
-**`exec 3>&1 4>&2` saves the original stdout/stderr before the command's own redirection reassigns
-fd1/fd2, and each `tee` explicitly targets the corresponding saved fd (`>&3`/`>&4`).** Also
-confirmed necessary by real execution, not obvious from reasoning alone: without saving the fds
-first, the *second* `tee`'s own passthrough copy silently inherits whatever fd1 had *already* been
-reassigned to by the *first* redirection on the same line, cross-contaminating the stdout capture
-file with stderr content (or vice versa) instead of writing to the real console. Explicitly
-targeting the saved fds removes the ambiguity regardless of redirection order.
+A plain `>`/`2>` file redirect (rejected even earlier, in the first draft of this mechanism) is
+wrong for a different, independent reason: it *diverts* the command's stdout/stderr to the file
+instead of the parent shell's own stdout/stderr - exactly what Jenkins' `sh` step watches to build
+the live console log - so the whole run would go silent in Jenkins until it finished. `tee`
+duplicates each stream to the file *and* passes it through to the script's own (console-connected)
+stdout/stderr, so a human watching the build sees the tool's output as it runs, same as the
+non-capturing path.
 
-**`>(...)` targets aren't part of a pipeline with the command, so this doesn't reintroduce the
-"pipe corrupts $?" problem the args-smuggling alternative (see proposal.md) would have hit.** `$?`
-immediately after the redirected command line still reflects the command's own exit status, not
-`tee`'s - confirmed by real execution across repeated runs with a nonzero exit fixture. This is
-captured into a variable (`_exit_code=$?`) on its own line before anything else (`wait`, closing
-the saved fds) can touch `$?`. The saved fds are then explicitly closed (`exec 3>&- 4>&-`) so the
-`tee` subshells see EOF and terminate, `wait` (no args) blocks until they finish flushing - without
-both of those, the script (and the `sh()` call wrapping it) could return before `tee` has finished
-writing the files, truncating what `Dotnet.groovy` reads back - and the script finally does
-`exit $_exit_code`, since `wait`'s own exit status would otherwise become the script's.
+**`exec 3>&1 4>&2` saves the original stdout/stderr before anything reassigns fd1/fd2, and each
+`tee` explicitly targets the corresponding saved fd (`>&3`/`>&4`).** Confirmed necessary by real
+execution, not obvious from reasoning alone: without saving the fds first, the *second* `tee`'s own
+passthrough copy silently inherits whatever fd1 had *already* been reassigned to by the *first*
+redirection on the same line, cross-contaminating the stdout capture file with stderr content (or
+vice versa) instead of writing to the real console. Explicitly targeting the saved fds removes the
+ambiguity regardless of redirection order. This part of the mechanism was correct from the first
+iteration and carried over unchanged into the FIFO-based version.
+
+**The command's own redirects target the FIFOs directly, not a pipe and not the `tee` processes
+themselves, so this doesn't reintroduce the "pipe corrupts $?" problem the args-smuggling
+alternative (see proposal.md) would have hit.** `$?` immediately after the command still reflects
+its own exit status, not `tee`'s or the shell's - confirmed by real execution across repeated runs
+with a nonzero-exit fixture, on both the process-substitution and FIFO versions of this mechanism.
+This is captured into a variable (`_exit_code=$?`) on its own line before anything else (closing the
+saved fds, `wait`) can touch `$?`, and the script finally does `exit $_exit_code`, since `wait`'s
+own exit status would otherwise become the script's.
 
 **Capture via a script that returns status through `sh(returnStatus: true)`, not `sh`'s own
 `returnStdout`.** Since `sh(returnStdout: true, returnStatus: true)` isn't a legal combination, and
 we need both the text and a non-throwing exit code in one call, the script itself does the
-capturing (via the `tee`/fd mechanism above) and the `sh()` call underneath only ever asks for the
-exit status; each file is then read back with `jenkins.readFile()`. This keeps `sh`'s own step
-contract untouched and puts the "give me status *and* text" behavior entirely inside
-`Dotnet.groovy`, where it can be tested directly against the generated script string, rather than
-depending on an assumption about how Jenkins' `sh` step might evolve.
+capturing (via the `tee`/FIFO/fd mechanism above) and the `sh()` call underneath only ever asks for
+the exit status; each file is then read back (guarded by `fileExists()` - see below) with
+`jenkins.readFile()`, pinning `encoding: 'UTF-8'` explicitly rather than trusting the agent's
+platform-default encoding, since .NET tools emit UTF-8 and validation messages plausibly contain
+non-ASCII content (config paths, localized strings) that would otherwise mangle on the way to
+wherever a caller forwards it. This keeps `sh`'s own step contract untouched and puts the "give me
+status *and* text" behavior entirely inside `Dotnet.groovy`, where it can be tested directly against
+the generated script string, rather than depending on an assumption about how Jenkins' `sh` step
+might evolve.
 
-**Bash, not POSIX `sh`, is required for the capture script - unconditionally, not gated behind
-`loginShell` like `shScript()`'s shebang.** `>(...)` process substitution is a bash extension, not
-POSIX. `shScript()`'s existing shebang is opt-in because plain commands work fine under Jenkins'
-default `sh -xe` invocation; the capture path has no such fallback, since there's no POSIX-`sh` way
-to get both "capture to a file" and "still visible live" at once - so `captureOutputScriptSh()`
-always emits `#!/bin/bash` (with `-l` appended when `loginShell` is requested, same as the plain
-path), rather than reusing `scriptPreambleLines()`'s conditional shebang.
+**A script exit *before* the command ever runs never creates the capture files - guarded with
+`jenkins.fileExists()` before each `readFile()`, returning an empty string rather than letting the
+call throw.** `requireDotnetCliHomeSh()`'s own guard clause (checking `DOTNET_CLI_HOME`) runs before
+any of the capturing setup, and exits the script early on failure; a missing/broken bash shebang
+would fail identically. Without this guard, `readFile()` on a nonexistent file throws
+`NoSuchFileException` - breaking the "captureOutput never throws on a bad exit" contract this
+option is meant to provide, with a confusing file-not-found far from the actual cause instead of a
+clear signal - exactly the kind of footgun already avoided for the Windows-rejection case.
+
+**Cleanup (`rm -f` on both capture files) is wrapped in its own try/catch, swallowing a cleanup
+failure rather than letting it propagate.** A `finally` block that itself throws replaces whatever
+exception was already propagating from the `try` - so if the *capturing* `sh()` call fails for an
+unrelated reason (e.g. an agent disconnect), a subsequent cleanup failure must not be allowed to
+mask that real cause behind a lost-two-temp-files problem, which is a far smaller concern than
+losing the actual reason a build failed.
+
+**Bash, not POSIX `sh`, for the capture script - unconditionally, not gated behind `loginShell` like
+`shScript()`'s shebang, though the mechanism itself no longer strictly requires it.** Named FIFOs,
+background jobs, and `$!`/`wait <pid>` are all POSIX, not bash-specific - unlike the
+process-substitution version, this mechanism *could* run under plain `sh` (e.g. dash). The
+unconditional `#!/bin/bash` is kept anyway, purely for consistency with the rest of this class's
+unix-path conventions (which already assume bash is available, e.g. for `loginShell`), not because
+this specific mechanism demands it. Shared with `shScript()` via `scriptPreambleLines(...,
+forceBash)` rather than a second, duplicated preamble (see below).
 
 **Verification.** Unit tests assert on the generated script string, not on real bash execution
-semantics (Groovy mocks stand in for `jenkins.sh`/`readFile`) - they cannot by themselves catch a
-subtle real-shell bug like the fd-inheritance issue above. That bug, and the corrected version's
-correctness (live output visible, correct exit code, correctly separated streams), were confirmed
-by literally running the generated script shape with a real bash (5.3, matching Linux Jenkins
-agents far more closely than macOS's frozen bash 3.2) against a fixture tool that prints to both
-streams with deliberate delays between lines and exits non-zero - across 5 repeated runs, with
-timestamps confirming output appeared progressively rather than being buffered until the process
-exited. See `tasks.md` for a note that a real-Jenkins run (as opposed to local bash) is still
-worth doing once this is deployed, mirroring how `serialize-dotnet-tool-install` had its own
-separate real-Jenkins verification section.
+semantics (Groovy mocks stand in for `jenkins.sh`/`readFile`/`fileExists`) - they cannot by
+themselves catch a subtle real-shell bug like the two above (the `wait`/process-substitution one, or
+the fd-inheritance one). Both were confirmed, and the FIFO-based fix confirmed correct, by literally
+running each generated script shape with a real bash (5.3, matching Linux Jenkins agents far more
+closely than macOS's frozen bash 3.2) against a fixture tool that prints to both streams with
+deliberate delays between lines and exits non-zero - across repeated runs, with timestamps
+confirming output appeared progressively rather than being buffered, and (for the `wait` bug
+specifically) a deliberately slowed-down `tee` proving the difference between "returns immediately"
+(process substitution) and "genuinely blocks for the full delay" (FIFO + background job). See
+`tasks.md` for a note that a real-Jenkins run (as opposed to local bash) is still worth doing once
+this is deployed, mirroring how `serialize-dotnet-tool-install` had its own separate real-Jenkins
+verification section.
 
-**Deterministic, `toolBinary`-keyed file names, not random ones.** `UUID.randomUUID()` and
-`Math.random()` aren't safely callable inside the Jenkins CPS sandbox without extra script
-approval (the same category of restriction noted for other steps in this library). Names derived
-from `toolBinary` (e.g. `.dotnet-tool-stdout-${toolBinary}.log`/`.dotnet-tool-stderr-${toolBinary}.log`,
-workspace-relative) are simple, require no sandbox approval, and are unique across the tools that
-would plausibly run concurrently in one workspace.
+**Deterministic file names, keyed by `toolBinary` and (when available) the current stage name, not
+random ones.** `UUID.randomUUID()` and `Math.random()` aren't safely callable inside the Jenkins CPS
+sandbox without extra script approval (the same category of restriction noted for other steps in
+this library). Names derived from `toolBinary` plus `env.STAGE_NAME` when set (e.g.
+`.dotnet-tool-stdout-${toolBinary}-${stageName}.log`, workspace-relative) are simple, require no
+sandbox approval, and narrow the collision window from "the whole workspace" to "the same tool run
+from the same stage in the same workspace" - cheap insurance against the specific case of a
+Jenkinsfile validating two config sets in a `parallel {}` block sharing one workspace, which is not
+a known current pattern but is a plausible future one.
 
 **Accepted risk: two concurrent `captureOutput` calls for the *same* `toolBinary` in the *same*
-shared workspace can collide on these files.** Not addressed by this change. This mirrors the
-`serialize-dotnet-tool-install` change's own workspace-relative NuGet-config lock, which accepted
-an analogous scoping assumption ("this specific file is workspace-scoped, and two invocations
-racing on it in the *same* workspace is the only failure mode, which the observed usage patterns
-don't hit") rather than building a more general per-invocation-unique scheme for a race with no
-known instance in current pipelines. If this is ever observed, the fix would be the same
-`mkdir`-lock pattern already used twice in this file, not a bigger redesign.
+stage in the *same* shared workspace can still collide on these files.** Not fully addressed by this
+change, only narrowed (see above). This mirrors the `serialize-dotnet-tool-install` change's own
+workspace-relative NuGet-config lock, which accepted an analogous scoping assumption rather than
+building a more general per-invocation-unique scheme for a race with no known instance in current
+pipelines. The failure mode if this is ever hit is silent cross-contamination of text that gets
+forwarded wherever a caller sends captured output (e.g. Slack) - not a crash. If this is ever
+observed in practice, the fix would be the same `mkdir`-lock pattern already used twice in this
+file, not a bigger redesign.
+
+**`loginShell`/`umask`/`logCommandToStdErr`/`captureOutput` are grouped into a single `options` Map
+parameter on `runTool()`, rather than more trailing positional parameters.** `runTool()` already had
+three trailing booleans/strings before this change; a fourth pushed real call sites past readable
+(`runTool("MyTool", "mytool", [], null, false, false, null, false, true)`) and the trend would only
+worsen with any future unix-only knob. Grouping them now, while `captureOutput` is still new and
+this is the only PR touching the signature, is cheaper than doing it later once more callers exist.
+`vars/runDotnetTool.groovy`'s public Map-based API is unaffected - this only changes the internal
+`Dotnet.runTool()` signature and its direct callers (the var wrapper, and this project's own tests).
 
 **`captureOutput` and `returnStatus` are mutually exclusive, validated at call time.** Rather than
 silently letting one win (e.g. `captureOutput` implying `returnStatus` is ignored) or picking an

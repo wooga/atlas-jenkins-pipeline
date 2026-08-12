@@ -59,3 +59,20 @@ only.
 - **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` on a Windows agent
 - **THEN** the call fails immediately with a clear error, rather than silently returning the
   plain exit status/throw behavior a Windows caller would otherwise get
+
+#### Scenario: A script exit before the tool's command ever ran does not throw
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` and the script exits before
+  the tool's command runs (e.g. a missing `DOTNET_CLI_HOME`, or any other precondition failure),
+  so neither capture file is ever created
+- **THEN** the call does not throw
+- **AND** the returned Map's `stdout` and `stderr` are both empty strings
+- **AND** the returned Map's `exitCode` reflects the script's actual non-zero exit status
+
+#### Scenario: A cleanup failure does not mask a real failure from the capturing call itself
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` and the capturing call
+  itself fails for an unrelated reason (e.g. an agent disconnect), and the subsequent cleanup of
+  the capture files also fails
+- **THEN** the original failure propagates to the caller
+- **AND** the cleanup failure is not what the caller sees

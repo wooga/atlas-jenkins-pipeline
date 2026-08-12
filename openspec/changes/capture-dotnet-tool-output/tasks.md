@@ -58,6 +58,75 @@
       valid parameters`, which fails identically on `master` with none of this change's commits
       applied (confirmed via `git stash`) — pre-existing, unrelated to `Dotnet`/`runDotnetTool`.
 
+## 3a. Review fixes (PR #353, first review round)
+
+Real, substantive review — not a rubber stamp. All findings verified before being accepted;
+none dismissed. Two were confirmed real bugs via real bash execution, not just re-reading the
+code: the `wait` claim (§1) was reproduced with a deliberately slowed-down `tee`, and the fix was
+independently verified to actually block.
+
+- [x] 3a.1 **Critical: `wait` does not synchronize the tee subshells on any bash version.**
+      Process-substitution subshells are never added to the job table, so a bare `wait` returns
+      immediately regardless of whether `tee` has finished. Confirmed by reproducing the
+      reviewer's exact test (a `sleep 2` before `tee`) on both bash 3.2 and 5.3 — `wait` returned
+      in ~0.01–0.03s, file did not exist. Fixed by switching to named FIFOs with `tee` run as a
+      real background job (`tee file >&N < fifo &` + `$!`), so `wait "$pid"` has an actual PID to
+      block on — confirmed fixed the same way (2s wall-time, complete file, correct exit code, on
+      both bash versions). `captureOutputScriptSh()` rewritten accordingly; `Dotnet.groovy`/
+      `design.md` corrected to stop claiming the process-substitution version worked.
+- [x] 3a.2 **Critical: `readFile()` throws when the script exits before the command ever ran**
+      (e.g. `requireDotnetCliHomeSh()`'s own guard failing). Fixed: guard both `readFile()` calls
+      with `jenkins.fileExists(...)`, returning `""` when the file was never created, so
+      `captureOutput` genuinely never throws on a bad exit as documented.
+- [x] 3a.3 `rm -f` cleanup now quotes both file paths (a `toolBinary`/stage name containing a
+      space would otherwise produce files the unquoted cleanup silently missed).
+- [x] 3a.4 `readFile()` now pins `encoding: 'UTF-8'` explicitly rather than trusting the agent's
+      platform-default encoding, since .NET tools emit UTF-8 and validation messages plausibly
+      contain non-ASCII content.
+- [x] 3a.5 `vars/runDotnetTool.txt` now documents that `captureOutput` always drops Jenkins'
+      default `-x` tracing (since it always forces its own shebang), same as `loginShell` already
+      documents for itself — pair with `logCommandToStdErr: true` to get it back.
+- [x] 3a.6 The cleanup `sh(rm -f ...)` call is now wrapped in its own try/catch, so a cleanup
+      failure can never mask a real exception already propagating from the capturing call (e.g.
+      an agent disconnect) behind an unrelated cleanup error.
+- [x] 3a.7 Capture file names now also key on `env.STAGE_NAME` when available (not just
+      `toolBinary`), narrowing the accepted same-workspace collision risk to "same tool, same
+      stage, same workspace" rather than "anywhere in the workspace" — cheap insurance against a
+      `parallel {}` block validating two config sets on one workspace, not a known current
+      pattern but a plausible future one.
+- [x] 3a.8 `scriptPreambleLines()` and `captureOutputScriptSh()` now share the preamble via a
+      `forceBash` parameter, rather than duplicating the shebang/PATH-export/`set -x`/`umask`/
+      `DOTNET_CLI_HOME`-guard lines — a future preamble addition now applies to both script
+      variants automatically instead of risking one being updated and the other forgotten.
+      (Conceded: the original "duplication is simpler than a boolean-parameterized helper"
+      rationale, borrowed from the lock-preamble precedent's *stale-timeout-branch* complexity,
+      didn't actually apply to a single shebang toggle.)
+- [x] 3a.9 `runTool(...)`'s `loginShell`/`umask`/`logCommandToStdErr`/`captureOutput` parameters
+      collapsed into a single `Map options = [:]` parameter, fixing the "9 positional params, 5
+      booleans, unreviewable at a glance" call sites (e.g. `runTool("MyTool", "mytool", [], null,
+      false, false, null, false, true)`). `vars/runDotnetTool.groovy` and every existing
+      `DotnetSpec`/`RunDotnetToolSpec` call site updated to the Map form for options beyond
+      `returnStatus`; calls not using any of the four options are unaffected.
+- [x] 3a.10 New `DotnetSpec` test: cleanup still runs, and the real exception still propagates
+      (not masked), when the capturing `sh()` call itself throws (e.g. simulating an agent
+      disconnect) — covers the "sh()/readFile() calls themselves threw" case the existing cleanup
+      comment claimed but nothing tested.
+- [x] 3a.11 New `DotnetSpec` test: the missing-capture-file path (§3a.2) returns
+      `[exitCode: <n>, stdout: "", stderr: ""]` rather than throwing.
+- [x] 3a.12 Full suite re-run after all fixes: 481 tests, same single pre-existing unrelated
+      `CacheSpec` failure (confirmed via `git stash` against `master`, and confirmed non-flaky by
+      re-running 3x). One transient, non-reproducing batch of 17 `JavaCheckSpec` failures on one
+      run turned out to be pre-existing test-suite flakiness unrelated to this change — did not
+      reproduce on 3 subsequent full-suite runs, nor when run isolated or paired with the changed
+      specs.
+- [ ] 3a.13 Not addressed, deliberately deferred rather than dismissed: `RunDotnetToolSpec`'s
+      `captureOutput` test still only asserts on the generated script/cleanup command, not the
+      returned Map, since this harness's `withEnv` mock doesn't thread a wrapped closure's return
+      value through (confirmed separately, not part of this review). `DotnetSpec`'s pure-Groovy-mock
+      tests remain the only coverage of the actual return shape — acceptable given the layering
+      (integration-level `RunDotnetToolSpec` vs. unit-level `DotnetSpec`), but noted rather than
+      silently accepted.
+
 ## 4. OpenSpec change artifacts
 
 - [x] 4.1 `proposal.md` — why/what/capabilities/impact.

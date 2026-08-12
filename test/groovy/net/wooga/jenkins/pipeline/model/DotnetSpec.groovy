@@ -17,7 +17,11 @@ class DotnetSpec extends Specification {
         jenkins.calls = [withEnv: [], sh: [], bat: [], powershell: [], writeFile: [], libraryResource: [], withCredentials: [], readFile: [], isUnix: 0]
         jenkins.isUnix = { -> jenkins.calls.isUnix++; unix }
         jenkins.env = env
-        jenkins.fileExists = { String path -> path == 'global.json' && hasGlobalJson }
+        // Capture-output files are treated as existing by default so the default
+        // readFile mock below (empty string) is reachable in tests that don't care
+        // about specific captured content - tests asserting on the missing-file
+        // path override this explicitly instead.
+        jenkins.fileExists = { String path -> (path == 'global.json' && hasGlobalJson) || path.startsWith('.dotnet-tool-') }
         jenkins.withEnv = { List envList, Closure body ->
             jenkins.calls.withEnv << envList
             body.call()
@@ -27,7 +31,9 @@ class DotnetSpec extends Specification {
         jenkins.powershell = { Object arg -> jenkins.calls.powershell << arg }
         jenkins.writeFile = { Map args -> jenkins.calls.writeFile << args }
         jenkins.libraryResource = { String path -> jenkins.calls.libraryResource << path; return "" }
-        jenkins.readFile = { String file -> jenkins.calls.readFile << file; return "" }
+        // Dotnet.groovy calls readFile(file: ..., encoding: ...) - a Map arg, not a
+        // plain String - since it now pins UTF-8 explicitly (see runToolCapturingOutput()).
+        jenkins.readFile = { Map args -> jenkins.calls.readFile << args.file; return "" }
         jenkins.usernamePassword = { Map args -> args }
         jenkins.withCredentials = { List bindings, Closure body ->
             jenkins.calls.withCredentials << bindings
@@ -550,7 +556,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, null, false)
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, [loginShell: true])
 
         then:
         // the shebang must be the very first line for Jenkins' sh step to honour it;
@@ -568,7 +574,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, null, true)
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, [logCommandToStdErr: true])
 
         then:
         jenkins.calls.sh.find { it instanceof Map && it.script == "set -x\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg" } != null
@@ -580,7 +586,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, false, "002", false)
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, [umask: "002"])
 
         then:
         jenkins.calls.sh.find { it instanceof Map && it.script == "umask 002\n${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- arg" } != null
@@ -592,7 +598,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, [loginShell: true, umask: "002", logCommandToStdErr: true])
 
         then:
         // shebang + PATH re-export must lead; logCommandToStdErr before umask so the umask command itself is traced too;
@@ -608,7 +614,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, true, "002", true)
+        dotnet.runTool("MyTool", "mytool", ["arg"], null, false, [loginShell: true, umask: "002", logCommandToStdErr: true])
 
         then:
         jenkins.calls.bat.find { it instanceof Map && it.script == "${CLI_HOME_GUARD_BAT} & dotnet tool run mytool -- arg" } != null
@@ -618,10 +624,10 @@ class DotnetSpec extends Specification {
     def "runTool captures stdout, stderr, and exit code separately when the tool fails"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        jenkins.readFile = { String file ->
-            jenkins.calls.readFile << file
+        jenkins.readFile = { Map args ->
+            jenkins.calls.readFile << args.file
             [".dotnet-tool-stdout-mytool.log": "Executing validator: Foo\n",
-             ".dotnet-tool-stderr-mytool.log": "Error: boom\n"][file] ?: ""
+             ".dotnet-tool-stderr-mytool.log": "Error: boom\n"][args.file] ?: ""
         }
         jenkins.sh = { Object arg ->
             jenkins.calls.sh << arg
@@ -630,23 +636,30 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        def result = dotnet.runTool("MyTool", "mytool", ["validate"], null, false, false, null, false, true)
+        def result = dotnet.runTool("MyTool", "mytool", ["validate"], null, false, [captureOutput: true])
 
         then:
         result == [exitCode: 1, stdout: "Executing validator: Foo\n", stderr: "Error: boom\n"]
         def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run mytool -- validate") }
-        // tee (not a plain redirect) so the run still streams live to the Jenkins
-        // console while also being captured to file - see captureOutputScriptSh().
-        // fd3/fd4 save the original stdout/stderr *before* the command's own
-        // redirection reassigns fd1/fd2 - confirmed by real execution required to
-        // stop the second tee's passthrough copy from silently inheriting the
-        // first redirection's already-reassigned fd instead of the real console.
+        // tee reading from named FIFOs, run as real background jobs - not tee via
+        // process substitution, which a bare `wait` doesn't actually wait for (see
+        // captureOutputScriptSh()). fd3/fd4 save the original stdout/stderr *before*
+        // the command's own redirection reassigns fd1/fd2 - confirmed by real
+        // execution required to stop the second tee's passthrough copy from
+        // silently inheriting the first redirection's already-reassigned fd instead
+        // of the real console.
         runCall.script.startsWith("#!/bin/bash\n")
         runCall.script.contains('exec 3>&1 4>&2')
-        runCall.script.contains('dotnet tool run mytool -- validate > >(tee ".dotnet-tool-stdout-mytool.log" >&3) 2> >(tee ".dotnet-tool-stderr-mytool.log" >&4)')
+        runCall.script.contains('mkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
+        runCall.script.contains('tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &')
+        runCall.script.contains('_stdout_tee_pid=$!')
+        runCall.script.contains('tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &')
+        runCall.script.contains('_stderr_tee_pid=$!')
+        runCall.script.contains('dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo"')
         runCall.script.contains('_exit_code=$?')
         runCall.script.contains('exec 3>&- 4>&-')
-        runCall.script.contains("wait")
+        runCall.script.contains('wait "$_stdout_tee_pid" "$_stderr_tee_pid"')
+        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
         runCall.script.contains('exit $_exit_code')
         runCall.returnStatus == true
         jenkins.calls.readFile == [".dotnet-tool-stdout-mytool.log", ".dotnet-tool-stderr-mytool.log"]
@@ -655,15 +668,15 @@ class DotnetSpec extends Specification {
     def "runTool captures stdout/stderr when the tool succeeds"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        jenkins.readFile = { String file ->
-            jenkins.calls.readFile << file
-            [".dotnet-tool-stdout-mytool.log": "all good\n", ".dotnet-tool-stderr-mytool.log": ""][file] ?: ""
+        jenkins.readFile = { Map args ->
+            jenkins.calls.readFile << args.file
+            [".dotnet-tool-stdout-mytool.log": "all good\n", ".dotnet-tool-stderr-mytool.log": ""][args.file] ?: ""
         }
         jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
         def dotnet = new Dotnet(jenkins)
 
         when:
-        def result = dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        def result = dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
         result == [exitCode: 0, stdout: "all good\n", stderr: ""]
@@ -676,7 +689,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", [], null, false, true, null, false, true)
+        dotnet.runTool("MyTool", "mytool", [], null, false, [loginShell: true, captureOutput: true])
 
         then:
         def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run mytool") }
@@ -686,15 +699,15 @@ class DotnetSpec extends Specification {
     def "runTool returns an empty stderr string for a tool that only writes to stdout"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        jenkins.readFile = { String file ->
-            jenkins.calls.readFile << file
-            file == ".dotnet-tool-stdout-mytool.log" ? "only stdout\n" : ""
+        jenkins.readFile = { Map args ->
+            jenkins.calls.readFile << args.file
+            args.file == ".dotnet-tool-stdout-mytool.log" ? "only stdout\n" : ""
         }
         jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
         def dotnet = new Dotnet(jenkins)
 
         when:
-        def result = dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        def result = dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
         result.stdout == "only stdout\n"
@@ -704,15 +717,15 @@ class DotnetSpec extends Specification {
     def "runTool returns an empty stdout string for a tool that only writes to stderr"() {
         given:
         def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
-        jenkins.readFile = { String file ->
-            jenkins.calls.readFile << file
-            file == ".dotnet-tool-stderr-mytool.log" ? "only stderr\n" : ""
+        jenkins.readFile = { Map args ->
+            jenkins.calls.readFile << args.file
+            args.file == ".dotnet-tool-stderr-mytool.log" ? "only stderr\n" : ""
         }
         jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 1 }
         def dotnet = new Dotnet(jenkins)
 
         when:
-        def result = dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        def result = dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
         result.stdout == ""
@@ -729,10 +742,10 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
-        jenkins.calls.sh.any { it instanceof Map && it.script == "rm -f .dotnet-tool-stdout-mytool.log .dotnet-tool-stderr-mytool.log" }
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
     }
 
     def "runTool removes both captured-output files after a succeeding run"() {
@@ -742,10 +755,48 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
-        jenkins.calls.sh.any { it instanceof Map && it.script == "rm -f .dotnet-tool-stdout-mytool.log .dotnet-tool-stderr-mytool.log" }
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+    }
+
+    def "runTool cleans up capture files and still propagates the exception when the capturing sh() call itself throws"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        jenkins.sh = { Object arg ->
+            jenkins.calls.sh << arg
+            if (arg instanceof Map && arg.script?.contains("dotnet tool run")) {
+                throw new RuntimeException("agent disconnected")
+            }
+            0
+        }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
+
+        then:
+        // the real cause must propagate, not get masked by (or lost behind) the
+        // cleanup step - see the try/catch around the cleanup sh() call.
+        RuntimeException ex = thrown(RuntimeException)
+        ex.message == "agent disconnected"
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+    }
+
+    def "runTool returns empty strings instead of throwing when the capture files were never created"() {
+        given: "a script exit before the tool's command ever ran - e.g. the DOTNET_CLI_HOME guard failing - never creates either capture file"
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin"])
+        jenkins.fileExists = { String path -> false }
+        jenkins.readFile = { Map args -> throw new RuntimeException("should not be called when fileExists is false") }
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 1 }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        def result = dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
+
+        then:
+        result == [exitCode: 1, stdout: "", stderr: ""]
     }
 
     def "runTool rejects captureOutput combined with returnStatus"() {
@@ -754,7 +805,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", [], null, true, false, null, false, true)
+        dotnet.runTool("MyTool", "mytool", [], null, true, [captureOutput: true])
 
         then:
         thrown(IllegalArgumentException)
@@ -767,7 +818,7 @@ class DotnetSpec extends Specification {
         def dotnet = new Dotnet(jenkins)
 
         when:
-        dotnet.runTool("MyTool", "mytool", [], null, false, false, null, false, true)
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
         thrown(IllegalArgumentException)

@@ -38,7 +38,11 @@ Map-form-only, unix/macOS-only option:
   returnStatus is rejected with an error - captureOutput's result already
   carries the exit code. Using captureOutput on a Windows agent is also
   rejected with an error, rather than silently returning the plain
-  status/throw behavior a Windows caller would otherwise get.
+  status/throw behavior a Windows caller would otherwise get. Also always
+  replaces Jenkins' default `sh -xe` invocation with its own script (like
+  loginShell does), regardless of whether loginShell is set - so its own
+  default `-x` tracing is silently dropped too; pair with
+  logCommandToStdErr: true to get it back.
 
 usage: ```
 // simple form

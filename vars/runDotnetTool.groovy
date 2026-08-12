@@ -19,8 +19,10 @@ def call(Map args) {
             (args.args ?: []) as List<String>,
             args.version as String,
             (args.returnStatus ?: false) as Boolean,
-            (args.loginShell ?: false) as Boolean,
-            args.umask as String,
-            (args.logCommandToStdErr ?: false) as Boolean,
-            (args.captureOutput ?: false) as Boolean)
+            [
+                    loginShell: args.loginShell,
+                    umask: args.umask,
+                    logCommandToStdErr: args.logCommandToStdErr,
+                    captureOutput: args.captureOutput
+            ])
 }
