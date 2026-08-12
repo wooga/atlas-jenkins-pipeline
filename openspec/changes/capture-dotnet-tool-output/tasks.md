@@ -126,6 +126,16 @@ independently verified to actually block.
       tests remain the only coverage of the actual return shape — acceptable given the layering
       (integration-level `RunDotnetToolSpec` vs. unit-level `DotnetSpec`), but noted rather than
       silently accepted.
+- [x] 3a.14 Verified the blast radius of §3a.9's `Dotnet.runTool()` signature change org-wide, not
+      assumed: `gh search code` across every `wooga` repo for both
+      `net.wooga.jenkins.pipeline.model.Dotnet` and `runTool(` found no caller anywhere outside
+      this library's own `vars/runDotnetTool.groovy` and its test file - both already updated.
+      `Dotnet` is reachable only through the `vars/` steps; nothing external imports or calls it
+      directly. Separately confirmed the *public* `runDotnetTool` step (whose Map-based signature
+      and return shape didn't change) has exactly one other real external caller org-wide -
+      `wooga/adventure5-jenkins-pipeline`'s `vars/adventure5Tools.groovy`, a shared step used
+      across content-build pipelines - which doesn't use `captureOutput` and is unaffected either
+      way. See `design.md`'s Migration Plan.
 
 ## 4. OpenSpec change artifacts
 

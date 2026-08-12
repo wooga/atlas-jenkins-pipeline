@@ -244,6 +244,23 @@ one new optional parameter, default `false`); no consumer-facing change for any 
 that doesn't pass `captureOutput`, no rollback concerns beyond reverting this change, no data
 migration.
 
+The `Dotnet.runTool()` internal signature change (collapsing `loginShell`/`umask`/
+`logCommandToStdErr`/`captureOutput` into a single `options` Map, made during review - see
+`tasks.md` §3a.9) is a different kind of change: it touches an existing method's *shape*, not just
+adds a parameter, so it was worth confirming its actual blast radius rather than assuming
+"internal" meant "safe." Verified org-wide, not assumed: a GitHub code search across every `wooga`
+repo for both `net.wooga.jenkins.pipeline.model.Dotnet` (the class) and `runTool(` (the method) found
+no caller anywhere outside this library's own `vars/runDotnetTool.groovy` and its test file - both
+already updated to the new signature. `Dotnet` is genuinely reachable only through the `vars/`
+steps; nothing external imports or calls it directly.
+
+Separately, `runDotnetTool` (the *public* step, whose Map-based call signature and return shape
+did not change at all) has exactly one other real external caller found via the same search:
+`wooga/adventure5-jenkins-pipeline`'s `vars/adventure5Tools.groovy` (a shared step used across
+content-build pipelines, not just this configs one), which calls the Map form with
+`loginShell`/`logCommandToStdErr`/`umask`/`returnStatus` and does not use `captureOutput` -
+unaffected either way.
+
 ## Open Questions
 
 - Should a future increment add Windows (`bat`) support, given `bat`'s `returnStdout` doesn't
