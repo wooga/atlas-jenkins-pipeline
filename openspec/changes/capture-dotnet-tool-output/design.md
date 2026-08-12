@@ -205,17 +205,67 @@ ignoring it on Windows would mean the caller's code (which likely does `result.s
 with a confusing `MissingPropertyException` far from the actual cause, instead of a clear error at
 the point of the mistake.
 
-**Both output files are removed in all cases, including when the tool itself fails.** Each file is
-only ever a transient conduit for one `runTool` call's result, not an artifact anyone downstream
-should rely on existing — leaving them behind on failure (the case a caller most wants the output
-*for*) would be exactly backwards, so removal is unconditional (success, tool failure, or an
-exception while constructing/running the script), via a `finally`-equivalent in the generated
-script or the surrounding Groovy, not conditioned on the tool's own exit code.
+**All four files (both capture files and both FIFOs) are removed in all cases, including when the
+tool itself fails, is aborted, or the script dies early.** Each is only ever a transient conduit
+for one `runTool` call's result, not an artifact anyone downstream should rely on existing —
+leaving them behind on failure (the case a caller most wants the output *for*) would be exactly
+backwards. The generated script's own trailing `rm -f` on the FIFOs only covers a clean run through
+the whole script - an abort, kill, or (before the shebang-is-required fix below) an early death
+under Jenkins' default `sh -e` skips it, confirmed by real execution to leak the FIFO paths into
+the workspace. The Groovy-side `finally` therefore removes all four paths itself, unconditionally -
+this is the only place cleanup is guaranteed to run regardless of how the script terminated, not
+the script's own (best-effort, not guaranteed) trailing `rm -f`.
+
+**A stale artifact at either FIFO path (from a previous crashed/killed run) is removed immediately
+before `mkfifo`, not left for `mkfifo` to fail on.** Confirmed by real execution that this matters
+specifically when the stale artifact is a *regular* file rather than no file or a stale FIFO:
+`mkfifo` erroring on an existing FIFO would at least be a loud failure, but a stale regular file at
+that path breaks capture silently instead - `tee` reading from a regular file hits EOF immediately
+and exits, then `<command>`'s own redirect writes straight into that now-unpiped file, giving no
+capture, no live console passthrough, and an exit code that still looks unremarkable.
+
+**Capture filenames are keyed on `env.STAGE_NAME` (sanitized), not the raw value.** Interpolating
+`STAGE_NAME` directly, as an earlier version of this change did, is a silent-wrong-answer bug, not
+just untidy: confirmed by real execution that a stage name containing `/` (a plausible name, e.g.
+"Validate/Configs") makes `mkfifo` fail outright - the tool never runs, and the caller gets back
+`[exitCode: 1, stdout: "", stderr: ""]`, indistinguishable from a tool that genuinely failed while
+printing nothing. A `$` or backtick is worse: since the stage name is interpolated into the
+generated shell script rather than only used as an opaque path segment, either would expand inside
+the double-quoted paths - an injection surface for whatever the stage name happens to contain, not
+merely a broken filename. Sanitizing to a conservative safe set (`[A-Za-z0-9._-]`, everything else
+replaced with `_`) removes both failure modes.
+
+**A background watchdog bounds how long `wait` can block on a hung/lingering child of the tool.**
+The FIFO/background-job fix above (see the `tee`/FIFO decision) makes `wait` a real barrier for the
+first time - which is exactly the point, but it also means a child of `<command>` that outlives it
+while still holding the inherited stdout/stderr (so the corresponding `tee` never sees EOF) would
+now block `wait` forever, confirmed by real execution. This wasn't possible with the original
+process-substitution version, precisely because its `wait` never actually waited for anything - so
+this is a genuinely new risk introduced by fixing the sync bug, not a pre-existing one carried over.
+A background job (`( sleep <timeout>; kill <tee pids> ) &`) is started right before `wait`, killed
+immediately once `wait` returns on its own, and otherwise fires after
+`CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS` (300s) to force both `tee` processes to exit - degrading
+to truncated captured output rather than hanging the step, and eventually the whole build, until
+some surrounding `timeout()` (if any) fires. Confirmed by real execution to unblock correctly on a
+genuinely hung child while adding no measurable delay to the normal case.
+
+**The forced shebang escapes Jenkins' default `sh -xe`, and this is load-bearing, not stylistic -
+an earlier version of this document got this wrong.** The FIFO mechanism itself (`mkfifo`,
+background jobs, `$!`/`wait <pid>`) is POSIX, not bash-specific, and the previous revision of this
+section concluded from that alone that the shebang was purely a consistency choice. That's wrong:
+confirmed by real execution that this exact script shape, run *without* any shebang under `sh -e`
+(what Jenkins uses when no custom shebang overrides it), dies the instant `<command>` exits
+non-zero - before `_exit_code=$?`, `wait`, or any cleanup ever runs, leaking both FIFOs and
+reverting the capture to winning-by-luck, i.e. exactly the race the FIFO switch exists to fix in the
+first place. *Some* shebang - not specifically bash - would suffice to escape `-e`; bash
+specifically is kept for consistency with `loginShell`'s own bash requirement elsewhere in this
+class, layered on top of the escape-`-e` requirement, not instead of it.
 
 ## Risks / Trade-offs
 
-- **[Same-tool-same-workspace collision]** Covered above under Decisions; accepted, no known
-  current instance, same class of risk already accepted by `serialize-dotnet-tool-install`.
+- **[Same-tool-same-stage-same-workspace collision]** Narrowed (not eliminated) by keying on
+  `STAGE_NAME` too - see Decisions. Accepted, no known current instance, same class of risk already
+  accepted by `serialize-dotnet-tool-install`.
 - **[Caller must remember to fail the build itself]** Like `returnStatus: true` today,
   `captureOutput: true` never throws on the tool's own nonzero exit — a caller who wants the build
   to actually fail must call `error(...)` (or equivalent) themselves based on the returned
@@ -230,19 +280,39 @@ script or the surrounding Groovy, not conditioned on the tool's own exit code.
   answer), not a flaw in the capture mechanism itself.
 - **[Lost cross-stream ordering]** Per the Non-Goals above; accepted, no current consumer needs
   it.
-- **[Requires a real bash, not just any POSIX `sh`]** `>(...)` process substitution doesn't exist
-  in plain POSIX `sh` (e.g. dash). Every unix/macOS Jenkins agent this library already assumes
-  has a `bash` available for `loginShell`'s existing shebang, so this isn't a new environmental
-  requirement - but it means `captureOutput` would fail outright (a shell syntax error, not a
-  silent fallback) on a hypothetical unix agent with no `bash` on `PATH` at all. No such agent is
-  known to exist in this fleet.
+- **[A hung/lingering child truncates output after the watchdog timeout, rather than blocking
+  forever]** A genuine trade-off, not a free fix: if `<command>`'s output was still being written
+  when the watchdog fires, whatever hadn't been flushed yet is lost from the capture (though the
+  live console already saw it as it happened). Accepted because the alternative - blocking `wait`
+  indefinitely - is strictly worse for a CI executor, and no current consumer's tools are known to
+  leave lingering children; this is a defensive bound against a failure mode the .NET ecosystem
+  does have precedent for (e.g. MSBuild node reuse / compiler-server processes outliving a parent),
+  not a response to an observed incident.
+- **[`Dotnet.runTool()`'s signature change from positional trailing parameters to a single
+  `options` Map is source-breaking for any caller using the old positional form directly]** This is
+  *not* the same claim as "purely additive" made elsewhere in this document about the `captureOutput`
+  option itself - that claim is still true for the public `runDotnetTool` step, whose Map-based call
+  signature and return shape didn't change at all. `Dotnet.runTool()` is a different matter: its
+  parameter list actually changed shape, which breaks source compatibility for any caller still
+  using the pre-existing positional form. Verified via an org-wide `gh search code` (see Migration
+  Plan) that no such caller exists today, in this repo or any other `wooga` repo - but `Dotnet` is a
+  public class other repos could import and call directly (`Dotnet.fromJenkins(this, ...)`), so
+  "no current caller" is a fact established by searching, not a property of the change being
+  "internal" by design. Re-verify with the same search before merging if meaningful time passes
+  between this check and the actual merge.
 
 ## Migration Plan
 
-Purely additive to an existing shared-library step's public API (`runDotnetTool`/`runTool` gain
-one new optional parameter, default `false`); no consumer-facing change for any existing caller
-that doesn't pass `captureOutput`, no rollback concerns beyond reverting this change, no data
-migration.
+The public `runDotnetTool` step is purely additive: its Map-based call signature and return shape
+are unchanged for any existing caller that doesn't pass `captureOutput`, no rollback concerns
+beyond reverting this change, no data migration.
+
+`Dotnet.runTool()` is not purely additive in the same sense - its signature changed shape
+(positional `loginShell`/`umask`/`logCommandToStdErr` trailing parameters collapsed into a single
+`options` Map, during review; see `tasks.md` §3a.9), which is source-breaking for any caller still
+using the old positional form directly, not just an added optional parameter. This is true
+regardless of whether such a caller currently exists - see below for what was actually verified
+about that.
 
 The `Dotnet.runTool()` internal signature change (collapsing `loginShell`/`umask`/
 `logCommandToStdErr`/`captureOutput` into a single `options` Map, made during review - see

@@ -650,7 +650,10 @@ class DotnetSpec extends Specification {
         // of the real console.
         runCall.script.startsWith("#!/bin/bash\n")
         runCall.script.contains('exec 3>&1 4>&2')
-        runCall.script.contains('mkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
+        // stale artifact from a previous crashed/killed run removed before mkfifo -
+        // a stale regular file at that path would otherwise silently break capture
+        // entirely (confirmed by real execution).
+        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nmkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
         runCall.script.contains('tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &')
         runCall.script.contains('_stdout_tee_pid=$!')
         runCall.script.contains('tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &')
@@ -658,11 +661,56 @@ class DotnetSpec extends Specification {
         runCall.script.contains('dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo"')
         runCall.script.contains('_exit_code=$?')
         runCall.script.contains('exec 3>&- 4>&-')
+        // watchdog bounds how long a lingering child can block wait - confirmed by
+        // real execution that a bare wait would otherwise hang forever if a child
+        // keeps the FIFO's write end open after <command> itself exits.
+        runCall.script.contains('( sleep 300; kill "$_stdout_tee_pid" "$_stderr_tee_pid" 2>/dev/null ) &')
+        runCall.script.contains('_watchdog_pid=$!')
         runCall.script.contains('wait "$_stdout_tee_pid" "$_stderr_tee_pid"')
-        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"')
-        runCall.script.contains('exit $_exit_code')
+        runCall.script.contains('kill "$_watchdog_pid" 2>/dev/null')
+        runCall.script.contains('rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"\nexit $_exit_code')
         runCall.returnStatus == true
         jenkins.calls.readFile == [".dotnet-tool-stdout-mytool.log", ".dotnet-tool-stderr-mytool.log"]
+    }
+
+    def "runTool keys capture filenames on STAGE_NAME when it's set"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin", STAGE_NAME: "Validate Configs"])
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
+
+        then:
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run") }
+        runCall.script.contains('".dotnet-tool-stdout-mytool-Validate_Configs.log.fifo"')
+        runCall.script.contains('".dotnet-tool-stderr-mytool-Validate_Configs.log.fifo"')
+    }
+
+    @Unroll
+    def "runTool sanitizes a STAGE_NAME containing #description into a filesystem-safe suffix"() {
+        given:
+        def jenkins = fakeJenkins(true, [HOME: "/home/tester", PATH: "/usr/bin", STAGE_NAME: stageName])
+        jenkins.sh = { Object arg -> jenkins.calls.sh << arg; 0 }
+        def dotnet = new Dotnet(jenkins)
+
+        when:
+        dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
+
+        then:
+        // a raw "/" would make mkfifo fail outright (no such directory) - and
+        // raw "$"/backticks would expand inside the generated script's
+        // double-quoted paths - confirmed by real execution, not just reasoning.
+        def runCall = jenkins.calls.sh.find { it instanceof Map && it.script.contains("dotnet tool run") }
+        runCall.script.contains(".dotnet-tool-stdout-mytool${expectedSuffix}.log.fifo")
+        !runCall.script.contains(unsafeFragment)
+
+        where:
+        description        | stageName          | expectedSuffix      | unsafeFragment
+        "a slash"           | "Validate/Configs" | "-Validate_Configs" | "Validate/Configs"
+        "a dollar sign"      | 'Deploy $HOME'     | "-Deploy__HOME"     | '$HOME'
+        "a backtick"         | 'Deploy `whoami`'  | "-Deploy__whoami_"  | '`whoami`'
     }
 
     def "runTool captures stdout/stderr when the tool succeeds"() {
@@ -745,7 +793,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
-        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log" ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"' }
     }
 
     def "runTool removes both captured-output files after a succeeding run"() {
@@ -758,7 +806,7 @@ class DotnetSpec extends Specification {
         dotnet.runTool("MyTool", "mytool", [], null, false, [captureOutput: true])
 
         then:
-        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log" ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"' }
     }
 
     def "runTool cleans up capture files and still propagates the exception when the capturing sh() call itself throws"() {
@@ -781,7 +829,7 @@ class DotnetSpec extends Specification {
         // cleanup step - see the try/catch around the cleanup sh() call.
         RuntimeException ex = thrown(RuntimeException)
         ex.message == "agent disconnected"
-        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+        jenkins.calls.sh.any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log" ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"' }
     }
 
     def "runTool returns empty strings instead of throwing when the capture files were never created"() {

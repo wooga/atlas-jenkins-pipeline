@@ -76,3 +76,28 @@ only.
   the capture files also fails
 - **THEN** the original failure propagates to the caller
 - **AND** the cleanup failure is not what the caller sees
+
+#### Scenario: Capture filenames are sanitized when derived from the current stage name
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` from within a stage whose
+  name contains characters unsafe for a shell-embedded path (e.g. `/`, `$`, a backtick)
+- **THEN** the capture mechanism still works
+- **AND** the unsafe characters are replaced rather than passed through literally into the
+  generated script
+
+#### Scenario: A hung/lingering child of the tool does not block the call forever
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` against a tool that exits
+  but leaves a child process running that still holds the inherited stdout/stderr open
+- **THEN** the call still returns, rather than blocking indefinitely
+- **AND** the returned `stdout`/`stderr` contain whatever was captured before the wait was given
+  up on, which may be truncated relative to what the lingering child eventually would have
+  produced
+
+#### Scenario: A stale artifact from a previous run at the same capture path does not silently break capture
+
+- **WHEN** a pipeline calls `runDotnetTool(..., captureOutput: true)` and a file already exists
+  at the path this call would use to set up its capture mechanism, left behind by a previous
+  crashed or killed run
+- **THEN** the stale artifact does not cause this call to silently capture nothing while still
+  reporting an unremarkable exit code

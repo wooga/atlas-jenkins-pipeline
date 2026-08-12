@@ -102,9 +102,28 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
 
         then:
         shArgs().any {
-            it instanceof Map && it.script == "#!/bin/bash\n${CLI_HOME_GUARD_SH}\nexec 3>&1 4>&2\nmkfifo \".dotnet-tool-stdout-mytool.log.fifo\" \".dotnet-tool-stderr-mytool.log.fifo\"\ntee \".dotnet-tool-stdout-mytool.log\" >&3 < \".dotnet-tool-stdout-mytool.log.fifo\" &\n_stdout_tee_pid=\$!\ntee \".dotnet-tool-stderr-mytool.log\" >&4 < \".dotnet-tool-stderr-mytool.log.fifo\" &\n_stderr_tee_pid=\$!\ndotnet tool run mytool -- validate > \".dotnet-tool-stdout-mytool.log.fifo\" 2> \".dotnet-tool-stderr-mytool.log.fifo\"\n_exit_code=\$?\nexec 3>&- 4>&-\nwait \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\"\nrm -f \".dotnet-tool-stdout-mytool.log.fifo\" \".dotnet-tool-stderr-mytool.log.fifo\"\nexit \$_exit_code"
+            it instanceof Map && it.script == ([
+                    "#!/bin/bash",
+                    CLI_HOME_GUARD_SH,
+                    'exec 3>&1 4>&2',
+                    'rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
+                    'mkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
+                    'tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &',
+                    '_stdout_tee_pid=$!',
+                    'tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &',
+                    '_stderr_tee_pid=$!',
+                    'dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo"',
+                    '_exit_code=$?',
+                    'exec 3>&- 4>&-',
+                    '( sleep 300; kill "$_stdout_tee_pid" "$_stderr_tee_pid" 2>/dev/null ) &',
+                    '_watchdog_pid=$!',
+                    'wait "$_stdout_tee_pid" "$_stderr_tee_pid"',
+                    'kill "$_watchdog_pid" 2>/dev/null',
+                    'rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
+                    'exit $_exit_code',
+            ].join("\n"))
         }
-        shArgs().any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log"' }
+        shArgs().any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log" ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"' }
     }
 
     def "map form threads loginShell, umask and logCommandToStdErr through"() {

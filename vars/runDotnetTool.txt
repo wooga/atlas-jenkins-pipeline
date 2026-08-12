@@ -27,8 +27,9 @@ umask, or `set -x` equivalent):
 
 Map-form-only, unix/macOS-only option:
 - captureOutput (boolean, default false): instead of the bare status/throw
-  behavior returnStatus gives, redirects the tool's stdout and stderr to
-  their own temp files, reads them back, and returns
+  behavior returnStatus gives, duplicates the tool's stdout and stderr to
+  their own temp files - the tool's output still streams live to the console
+  exactly as it does without this option - reads the files back, and returns
   [exitCode: &lt;int&gt;, stdout: &lt;string&gt;, stderr: &lt;string&gt;].
   The call never throws on the tool's own nonzero exit when captureOutput is
   used - inspect the returned exitCode and call error(...) yourself if you

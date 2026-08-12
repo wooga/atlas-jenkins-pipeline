@@ -22,6 +22,15 @@ class Dotnet {
      */
     static final String DEFAULT_VERSION = "10.0.301"
 
+    /**
+     * Bounds how long a captureOutput call can be blocked by a hung/lingering
+     * child of the tool (see captureOutputScriptSh()) before giving up waiting
+     * and returning truncated output, rather than hanging the step - and
+     * eventually the whole build, until some surrounding timeout() fires -
+     * indefinitely.
+     */
+    static final int CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS = 300
+
     private Object jenkins
     // Not named "unix" - that would form a Groovy JavaBean property pair with
     // isUnix() below, and referencing the bare field name inside its own
@@ -382,7 +391,18 @@ class Dotnet {
      * `options` (all optional; grouped into one Map rather than more trailing
      * positional parameters, which had already grown three deep before
      * captureOutput and would only get harder to read at call sites with each
-     * new unix-only knob added):
+     * new unix-only knob added). Note this must be passed as an explicit Map
+     * literal (`runTool(p, b, a, v, false, [captureOutput: true])`), not
+     * Groovy's bare trailing named-argument sugar
+     * (`runTool(p, b, a, v, false, captureOutput: true)`, no brackets) - that
+     * sugar always collapses into a Map passed as the *first* argument to the
+     * call regardless of where a Map-typed parameter appears in the target
+     * method's signature, so it does not "reach" this trailing `options`
+     * parameter; it silently fails to match any overload here instead
+     * (confirmed by real execution: `MissingMethodException`, not a Map ending
+     * up in `options`). Every call site in this file/its tests uses the
+     * explicit-literal form for exactly this reason.
+     *
      * - loginShell/umask/logCommandToStdErr only apply on unix (bat has no
      *   shebang, umask, or `set -x` equivalent) and are ignored on Windows:
      *   - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
@@ -473,6 +493,8 @@ class Dotnet {
     private Map runToolCapturingOutput(String command, String toolBinary, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFile = toolStdoutFile(toolBinary)
         String stderrFile = toolStderrFile(toolBinary)
+        String stdoutFifo = "${stdoutFile}.fifo"
+        String stderrFifo = "${stderrFile}.fifo"
         try {
             int exitCode = jenkins.sh(
                     label: command,
@@ -489,12 +511,18 @@ class Dotnet {
             return [exitCode: exitCode, stdout: stdout, stderr: stderr]
         } finally {
             try {
-                jenkins.sh(script: "rm -f \"${stdoutFile}\" \"${stderrFile}\"", returnStatus: true)
+                // The script's own trailing `rm -f` on the FIFOs only runs on a clean exit
+                // through the whole script - an abort/kill (or, before the shebang fix, an
+                // early death under Jenkins' default `sh -e`) skips it and leaks the FIFO
+                // paths into the workspace. Removing them here too, alongside the actual
+                // capture files, is the only place cleanup is guaranteed to run regardless
+                // of how the script itself terminated.
+                jenkins.sh(script: "rm -f \"${stdoutFile}\" \"${stderrFile}\" \"${stdoutFifo}\" \"${stderrFifo}\"", returnStatus: true)
             } catch (Exception ignored) {
                 // Swallow: a cleanup failure must never mask whatever exception (if any)
                 // is already propagating from the try block above - e.g. an agent
-                // disconnect during the capturing sh() call itself. Losing two stray
-                // capture files is a far smaller problem than losing the real cause of
+                // disconnect during the capturing sh() call itself. Losing four stray
+                // capture/FIFO files is a far smaller problem than losing the real cause of
                 // a build failure to an unrelated cleanup error.
             }
         }
@@ -520,9 +548,17 @@ class Dotnet {
         return ".dotnet-tool-stderr-${toolBinary}${stageKeySuffix()}.log"
     }
 
+    // Sanitized, not used raw: a `/` in a stage name breaks mkfifo (no such
+    // directory) and silently produces [exitCode: 1, stdout: "", stderr: ""] -
+    // indistinguishable from a tool that genuinely failed while printing
+    // nothing (confirmed by real execution). `$`/backticks are worse - since
+    // the stage name is interpolated directly into the generated shell script,
+    // not just used as a literal path segment, they'd expand inside the
+    // double-quoted paths, an injection surface for whatever the stage name
+    // contains. Anything outside a conservative safe set becomes `_`.
     private String stageKeySuffix() {
         String stageName = jenkins.env?.STAGE_NAME
-        return stageName ? "-${stageName}" : ""
+        return stageName ? "-${stageName.replaceAll(/[^A-Za-z0-9._-]/, '_')}" : ""
     }
 
     // A custom shebang must be the very first line of the script for Jenkins'
@@ -594,17 +630,47 @@ class Dotnet {
     // <command>'s) would otherwise become the script's.
     //
     // Building/tearing down FIFOs, background jobs, and `$!`/`wait <pid>` are
-    // all POSIX, not bash-specific - this mechanism doesn't actually require
-    // bash the way process substitution did. The shebang is still forced to
-    // bash unconditionally (via scriptPreambleLines' forceBash) purely for
-    // consistency with the rest of this class's unix-path conventions, not
-    // because this specific mechanism demands it.
+    // all POSIX, not bash-specific. The shebang is still forced unconditionally
+    // (via scriptPreambleLines' forceBash) - but *not* merely for consistency
+    // with the rest of this class's unix-path conventions, and this is
+    // load-bearing, not stylistic: confirmed by real execution that this exact
+    // script shape, run *without* any shebang under `sh -e` (what Jenkins uses
+    // when no custom shebang overrides it), dies the instant <command> exits
+    // non-zero - before _exit_code=$?, wait, or any cleanup ever runs, leaking
+    // both FIFOs and reverting the capture to winning-by-luck (exactly the
+    // race the FIFO switch above exists to fix). Some shebang - not
+    // specifically bash - would suffice to escape `-e`; bash is kept for
+    // consistency with `loginShell`'s own bash requirement elsewhere in this
+    // class, on top of the escape-`-e` requirement this comment used to
+    // (incorrectly) claim was the only reason for a shebang at all.
+    //
+    // A hung/lingering child that keeps a FIFO's write end open after
+    // <command> itself has already exited (e.g. a detached grandchild process
+    // inheriting stdout/stderr) means the corresponding `tee` never sees EOF,
+    // so a bare `wait "$_stdout_tee_pid" "$_stderr_tee_pid"` would block
+    // forever - confirmed by real execution. A background watchdog kills both
+    // `tee` PIDs after CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS if `wait`
+    // hasn't returned by then, degrading to truncated output rather than
+    // hanging the step (and eventually the whole build, until some
+    // surrounding `timeout()` fires) - confirmed by real execution to unblock
+    // correctly on a genuinely hung child while adding no measurable delay to
+    // the normal case, since the watchdog is itself killed immediately once
+    // `wait` returns on its own.
+    //
+    // The `rm -f` immediately before `mkfifo` removes any leftover artifact at
+    // either path from a previous crashed/killed run. Confirmed by real
+    // execution that a stale *regular* file (as opposed to no file, or a stale
+    // FIFO) at that path silently breaks capture entirely: `tee` reading from
+    // a regular file hits EOF immediately and exits, then <command>'s own
+    // redirect writes straight into that now-unpiped file - no capture, no
+    // live console passthrough, and the exit code still looks unremarkable.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         String stdoutFifo = "${stdoutFile}.fifo"
         String stderrFifo = "${stderrFile}.fifo"
         List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true)
         lines << 'exec 3>&1 4>&2'
+        lines << "rm -f \"${stdoutFifo}\" \"${stderrFifo}\""
         lines << "mkfifo \"${stdoutFifo}\" \"${stderrFifo}\""
         lines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFifo}\" &"
         lines << '_stdout_tee_pid=$!'
@@ -613,7 +679,10 @@ class Dotnet {
         lines << "${command} > \"${stdoutFifo}\" 2> \"${stderrFifo}\""
         lines << '_exit_code=$?'
         lines << 'exec 3>&- 4>&-'
+        lines << "( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &"
+        lines << '_watchdog_pid=$!'
         lines << 'wait "$_stdout_tee_pid" "$_stderr_tee_pid"'
+        lines << 'kill "$_watchdog_pid" 2>/dev/null'
         lines << "rm -f \"${stdoutFifo}\" \"${stderrFifo}\""
         lines << 'exit $_exit_code'
         return lines.join("\n")

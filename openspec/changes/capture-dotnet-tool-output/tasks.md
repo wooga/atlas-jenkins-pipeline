@@ -137,6 +137,68 @@ independently verified to actually block.
       across content-build pipelines - which doesn't use `captureOutput` and is unaffected either
       way. See `design.md`'s Migration Plan.
 
+## 3b. Review fixes (PR #353, second review round)
+
+Five new findings introduced by the first round's own rework, plus doc drift. All verified by
+real execution before being accepted, same discipline as the first round - two of these
+(`STAGE_NAME`'s `/` case, the stale-regular-file case) produce a *silently wrong answer*
+(`[exitCode: 1, stdout: "", stderr: ""]` indistinguishable from a genuine failure) rather than a
+loud error, which is the worst failure shape for something a Slack notification depends on.
+
+- [x] 3b.1 **`STAGE_NAME` interpolated unsanitized into filenames.** A `/` in a stage name breaks
+      `mkfifo` (no such directory) and produces the silent-wrong-answer shape above; `$`/backtick
+      expand inside the generated script's double-quoted paths, an injection surface. Confirmed
+      with `Validate/Configs`, `Deploy $HOME`, and a backtick case. Fixed: `stageKeySuffix()` now
+      sanitizes via `replaceAll(/[^A-Za-z0-9._-]/, '_')`.
+- [x] 3b.2 **A hung/lingering child can now hang `wait` forever - the flip side of fixing §3a.1.**
+      The process-substitution version's `wait` was a no-op, so it *couldn't* hang; the FIFO fix
+      makes `wait` a real barrier, which is correct but introduces this as a genuinely new risk.
+      Confirmed by real execution (a child backgrounding `sleep 30` after the main tool exits)
+      that `wait` blocks indefinitely. Fixed with a background watchdog
+      (`CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS`, 300s) that kills both `tee` PIDs if `wait` hasn't
+      returned by then, degrading to truncated output rather than hanging the step. Confirmed by
+      real execution to unblock the hung case correctly and add no delay to the normal case.
+- [x] 3b.3 **The `.fifo` files escaped the Groovy-side cleanup**, contradicting the spec's "no
+      longer exist in the workspace once the call returns" scenario on any abnormal termination
+      (the script's own trailing `rm -f` only runs on a clean path through the whole script).
+      Fixed: the Groovy `finally` now removes both `.fifo` paths alongside the two `.log` files.
+- [x] 3b.4 **A stale *regular* file at a `.fifo` path silently breaks capture and console output
+      both**, confirmed by real execution (`tee` hits EOF immediately reading a regular file and
+      exits; the tool's own write then goes straight into that now-unpiped file - no capture, no
+      live passthrough, unremarkable exit code). Fixed: `rm -f` on both FIFO paths immediately
+      before `mkfifo`, removing any leftover artifact from a previous crashed/killed run - this
+      also happens to be what made §3b.3's `mkfifo: File exists` console noise on a stale FIFO
+      (not just a stale regular file) go away too.
+- [x] 3b.5 **The forced-bash-shebang comment claimed it was "purely for consistency," which is
+      wrong in a load-bearing way.** Confirmed by real execution: this script shape, run without
+      any shebang under `sh -e` (Jenkins' default when no shebang overrides it), dies the instant
+      the tool exits non-zero - before `_exit_code=$?`, `wait`, or cleanup ever run, reverting the
+      whole mechanism to winning-by-luck (exactly what the FIFO fix in §3a.1 exists to prevent) and
+      leaking the FIFOs. Reworded the comment and `design.md`'s matching Risks bullet: the shebang
+      escapes Jenkins' `-e`, independently of the FIFO mechanism's own POSIX-not-bash-specific
+      nature; bash specifically (rather than any shebang) is the part that's merely for
+      consistency.
+- [x] 3b.6 Doc drift: `design.md`'s Migration Plan corrected to stop claiming `Dotnet.runTool()`
+      itself is "purely additive" - its signature changing from positional to a Map `options`
+      parameter is source-breaking for a direct positional caller, distinct from the genuinely
+      additive `captureOutput` option and the unchanged public `runDotnetTool` step (§3a.14 already
+      covers the org-wide verification that no such caller currently exists). Added a Javadoc note
+      on `runTool()` warning that Groovy's bare trailing named-argument sugar
+      (`runTool(p, b, a, v, false, captureOutput: true)`, no brackets) does not reach the trailing
+      `options` parameter - it always collapses into a Map passed as the *first* argument instead,
+      confirmed by real execution to throw `MissingMethodException` rather than silently doing the
+      wrong thing; every call site here already uses the explicit `[captureOutput: true]` literal
+      form for this reason. `runDotnetTool.txt` reworded from "redirects... to their own temp
+      files" to "duplicates... while still streaming live to the console" - the previous wording
+      undersold the one thing a pipeline author most wants reassurance about.
+- [x] 3b.7 New tests: `stageKeySuffix()` had zero coverage before this round (every existing
+      capture test ran with no `STAGE_NAME` set). Added one test asserting the suffix appears when
+      set, and one `@Unroll` test (3 cases: `/`, `$`, backtick) asserting each unsafe character is
+      sanitized. Also added watchdog-line and rm-before-mkfifo assertions to the existing
+      script-content test, which previously didn't cover either.
+- [x] 3b.8 Full suite re-run after all fixes: 485 tests, same single pre-existing unrelated
+      `CacheSpec` failure.
+
 ## 4. OpenSpec change artifacts
 
 - [x] 4.1 `proposal.md` — why/what/capabilities/impact.
