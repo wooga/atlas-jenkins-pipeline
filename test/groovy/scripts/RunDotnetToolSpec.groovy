@@ -91,6 +91,21 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help" }
     }
 
+    def "map form threads captureOutput through"() {
+        given:
+        helper.registerAllowedMethod("readFile", [String]) { String file -> "" }
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"], captureOutput: true) }
+
+        then:
+        shArgs().any {
+            it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- validate > .dotnet-tool-stdout-mytool.log 2> .dotnet-tool-stderr-mytool.log"
+        }
+        shArgs().any { it instanceof Map && it.script == "rm -f .dotnet-tool-stdout-mytool.log .dotnet-tool-stderr-mytool.log" }
+    }
+
     def "map form threads loginShell, umask and logCommandToStdErr through"() {
         given:
         def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)

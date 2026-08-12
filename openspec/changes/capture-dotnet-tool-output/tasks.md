@@ -1,55 +1,57 @@
 ## 1. Implementation in Dotnet.groovy
 
-- [ ] 1.1 Add `toolStdoutFile(toolBinary)`/`toolStderrFile(toolBinary)`, each returning a
+- [x] 1.1 Add `toolStdoutFile(toolBinary)`/`toolStderrFile(toolBinary)`, each returning a
       workspace-relative, deterministic path (`.dotnet-tool-stdout-${toolBinary}.log`/
       `.dotnet-tool-stderr-${toolBinary}.log`) — not random/UUID names, since those aren't safely
       usable inside the Jenkins CPS sandbox without extra script approval.
-- [ ] 1.2 Add `captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr)`:
+- [x] 1.2 Add `captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr)`:
       the same shebang/PATH-restore/`set -x`/`umask`/`DOTNET_CLI_HOME`-guard preamble as the
       existing `shScript()`, followed by `${command} > ${stdoutFile} 2> ${stderrFile}` instead of
       the bare command.
-- [ ] 1.3 Add `runTool(...)` parameter `Boolean captureOutput = false`; validate at the top of the
+- [x] 1.3 Add `runTool(...)` parameter `Boolean captureOutput = false`; validate at the top of the
       method (mirroring `validateSelectors`/`validateNugetConfig`'s guard-clause style) that
       `captureOutput` and `returnStatus` aren't both `true`, and that `captureOutput` isn't `true`
       on a non-unix agent — both throw `IllegalArgumentException` with a clear message.
-- [ ] 1.4 Wire the unix branch: when `captureOutput`, run via
+- [x] 1.4 Wire the unix branch: when `captureOutput`, run via
       `jenkins.sh(label: command, script: captureOutputScriptSh(...), returnStatus: true)`, then
       `jenkins.readFile(stdoutFile)`/`readFile(stderrFile)`, then remove both files (`jenkins.sh(
       script: "rm -f ${stdoutFile} ${stderrFile}", returnStatus: true)`) in a `finally` so
       they're removed whether the reads succeed or not; return
       `[exitCode: <status>, stdout: <text>, stderr: <text>]`.
-- [ ] 1.5 Leave the existing non-capturing unix branch and the Windows `bat` branch (aside from
+- [x] 1.5 Leave the existing non-capturing unix branch and the Windows `bat` branch (aside from
       the new upfront validation throwing before either branch is reached) unchanged.
 
 ## 2. vars/runDotnetTool.groovy and docs
 
-- [ ] 2.1 Forward `args.captureOutput` from the `call(Map args)` overload into
+- [x] 2.1 Forward `args.captureOutput` from the `call(Map args)` overload into
       `dotnet.runTool(...)`, alongside the existing `returnStatus` forwarding.
-- [ ] 2.2 Update `vars/runDotnetTool.txt` to document `captureOutput`, its unix-only scope, its
+- [x] 2.2 Update `vars/runDotnetTool.txt` to document `captureOutput`, its unix-only scope, its
       mutual exclusivity with `returnStatus`, and the `[exitCode, stdout, stderr]` return shape —
       including that the library makes no requirement on how a tool splits its own output
       between the two streams.
 
 ## 3. Tests
 
-- [ ] 3.1 `DotnetSpec`: "runTool captures stdout, stderr, and exit code separately when the tool
+- [x] 3.1 `DotnetSpec`: "runTool captures stdout, stderr, and exit code separately when the tool
       fails" — asserts the returned Map's `exitCode` matches a non-zero fixture exit, `stdout`
       contains fixture stdout text, and `stderr` contains fixture stderr text, from a fixture that
       writes distinct content to each stream.
-- [ ] 3.2 `DotnetSpec`: "runTool captures stdout/stderr when the tool succeeds" — exit code `0`,
+- [x] 3.2 `DotnetSpec`: "runTool captures stdout/stderr when the tool succeeds" — exit code `0`,
       both streams still returned.
-- [ ] 3.3 `DotnetSpec`: "runTool returns an empty stderr string for a tool that only writes to
+- [x] 3.3 `DotnetSpec`: "runTool returns an empty stderr string for a tool that only writes to
       stdout" (and the symmetric stdout-empty case) — confirms streams aren't cross-contaminated.
-- [ ] 3.4 `DotnetSpec`: "runTool removes both captured-output files after a failing run" and after
+- [x] 3.4 `DotnetSpec`: "runTool removes both captured-output files after a failing run" and after
       a succeeding run — assert no lingering files/cleanup command ran in both cases.
-- [ ] 3.5 `DotnetSpec`: "runTool rejects captureOutput combined with returnStatus" — asserts
+- [x] 3.5 `DotnetSpec`: "runTool rejects captureOutput combined with returnStatus" — asserts
       `IllegalArgumentException`.
-- [ ] 3.6 `DotnetSpec`: "runTool rejects captureOutput on a non-unix agent" — asserts
+- [x] 3.6 `DotnetSpec`: "runTool rejects captureOutput on a non-unix agent" — asserts
       `IllegalArgumentException` without attempting the Windows `bat` path.
-- [ ] 3.7 `RunDotnetToolSpec`: asserts `captureOutput` is forwarded from the var's Map-form call
+- [x] 3.7 `RunDotnetToolSpec`: asserts `captureOutput` is forwarded from the var's Map-form call
       into `Dotnet.runTool`.
-- [ ] 3.8 Run the full test suite to confirm no regressions in existing `runTool`/Windows-bat/
-      `returnStatus` coverage.
+- [x] 3.8 Run the full test suite to confirm no regressions in existing `runTool`/Windows-bat/
+      `returnStatus` coverage. 478 tests, all pass except `CacheSpec > renews project cache with
+      valid parameters`, which fails identically on `master` with none of this change's commits
+      applied (confirmed via `git stash`) — pre-existing, unrelated to `Dotnet`/`runDotnetTool`.
 
 ## 4. OpenSpec change artifacts
 

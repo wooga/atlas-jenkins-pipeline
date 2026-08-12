@@ -21,5 +21,6 @@ def call(Map args) {
             (args.returnStatus ?: false) as Boolean,
             (args.loginShell ?: false) as Boolean,
             args.umask as String,
-            (args.logCommandToStdErr ?: false) as Boolean)
+            (args.logCommandToStdErr ?: false) as Boolean,
+            (args.captureOutput ?: false) as Boolean)
 }

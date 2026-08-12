@@ -401,13 +401,18 @@ class Dotnet {
      *   Jenkins' own default `-xe` tracing.
      */
     def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus,
-                Boolean loginShell = false, String umask = null, Boolean logCommandToStdErr = false) {
+                Boolean loginShell = false, String umask = null, Boolean logCommandToStdErr = false,
+                Boolean captureOutput = false) {
+        validateCaptureOutput(captureOutput, returnStatus, isUnix())
         return withTool(packageId, version) {
             // The "--" separator is required: without it, dotnet's own CLI parser
             // intercepts args that look like its own options (e.g. --help, -h) before
             // they ever reach the tool, printing `dotnet tool run`'s help instead of
             // forwarding the flag (confirmed by real execution).
             def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
+            if (captureOutput) {
+                return runToolCapturingOutput(command, toolBinary, loginShell, umask, logCommandToStdErr)
+            }
             // label: reuses the same command string shown in the script body
             // (not a hand-written paraphrase) so the Jenkins UI's collapsed
             // step summary shows the meaningful command instead of the guard
@@ -421,13 +426,78 @@ class Dotnet {
         }
     }
 
+    // captureOutput and returnStatus don't compose: captureOutput's result Map
+    // already carries the exit code, so asking for returnStatus too is almost
+    // certainly a caller expecting the old bare-status return shape - fail loudly
+    // rather than silently pick one (mirrors Jenkins' own sh() step, which rejects
+    // returnStdout+returnStatus together). captureOutput on Windows is rejected
+    // outright rather than silently ignored (unlike loginShell/umask/
+    // logCommandToStdErr): those don't change the return type, but captureOutput
+    // does (a Map instead of a bare status), so silently ignoring it on Windows
+    // would surface as a confusing MissingPropertyException far from the actual
+    // mistake instead of a clear error at the call site.
+    @NonCPS
+    private static void validateCaptureOutput(Boolean captureOutput, Boolean returnStatus, boolean unix) {
+        if (!captureOutput) {
+            return
+        }
+        if (returnStatus) {
+            throw new IllegalArgumentException(
+                    "runTool: 'captureOutput' and 'returnStatus' are mutually exclusive - captureOutput's result already includes the exit code")
+        }
+        if (!unix) {
+            throw new IllegalArgumentException("runTool: 'captureOutput' is only supported on unix/macOS agents")
+        }
+    }
+
+    // Runs the tool with its stdout/stderr each redirected to their own file inside
+    // the generated script, then reads both back - Jenkins' sh() step can't return
+    // captured stdout and a non-throwing exit status from the same call, so this
+    // routes around that limitation by never asking sh() for anything but the exit
+    // status (returnStatus: true) and instead capturing text via the redirect
+    // itself. Both files are removed in a finally so a captured-output call never
+    // leaves stray files behind, whether the tool succeeded, failed, or the sh()/
+    // readFile() calls themselves threw.
+    private Map runToolCapturingOutput(String command, String toolBinary, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        String stdoutFile = toolStdoutFile(toolBinary)
+        String stderrFile = toolStderrFile(toolBinary)
+        try {
+            int exitCode = jenkins.sh(
+                    label: command,
+                    script: captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr),
+                    returnStatus: true)
+            String stdout = jenkins.readFile(stdoutFile)
+            String stderr = jenkins.readFile(stderrFile)
+            return [exitCode: exitCode, stdout: stdout, stderr: stderr]
+        } finally {
+            jenkins.sh(script: "rm -f ${stdoutFile} ${stderrFile}", returnStatus: true)
+        }
+    }
+
+    // Workspace-relative, deterministic (not a random/UUID name - those aren't
+    // safely callable inside the Jenkins CPS sandbox without extra script
+    // approval), keyed by toolBinary so two different tools running in the same
+    // workspace don't collide. Two concurrent captureOutput calls for the *same*
+    // toolBinary in the *same* workspace can still collide on these paths - not
+    // addressed here, mirrors the same accepted scoping assumption already made
+    // for the workspace-relative NuGet-config lock.
+    private static String toolStdoutFile(String toolBinary) {
+        return ".dotnet-tool-stdout-${toolBinary}.log"
+    }
+
+    private static String toolStderrFile(String toolBinary) {
+        return ".dotnet-tool-stderr-${toolBinary}.log"
+    }
+
     // A custom shebang must be the very first line of the script for Jenkins'
     // sh step to honour it. The PATH re-export comes right after it, before
     // logCommandToStdErr/umask, since a login shell's profile-sourcing may
     // have already clobbered PATH by the time the script body starts running.
     // The DOTNET_CLI_HOME guard comes last, immediately before the actual
     // command, since it's a precondition check for that command specifically.
-    private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+    // Shared between the plain and capture-output script variants so both stay
+    // in sync automatically instead of duplicating this preamble.
+    private static List<String> scriptPreambleLines(Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         List<String> lines = []
         if (loginShell) {
             lines << "#!/bin/bash -l"
@@ -436,8 +506,21 @@ class Dotnet {
         if (logCommandToStdErr) { lines << "set -x" }
         if (umask) { lines << "umask ${umask}" }
         lines << requireDotnetCliHomeSh()
-        lines << command
-        return lines.join("\n")
+        return lines
+    }
+
+    private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [command]).join("\n")
+    }
+
+    // Redirects stdout/stderr to their own files rather than passing redirection
+    // through the caller-supplied args list, which would rely on Dotnet.runTool's
+    // current (accidental, unquoted) arg-joining behavior instead of a documented
+    // feature.
+    private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
+                                                 Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        String redirectedCommand = "${command} > ${stdoutFile} 2> ${stderrFile}"
+        return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [redirectedCommand]).join("\n")
     }
 
     // dotnet tool install is idempotent on its own for a local/manifest tool:

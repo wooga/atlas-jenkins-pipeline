@@ -25,6 +25,21 @@ umask, or `set -x` equivalent):
   each command to stderr before running it) - useful with loginShell since a
   custom shebang loses Jenkins' own default tracing.
 
+Map-form-only, unix/macOS-only option:
+- captureOutput (boolean, default false): instead of the bare status/throw
+  behavior returnStatus gives, redirects the tool's stdout and stderr to
+  their own temp files, reads them back, and returns
+  [exitCode: &lt;int&gt;, stdout: &lt;string&gt;, stderr: &lt;string&gt;].
+  The call never throws on the tool's own nonzero exit when captureOutput is
+  used - inspect the returned exitCode and call error(...) yourself if you
+  want the build to actually fail. No requirement on how the tool splits its
+  output between the two streams: a tool that prints everything to stdout
+  simply gets an empty stderr string back. Combining captureOutput with
+  returnStatus is rejected with an error - captureOutput's result already
+  carries the exit code. Using captureOutput on a Windows agent is also
+  rejected with an error, rather than silently returning the plain
+  status/throw behavior a Windows caller would otherwise get.
+
 usage: ```
 // simple form
 runDotnetTool("dotnet-ef", "dotnet-ef", ["database", "update"])
@@ -47,4 +62,16 @@ runDotnetTool(
     logCommandToStdErr: true,
     umask: "002"
 )
+
+// capture output instead of failing/throwing on a nonzero exit
+def result = runDotnetTool(
+    packageId: "adv5-config-val",
+    toolBinary: "adv5-config-val",
+    args: ["validate", "configs", "--env", "ci"],
+    captureOutput: true
+)
+if (result.exitCode != 0) {
+    // e.g. forward result.stderr somewhere, then decide whether to fail the build
+    error("validation failed")
+}
 ```
