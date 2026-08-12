@@ -97,21 +97,26 @@
 
 ## 7. Downstream consumer
 
-- [ ] 7.1 In `adventure5-configs`'s `Wooga.Adv5.Configs.Validation` project, change
-      `Program.cs`'s `PrintValidationMessages` to write via `Console.Error.WriteLine` instead of
-      `Console.WriteLine`, so actual findings go to stderr; leave the per-validator
-      `"Executing validator: X"` progress line in `RunValidations` on stdout, unchanged. This is a
-      small, independently-justified change (correct stream usage for a CLI tool) that happens to
-      also be exactly what this feature needs — not a Slack- or Jenkins-specific change to the
-      tool.
-- [ ] 7.2 Once `captureOutput` is merged and released under the `1.x` line, update
-      `adventure5-tools`'s `configs/release_configs_to_sbs/Jenkinsfile` to run "Validate Configs"
-      with `captureOutput: true`, then decouple notifying from failing — the two are not the same
-      condition, since `Program.cs`'s exit code only reflects Error-severity messages
-      (AD-36506), while a Warning-only run still has content worth reporting on `stderr` despite
-      exiting `0`:
-      - Notify whenever `result.stderr` is non-empty, forwarding it verbatim (no text
-        filtering/parsing) to `slack:notify` — this covers both warnings-only and error runs, and
+- [x] 7.1 Opened wooga/adventure5-configs#335: `Program.cs`'s `PrintValidationMessages` now
+      writes via `Console.Error.WriteLine` instead of `Console.WriteLine`, so actual findings go
+      to stderr; the per-validator `"Executing validator: X"` progress line in `RunValidations`
+      stays on stdout, unchanged. A small, independently-justified change (correct stream usage
+      for a CLI tool) that happens to also be exactly what this feature needs — not a Slack- or
+      Jenkins-specific change to the tool. Independent of this PR; mergeable now. Manually
+      smoke-tested (`2>/dev/null` shows only progress, `1>/dev/null` shows only findings); 138
+      existing tests pass unmodified.
+- [ ] 7.2 Opened wooga/adventure5-tools#452 as a **draft** (blocked on this PR merging and
+      releasing under `1.x` — the Jenkinsfile's `@Library` floats on a released version, not this
+      branch, so it genuinely can't be run or tested yet). Written now anyway per explicit
+      request ("we can't test it but we can write it"). Updates `configs/release_configs_to_sbs/Jenkinsfile`'s
+      "Validate Configs" stage to run with `captureOutput: true`, then decouples notifying from
+      failing — the two are not the same condition, since `Program.cs`'s exit code only reflects
+      Error-severity messages (AD-36506), while a Warning-only run still has content worth
+      reporting on `stderr` despite exiting `0`:
+      - Notify whenever `result.stderr` is non-empty, forwarding it (through a `shellSafeMessage()`
+        escaping helper — backslash/quote/`$`/backtick — since the captured text isn't otherwise
+        parsed or controlled and would otherwise risk breaking out of the shell-embedded
+        `--message` string) to `slack:notify` — this covers both warnings-only and error runs, and
         preserves the original PR #333 behavior of notifying on any message, not just failures.
       - Separately, fail the stage only when `result.exitCode != 0` (i.e. call `error(...)` at
         that point), independent of whether a Slack notification was sent — this preserves the
