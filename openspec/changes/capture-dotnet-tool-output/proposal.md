@@ -14,6 +14,13 @@ Three approaches were considered and rejected before writing this proposal:
   Jenkins-side `post { failure {...} } }` block (which already exists in most pipelines for the
   generic "build failed" case) ends up firing *again* for the same failure, producing two
   Slack messages in an awkward order for one real failure.
+- **Report from a `post { failure {...} }` block alone, with no capture at all.** This is the
+  first thing to reach for, and it can't work on its own: a `post` block receives a build result,
+  not the tool's output, so the only ways to get the findings text into the message are to scrape
+  the console log (`currentBuild.rawBuild.getLog()` — needs script approval, is brittle, and is
+  full of unrelated pipeline noise) or the rejected tool-posts-to-Slack option above. Capture is
+  what gives any `post` block something to send; the two compose rather than compete, and the
+  design below deliberately keeps the reporting side inside `post`.
 - **Smuggle shell redirection tokens into the `args` list** (e.g. `args: [..., "2>", "out.log"]`).
   `Dotnet.runTool` currently joins `args` with plain spaces and does not quote them, so this
   happens to work today — but it's an accident of the current implementation, not a documented
@@ -24,40 +31,49 @@ Three approaches were considered and rejected before writing this proposal:
   of shell/CLI argument parsing that a validation message's content (JSON snippets, quotes,
   `$`) can break in ways that are hard to catch outside of unlucky real input.
 - **Capture stdout and stderr combined into one string, then let the caller pick out the real
-  findings by matching a text pattern** (e.g. lines starting with `Error: `/`Warning: `). This
-  was the first version of this proposal. Rejected on reflection: a tool's console output
-  typically mixes human-readable progress ("Executing validator: X", printed for every validator
+  findings by matching a text pattern** (e.g. lines starting with `Error: `/`Warning: `). A tool's
+  console output typically mixes human-readable progress ("Executing validator: X", printed for every validator
   regardless of outcome) with the actual findings, and a combined capture forces the caller to
   reconstruct "just the findings" by parsing text formatted for a human terminal. That coupling
   is fragile in the wrong direction — it breaks silently the moment the tool's message format
   changes for unrelated reasons (reordering fields, adding a new severity, localizing text), with
   no compiler or test on the Jenkins side to catch it.
 
-All three are worse than teaching `runDotnetTool` to capture a tool's stdout and stderr as two
-*separate* strings, alongside its exit code — the same structural separation Unix CLI tools
-already use by convention (stdout for primary/progress output, stderr for diagnostics and
-errors) — so a caller that wants "just the findings" asks for the stderr stream specifically,
-with no text parsing and no coupling to how the tool formats a message.
+All four are worse than teaching `runDotnetTool` to duplicate a tool's stdout and stderr into two
+*separate* caller-named files — the same structural separation Unix CLI tools already use by
+convention (stdout for primary/progress output, stderr for diagnostics and errors) — so a caller
+that wants "just the findings" asks for the stderr stream specifically, with no text parsing and
+no coupling to how the tool formats a message.
 
 ## What Changes
 
-- `runDotnetTool`/`Dotnet.runTool` gain a new `captureOutput` option (unix/macOS only, default
-  `false`, zero behavior change when omitted). When `true`, the tool's stdout and stderr are each
-  redirected to their own temp file inside the generated script, read back after the command
-  completes, and the call returns `[exitCode: <int>, stdout: <string>, stderr: <string>]` instead
-  of the bare status/throw behavior `returnStatus` gives today.
-- `captureOutput: true` implies the same "don't throw on a nonzero tool exit" behavior
-  `returnStatus: true` gives today — the caller always gets the exit code back and decides
-  whether/how to fail the build. Combining `captureOutput: true` with `returnStatus: true` is
-  rejected with a clear error at call time (mirrors Jenkins' own `sh` step, which forbids setting
-  both `returnStdout` and `returnStatus` in one call), rather than silently picking one.
-- Windows (`bat`) is out of scope for this change — calling with `captureOutput: true` on a
-  Windows agent throws immediately with a clear message, rather than silently returning the
-  wrong shape (a Map is a materially different contract than the plain exit code Windows callers
-  get today, so silent no-effect — the existing behavior for `loginShell`/`umask`/
-  `logCommandToStdErr` on Windows — would be a worse footgun here).
+- `runDotnetTool`/`Dotnet.runTool` gain two new options, `stdoutFile` and `stderrFile` (unix/macOS
+  only, both optional and independent, zero behavior change when omitted). Each names a
+  workspace-relative file that stream is duplicated into inside the generated script, while still
+  streaming live to the console. An unrequested stream is left completely untouched, so capturing
+  only stderr costs nothing on stdout.
+- **The step's own return/throw contract is unchanged.** Because the output travels out of band —
+  in files the caller names, reads with `readFile`, and owns — the step does not have to give up
+  throwing in order to hand back text. A nonzero tool exit still fails the build exactly as it does
+  today unless the caller also passes `returnStatus: true`, so failure stays declarative and only
+  the *reporting* is the caller's business. This is what lets the reporting live in
+  `post { always { ... } }`: the file survives the call, so a post block can read it whether the
+  stage passed or failed. It also means `returnStatus` composes with capture instead of being
+  mutually exclusive with it.
+- The capture files are truncated at the start of the generated script, before any early exit
+  (the `DOTNET_CLI_HOME` guard, or a `mkfifo` failure) can happen, so a leftover file from an
+  earlier build on a reused workspace is never read back as this run's output. They may still
+  legitimately be empty, which callers must treat as "nothing to report" rather than an error.
+- Paths are validated, never sanitized: quotes, `$`, backticks, backslashes, newlines, absolute
+  paths, `..` segments, and naming the same file for both streams are all rejected with a clear
+  error at call time. Sanitizing by substitution would quietly write somewhere other than the path
+  the caller was promised and is about to read.
+- Windows (`bat`) is out of scope for this change — passing either option on a Windows agent
+  throws immediately with a clear message. Unlike `loginShell`/`umask`/`logCommandToStdErr`, which
+  are silently ignored there, silently producing *no file* for a caller that is about to `readFile`
+  it would surface far from the mistake.
 - No requirement on how any individual .NET tool splits its own output between stdout and
-  stderr — the library captures both streams distinctly and returns both; whether a given tool's
+  stderr — the library duplicates whichever streams were asked for; whether a given tool's
   stderr is actually useful on its own is up to that tool's own conventions. (Separately, as a
   consumer of this change, `adv5-config-val` would route its actual findings to stderr and keep
   progress logging on stdout — tracked in `tasks.md`, not part of this library change itself.)
@@ -69,30 +85,30 @@ with no text parsing and no coupling to how the tool formats a message.
 
 ### Modified Capabilities
 - `dotnet-tool-steps`: adds one new requirement — a tool's stdout and stderr can each be
-  captured and returned alongside its exit code, as an alternative to the existing `returnStatus`
-  option, on unix/macOS agents only.
+  duplicated into a caller-named workspace file, independently of and without altering the
+  existing `returnStatus`/throw behavior, on unix/macOS agents only.
 
 ## Impact
 
 - `src/net/wooga/jenkins/pipeline/model/Dotnet.groovy`:
-  - `runTool()` gains the `captureOutput` parameter and validates it isn't combined with
-    `returnStatus` (mirroring the existing `validateSelectors`/`validateNugetConfig` pattern
-    already used in the constructor for other mutually-exclusive option pairs), and throws if
-    `captureOutput: true` is requested on a non-unix agent.
+  - `runTool()` gains the `stdoutFile`/`stderrFile` options and validates them (mirroring the
+    existing `validateSelectors`/`validateNugetConfig` pattern already used in the constructor):
+    shell-unsafe characters, absolute paths, `..`, one file named for both streams, and any use on
+    a non-unix agent are all rejected.
   - A new private `captureOutputScriptSh(command, stdoutFile, stderrFile)` helper builds the
-    redirect-each-stream-to-its-own-file script variant, alongside the existing `shScript()` used
-    for the non-capturing path.
-  - New private `toolStdoutFile(toolBinary)`/`toolStderrFile(toolBinary)` helpers return
-    workspace-relative, deterministic file paths (not random/UUID names — those aren't usable
-    inside the Jenkins CPS sandbox without extra script-approval), keyed by `toolBinary` so two
-    different tools running in the same workspace don't collide.
-  - Both captured files are read via `jenkins.readFile()` and removed via a best-effort `rm -f`
-    in all cases (success, tool failure, or an exception constructing/running the script), so a
-    captured-output run never leaves stray files behind in the workspace.
-- `vars/runDotnetTool.groovy`: the `call(Map args)` overload forwards `args.captureOutput` to
-  `dotnet.runTool(...)` alongside the existing `returnStatus`.
-- `vars/runDotnetTool.txt`: documents the new option and its `[exitCode, stdout, stderr]` return
-  shape.
+    duplicate-each-requested-stream script variant, alongside the existing `shScript()` used for
+    the non-capturing path. It emits a FIFO and a `tee` only for the streams that were asked for.
+  - `scriptPreambleLines()` gains a `preGuardLines` parameter, so the capture variant's file
+    truncation lands after `umask` (for the caller's intended permissions) but before the
+    `DOTNET_CLI_HOME` guard (so an early exit can't leave a stale file behind).
+  - The generated script's `sh()` call passes the caller's `returnStatus` straight through, so
+    `runTool` keeps its normal return/throw contract. Only the FIFOs are cleaned up, via a
+    best-effort `rm -f` in a `finally`; the capture files deliberately outlive the call, since
+    that is what a `post` block reads. The library never reads them itself.
+- `vars/runDotnetTool.groovy`: the `call(Map args)` overload forwards `args.stdoutFile` and
+  `args.stderrFile` to `dotnet.runTool(...)` alongside the existing `returnStatus`.
+- `vars/runDotnetTool.txt`: documents the new options, the unchanged return/throw contract, and
+  the `post { always { ... } }` reporting pattern they enable.
 - `test/groovy/net/wooga/jenkins/pipeline/model/DotnetSpec.groovy` and
   `test/groovy/scripts/RunDotnetToolSpec.groovy`: new coverage (see `tasks.md`).
 - No changes to `withDotnetTool`, `withDotnet`, `dotnetWrapper`, the SDK-install or tool-install

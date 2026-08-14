@@ -23,6 +23,7 @@ def call(Map args) {
                     loginShell: args.loginShell,
                     umask: args.umask,
                     logCommandToStdErr: args.logCommandToStdErr,
-                    captureOutput: args.captureOutput
+                    stdoutFile: args.stdoutFile,
+                    stderrFile: args.stderrFile
             ])
 }

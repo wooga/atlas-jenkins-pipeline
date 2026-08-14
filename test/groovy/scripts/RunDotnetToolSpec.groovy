@@ -92,39 +92,74 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help" }
     }
 
-    def "map form threads captureOutput through"() {
+    def "map form threads stdoutFile and stderrFile through"() {
         given:
-        helper.registerAllowedMethod("fileExists", [String]) { String path -> true }
-        helper.registerAllowedMethod("readFile", [Map]) { Map args -> "" }
         def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
 
         when:
-        inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"], captureOutput: true) }
+        inSandbox {
+            runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"],
+                    stdoutFile: "out.log", stderrFile: "err.log")
+        }
 
         then:
         shArgs().any {
             it instanceof Map && it.script == ([
                     "#!/bin/bash",
+                    ': > "out.log"',
+                    ': > "err.log"',
                     CLI_HOME_GUARD_SH,
                     'exec 3>&1 4>&2',
-                    'rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
-                    'mkfifo ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo" || exit 125',
-                    'tee ".dotnet-tool-stdout-mytool.log" >&3 < ".dotnet-tool-stdout-mytool.log.fifo" &',
+                    'rm -f "out.log.fifo" "err.log.fifo"',
+                    'mkfifo "out.log.fifo" "err.log.fifo" || exit 125',
+                    'tee "out.log" >&3 < "out.log.fifo" &',
                     '_stdout_tee_pid=$!',
-                    'tee ".dotnet-tool-stderr-mytool.log" >&4 < ".dotnet-tool-stderr-mytool.log.fifo" &',
+                    'tee "err.log" >&4 < "err.log.fifo" &',
                     '_stderr_tee_pid=$!',
-                    'dotnet tool run mytool -- validate > ".dotnet-tool-stdout-mytool.log.fifo" 2> ".dotnet-tool-stderr-mytool.log.fifo" 3>&- 4>&-',
+                    'dotnet tool run mytool -- validate > "out.log.fifo" 2> "err.log.fifo" 3>&- 4>&-',
                     '_exit_code=$?',
                     'exec 3>&- 4>&-',
                     "( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &",
                     '_watchdog_pid=$!',
                     'wait "$_stdout_tee_pid" "$_stderr_tee_pid"',
                     'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null',
-                    'rm -f ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"',
+                    'rm -f "out.log.fifo" "err.log.fifo"',
                     'exit $_exit_code',
             ].join("\n"))
         }
-        shArgs().any { it instanceof Map && it.script == 'rm -f ".dotnet-tool-stdout-mytool.log" ".dotnet-tool-stderr-mytool.log" ".dotnet-tool-stdout-mytool.log.fifo" ".dotnet-tool-stderr-mytool.log.fifo"' }
+        // only the FIFOs are cleaned up - the capture files belong to the caller
+        shArgs().any { it instanceof Map && it.script == 'rm -f "out.log.fifo" "err.log.fifo"' }
+    }
+
+    def "map form threads stderrFile through on its own"() {
+        given:
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"], stderrFile: "err.log") }
+
+        then:
+        shArgs().any {
+            it instanceof Map && it.script == ([
+                    "#!/bin/bash",
+                    ': > "err.log"',
+                    CLI_HOME_GUARD_SH,
+                    'exec 3>&1 4>&2',
+                    'rm -f "err.log.fifo"',
+                    'mkfifo "err.log.fifo" || exit 125',
+                    'tee "err.log" >&4 < "err.log.fifo" &',
+                    '_stderr_tee_pid=$!',
+                    'dotnet tool run mytool -- validate 2> "err.log.fifo" 3>&- 4>&-',
+                    '_exit_code=$?',
+                    'exec 3>&- 4>&-',
+                    "( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stderr_tee_pid\" 2>/dev/null ) &",
+                    '_watchdog_pid=$!',
+                    'wait "$_stderr_tee_pid"',
+                    'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null',
+                    'rm -f "err.log.fifo"',
+                    'exit $_exit_code',
+            ].join("\n"))
+        }
     }
 
     def "map form threads loginShell, umask and logCommandToStdErr through"() {

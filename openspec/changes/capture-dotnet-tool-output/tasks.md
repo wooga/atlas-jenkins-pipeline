@@ -119,13 +119,11 @@ independently verified to actually block.
       run turned out to be pre-existing test-suite flakiness unrelated to this change — did not
       reproduce on 3 subsequent full-suite runs, nor when run isolated or paired with the changed
       specs.
-- [ ] 3a.13 Not addressed, deliberately deferred rather than dismissed: `RunDotnetToolSpec`'s
-      `captureOutput` test still only asserts on the generated script/cleanup command, not the
-      returned Map, since this harness's `withEnv` mock doesn't thread a wrapped closure's return
-      value through (confirmed separately, not part of this review). `DotnetSpec`'s pure-Groovy-mock
-      tests remain the only coverage of the actual return shape — acceptable given the layering
-      (integration-level `RunDotnetToolSpec` vs. unit-level `DotnetSpec`), but noted rather than
-      silently accepted.
+- [x] 3a.13 Deferred at the time, and moot as of §3e: `RunDotnetToolSpec`'s capture test only
+      asserted on the generated script/cleanup command and not the returned Map, since this harness's
+      `withEnv` mock doesn't thread a wrapped closure's return value through (confirmed separately,
+      not part of that review). There is no capture-specific return shape left to assert — the step
+      returns what it always returned — so nothing remains uncovered here.
 - [x] 3a.14 Verified the blast radius of §3a.9's `Dotnet.runTool()` signature change org-wide, not
       assumed: `gh search code` across every `wooga` repo for both
       `net.wooga.jenkins.pipeline.model.Dotnet` and `runTool(` found no caller anywhere outside
@@ -262,13 +260,71 @@ no action taken.
       in `design.md`'s Risks, not silently dropped.
 - [x] 3d.5 Full suite re-run: 487 tests, same single pre-existing unrelated `CacheSpec` failure.
 
+## 3e. Review fixes (PR #353, fifth review round) — API redesign
+
+Marcel's review raised the same question at three levels (on `proposal.md`'s "the caller decides
+whether/how to fail", on `design.md`'s matching Risks bullet, and on the consumer Jenkinsfile in
+wooga/adventure5-tools#452): why can't the reporting live in a `post` block, instead of the caller
+hand-rolling `if (result.exitCode != 0) error(...)`? The honest answer was that a return-value
+design *forces* it — a Jenkins step can't both throw and return a value — which made the question a
+good argument against the design rather than something to explain away. Replaced `captureOutput:
+true` with caller-supplied `stdoutFile`/`stderrFile` paths, which moves the output out of band and
+lets the step keep throwing. The FIFO/`tee`/fd/watchdog mechanism itself — the part that took four
+rounds and two execution-only bugs to get right — is untouched; only the contract layer changed.
+
+- [x] 3e.1 `Dotnet.groovy`: `captureOutput` replaced by `stdoutFile`/`stderrFile`, each optional and
+      independent. `runToolCapturingOutput()` now passes the caller's `returnStatus` straight through
+      to `sh()` (so a nonzero tool exit throws as usual), no longer calls `readFile`/`fileExists` at
+      all, and cleans up only the FIFOs. `validateCaptureOutput()` → `validateCaptureFiles()` +
+      `validateCaptureFile()`. Deleted `toolStdoutFile()`, `toolStderrFile()`, `stageKeySuffix()` and
+      `sanitizeForFilename()` — with them go the same-tool-same-stage collision window and the
+      `STAGE_NAME`-differs-inside-a-post-block trap a caller would have hit trying to reconstruct a
+      derived path. The `returnStatus` mutual-exclusion branch is gone too: the two now compose.
+- [x] 3e.2 Paths are validated, not sanitized (quotes/`$`/backtick/backslash/newline, absolute
+      paths, `..`, and one file named for both streams all throw at call time) — since the caller
+      reads back the exact path it named, quietly rewriting it is worse than refusing. Relative paths
+      with directory segments are allowed.
+- [x] 3e.3 Capture files are truncated (`: > "<file>"`) before the `DOTNET_CLI_HOME` guard and after
+      `umask`, via a new `preGuardLines` parameter on `scriptPreambleLines()`. Without this, a run
+      exiting before the tool started would leave an earlier build's file on a reused workspace for
+      the caller to read back and report as current — the one way this redesign could have been
+      *worse* than the return-value version, since a return value can't go stale.
+- [x] 3e.4 Only requested streams get a FIFO/`tee`/redirect, so `stderrFile` alone leaves stdout
+      completely untouched — which is what the motivating consumer actually wants, since
+      `adv5-config-val`'s stdout is only per-validator progress noise.
+- [x] 3e.5 Real-shell verification of the new shapes (the unit tests assert on the generated script
+      string, so they can't catch this class of bug — same reasoning as §6.1). Confirmed by executing
+      the generated scripts against a fixture tool that writes to both streams with delays and exits
+      3: both-streams run splits cleanly with exit 3 propagated and no leftover FIFOs; `umask 002`
+      yields `-rw-rw-r--` on the capture files, confirming the truncation is correctly ordered after
+      `umask`; `set -x` tracing goes to the console and does *not* leak into the stderr capture file
+      (worth checking, since the consumer passes `logCommandToStdErr: true` and would otherwise have
+      shipped the traced command line to Slack); stderr-only run leaves stdout untouched with no file
+      created; and a pre-seeded stale capture file plus a failing `DOTNET_CLI_HOME` guard leaves the
+      file at 0 bytes rather than stale content.
+- [x] 3e.6 Tests rewritten in `DotnetSpec` (13 capture tests, replacing the 14 Map-shape/sanitization
+      ones) and `RunDotnetToolSpec` (both-streams and stderr-only script shapes). New coverage for
+      the throw-contract passthrough, per-stream capture, truncation ordering, FIFO-only cleanup, and
+      all eight path-rejection cases. 75 `DotnetSpec` + 8 `RunDotnetToolSpec` tests pass.
+- [x] 3e.7 Updated wooga/adventure5-tools#452 to the new option and the `post { always }` shape: the
+      stage is now a plain `runDotnetTool(..., stderrFile: env.VALIDATION_STDERR_FILE)` with no
+      `script {}`, no `def result`, and no `error(...)`; the notify moved into
+      `post { always { script { ... } } }`, reading the file with `fileExists`/`readFile`. Verified
+      the file still parses as valid Groovy, and re-ran the standalone logic check (missing/empty/
+      whitespace-only file → no notify; warning-only content → notify; notify failure swallowed;
+      all four shell-special characters escaped; over-long input truncated *before* escaping).
+- [x] 3e.8 Full suite re-run: 492 tests, same single pre-existing unrelated `CacheSpec` failure
+      (`renews project cache with valid parameters`, fails identically on `master`).
+      `openspec validate capture-dotnet-tool-output --strict` passes.
+
 ## 4. OpenSpec change artifacts
 
 - [x] 4.1 `proposal.md` — why/what/capabilities/impact.
-- [x] 4.2 `design.md` — separate-stream capture mechanism, file-naming, and mutual-exclusivity
-      decisions with rationale (including why combined-stream capture was reconsidered).
+- [x] 4.2 `design.md` — separate-stream capture mechanism, the caller-owned-files contract, and
+      path-validation decisions with rationale (including why combined-stream capture was
+      reconsidered, and why the returned-strings iteration was replaced — see §3e).
 - [x] 4.3 `specs/dotnet-tool-steps/spec.md` delta — ADDED requirement "Tool stdout and stderr can
-      be captured separately, alongside its exit code" with scenarios.
+      each be duplicated into a caller-named file" with scenarios.
 - [x] 4.4 Validate the change (`openspec validate capture-dotnet-tool-output --strict`) before
       requesting review. Passes.
 
@@ -283,7 +339,7 @@ no action taken.
       is Raul himself, not a distinct maintainer — fixed to request review from `Joaquimmnetto`
       and `jhett12321` instead, both of whom have reviewed/merged in this exact area before.
 
-## 6. Verification (real Jenkins)
+## 6. Verification
 
 - [x] 6.1 Local bash verification: ran the exact `tee`/fd3-fd4/`wait` script shape against a
       fixture tool (delayed prints to both streams, nonzero exit) with a modern bash (5.3,
@@ -293,11 +349,8 @@ no action taken.
       repeated runs. This caught two real bugs an initial version had (silent during the run;
       stream cross-contamination) that unit tests alone couldn't have caught, since they assert
       on the generated script string, not real shell execution.
-- [ ] 6.2 Real-Jenkins run: once mergeable, trigger an actual pipeline using
-      `runDotnetTool(..., captureOutput: true)` against a real tool on a real unix/macOS agent,
-      and confirm the same three things (live console output, correct exit code, correctly split
-      streams) hold there too — local bash isn't a full substitute for Jenkins' own Durable Task
-      Plugin process handling, even though the script itself is agent-agnostic.
+      See §3e.5 for the equivalent verification of the redesigned script shapes (per-stream capture,
+      truncation ordering, stale-file protection, no `set -x` leakage into the capture).
 
 ## 7. Downstream consumer
 
@@ -309,22 +362,21 @@ no action taken.
       Jenkins-specific change to the tool. Independent of this PR; mergeable now. Manually
       smoke-tested (`2>/dev/null` shows only progress, `1>/dev/null` shows only findings); 138
       existing tests pass unmodified.
-- [ ] 7.2 Opened wooga/adventure5-tools#452 as a **draft** (blocked on this PR merging and
-      releasing under `1.x` — the Jenkinsfile's `@Library` floats on a released version, not this
-      branch, so it genuinely can't be run or tested yet). Written now anyway per explicit
-      request ("we can't test it but we can write it"). Updates `configs/release_configs_to_sbs/Jenkinsfile`'s
-      "Validate Configs" stage to run with `captureOutput: true`, then decouples notifying from
-      failing — the two are not the same condition, since `Program.cs`'s exit code only reflects
-      Error-severity messages (AD-36506), while a Warning-only run still has content worth
-      reporting on `stderr` despite exiting `0`:
-      - Notify whenever `result.stderr` is non-empty, forwarding it (through a `shellSafeMessage()`
-        escaping helper — backslash/quote/`$`/backtick — since the captured text isn't otherwise
-        parsed or controlled and would otherwise risk breaking out of the shell-embedded
-        `--message` string) to `slack:notify` — this covers both warnings-only and error runs, and
-        preserves the original PR #333 behavior of notifying on any message, not just failures.
-      - Separately, fail the stage only when `result.exitCode != 0` (i.e. call `error(...)` at
-        that point), independent of whether a Slack notification was sent — this preserves the
-        existing warning-vs-error build-abort semantics untouched.
+- [x] 7.2 Opened wooga/adventure5-tools#452, which updates
+      `configs/release_configs_to_sbs/Jenkinsfile`'s "Validate Configs" stage to run with
+      `stderrFile:` and decouples notifying from failing — the two are not the same condition, since
+      `Program.cs`'s exit code only reflects Error-severity messages (AD-36506), while a Warning-only
+      run still has content worth reporting on `stderr` despite exiting `0`:
+      - Notify from `post { always { ... } }` whenever the captured file is non-empty, forwarding it
+        (through a `shellSafeMessage()` escaping helper — backslash/quote/`$`/backtick — since the
+        captured text isn't otherwise parsed or controlled and would otherwise risk breaking out of
+        the shell-embedded `--message` string) to `slack:notify` — this covers both warnings-only and
+        error runs, and preserves the original PR #333 behavior of notifying on any message, not just
+        failures. `always` rather than `failure` is load-bearing: a Warning-only run exits `0`.
+      - Failing the stage is not the Jenkinsfile's job at all — `runDotnetTool` throws on the tool's
+        nonzero exit by itself, so the stage needs no `error(...)` and no `def result`. This preserves
+        the existing warning-vs-error build-abort semantics untouched with no hand-rolled failure
+        handling, which is what Marcel's review asked for.
       - This replaces the Slack integration added directly to `adv5-config-val`
         (wooga/adventure5-configs#333) and the generic `post { failure {...} } }` duplication
         issue on wooga/adventure5-tools#449.
