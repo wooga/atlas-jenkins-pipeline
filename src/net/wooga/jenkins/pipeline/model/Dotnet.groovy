@@ -574,85 +574,65 @@ class Dotnet {
         return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [command]).join("\n")
     }
 
-    // Duplicates each stream to its own capture file while still passing it
-    // through to the live console, rather than smuggling redirection through the
-    // caller-supplied args list (which would rely on the current accidental
-    // unquoted arg-joining). Every non-obvious choice below was confirmed by
-    // real execution on bash 3.2 and 5.3, not just reasoning; the full decision
-    // history is in openspec/changes/capture-dotnet-tool-output/design.md.
-    //
-    // - `tee` reads from named FIFOs as real background jobs, not `> >(tee ...)`:
-    //   process-substitution subshells never enter the job table, so `wait`
-    //   returns without them having flushed. A plain `>`/`2>` redirect is wrong
-    //   differently - it diverts output away from the console-connected fds
-    //   Jenkins watches, so the run would go silent until it finished.
-    // - `exec 3>&1 4>&2` saves the console fds before anything reassigns
-    //   fd1/fd2, and each tee targets its saved fd explicitly - otherwise the
-    //   second tee's passthrough can inherit the first redirection's target,
-    //   cross-contaminating the capture files.
-    // - The `rm -f` before `mkfifo` clears leftovers from a crashed/killed run:
-    //   a stale *regular* file at a FIFO path makes tee hit EOF instantly and
-    //   capture nothing, with an unremarkable exit code. `|| exit 125` makes a
-    //   genuine mkfifo failure (disk full, permissions) loud instead of letting
-    //   it cascade into the same silent shape - 125 is a recognizable
-    //   setup-failed sentinel, distinct from plausible tool exit codes.
-    // - <command> redirects straight into the FIFOs (no pipe), so `$?` is its
-    //   own exit status - captured into _exit_code before the fd-closes and
-    //   `wait` can clobber it, and restored by the final `exit`. It also closes
-    //   fds 3/4 (`3>&- 4>&-`) so neither it nor any child it spawns keeps a
-    //   handle to the console descriptors, which a lingering child could
-    //   otherwise hold open against the Durable Task step.
-    // - The forced shebang is load-bearing, not stylistic: without one, Jenkins
-    //   runs this under `sh -e`, which kills the script the moment <command>
-    //   exits non-zero - before _exit_code, wait, or cleanup - and leaks the
-    //   FIFOs. Any shebang escapes `-e` (and makes the explicit `exit 125`
-    //   necessary); bash specifically is just consistency with loginShell.
-    // - The watchdog bounds `wait`: a child that outlives <command> while
-    //   holding a FIFO's write end open means that tee never sees EOF and
-    //   `wait` blocks forever - killing the tees after the timeout degrades to
-    //   truncated capture instead of a hung step. On the normal path,
-    //   `pkill -P` must take the watchdog's `sleep` before `kill` takes the
-    //   subshell, or the sleep is orphaned for its full timeout. `pkill -P`
-    //   isn't POSIX but is present on both Linux and macOS agents.
-    // - The leading `: >` truncation is what makes the caller-owned files safe to
-    //   read unconditionally: the workspace is reused across builds, so without
-    //   it a script that exits before <command> ever runs (the DOTNET_CLI_HOME
-    //   guard, or `exit 125`) would leave an *earlier* build's file in place for
-    //   the caller to read back as this run's output. It therefore has to precede
-    //   that guard, hence preGuardLines - see scriptPreambleLines().
-    // - Only the requested streams get a FIFO and a tee; an unrequested stream is
-    //   left entirely alone and reaches the console untouched, so capturing just
-    //   stderr costs nothing on stdout.
+    // Duplicates each requested stream into its own capture file while still
+    // streaming it live to the console. Named FIFOs + background `tee` jobs,
+    // not `> >(tee ...)`: process-substitution subshells never join the job
+    // table, so `wait` would return before they'd flushed. See design.md for
+    // the full rationale, including the two bugs only real execution caught.
     private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
                                                  Boolean loginShell, String umask, Boolean logCommandToStdErr) {
         List<String> captureFiles = [stdoutFile, stderrFile].findAll { it }
         String quotedFifos = captureFiles.collect { "\"${it}.fifo\"" }.join(" ")
-        List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true,
-                captureFiles.collect { ": > \"${it}\"" })
-        lines << 'exec 3>&1 4>&2'
-        lines << "rm -f ${quotedFifos}"
-        lines << "mkfifo ${quotedFifos} || exit 125"
+
+        // Only a requested stream gets a FIFO/tee/pid slot - an unrequested one
+        // reaches the console untouched. Built as lines, not the template below,
+        // since it's the one part whose shape varies with what was requested.
+        List<String> teeSetupLines = []
         List<String> teePids = []
         if (stdoutFile) {
-            lines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFile}.fifo\" &"
-            lines << '_stdout_tee_pid=$!'
+            teeSetupLines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFile}.fifo\" &"
+            teeSetupLines << '_stdout_tee_pid=$!'
             teePids << '"$_stdout_tee_pid"'
         }
         if (stderrFile) {
-            lines << "tee \"${stderrFile}\" >&4 < \"${stderrFile}.fifo\" &"
-            lines << '_stderr_tee_pid=$!'
+            teeSetupLines << "tee \"${stderrFile}\" >&4 < \"${stderrFile}.fifo\" &"
+            teeSetupLines << '_stderr_tee_pid=$!'
             teePids << '"$_stderr_tee_pid"'
         }
         String redirects = (stdoutFile ? " > \"${stdoutFile}.fifo\"" : "") + (stderrFile ? " 2> \"${stderrFile}.fifo\"" : "")
-        lines << "${command}${redirects} 3>&- 4>&-"
-        lines << '_exit_code=$?'
-        lines << 'exec 3>&- 4>&-'
-        lines << "( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill ${teePids.join(" ")} 2>/dev/null ) &"
-        lines << '_watchdog_pid=$!'
-        lines << "wait ${teePids.join(" ")}"
-        lines << 'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null'
-        lines << "rm -f ${quotedFifos}"
-        lines << 'exit $_exit_code'
+        String teePidList = teePids.join(" ")
+
+        // preGuardLines truncates the capture files before the DOTNET_CLI_HOME
+        // guard, so an early exit leaves them empty, not showing a stale build.
+        // Flush-left below, not indented + stripIndent()'d: stripIndent() isn't
+        // sandbox-whitelisted, and only real execution (RunDotnetToolSpec, not
+        // the mocked DotnetSpec) catches that.
+        List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true,
+                captureFiles.collect { ": > \"${it}\"" })
+        lines << """exec 3>&1 4>&2  # each tee below targets its own fd, so neither redirect can clobber the other's target
+# Clear a stale file at a FIFO path first (from a crashed run) - tee would
+# otherwise hit EOF instantly and capture nothing. A genuine mkfifo failure
+# exits loudly via 125 instead of that same silent shape.
+rm -f ${quotedFifos}
+mkfifo ${quotedFifos} || exit 125
+${teeSetupLines.join("\n")}
+# No pipe, so \$? is <command>'s own exit status; closing fds 3/4 stops it
+# (or any child) from holding the console descriptors open against the
+# Durable Task step.
+${command}${redirects} 3>&- 4>&-
+_exit_code=\$?
+exec 3>&- 4>&-
+# Bounds `wait`: a child outliving <command> while holding a FIFO open would
+# hang tee (and wait) forever, so the watchdog kills it after a timeout,
+# trading a hang for truncated capture. `pkill -P` (non-POSIX, but present
+# on Linux and macOS) must kill the sleep before `kill` takes the watchdog,
+# or the sleep is orphaned for the full timeout.
+( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill ${teePidList} 2>/dev/null ) &
+_watchdog_pid=\$!
+wait ${teePidList}
+pkill -P "\$_watchdog_pid" 2>/dev/null; kill "\$_watchdog_pid" 2>/dev/null
+rm -f ${quotedFifos}
+exit \$_exit_code"""
         return lines.join("\n")
     }
 
