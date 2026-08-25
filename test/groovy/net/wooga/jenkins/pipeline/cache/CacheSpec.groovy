@@ -1,6 +1,8 @@
 package net.wooga.jenkins.pipeline.cache
 
+import spock.lang.Requires
 import spock.lang.Specification
+import spock.util.environment.OperatingSystem
 
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -89,6 +91,8 @@ class FakeJenkins {
 
 class CacheSpec extends Specification {
 
+    // TODO @Joaquim https://woogagmbh.atlassian.net/browse/AD-37579
+    @Requires({ OperatingSystem.current.isLinux() })
     def "renews project cache with valid parameters"() {
         given: "a Cache instance with mock Jenkins"
         def cacheRoot = Files.createTempDirectory("cacheRoot").toFile()

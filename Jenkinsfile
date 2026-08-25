@@ -38,6 +38,7 @@ pipeline {
     agent any
     stages {
         stage("Check") {
+            agent { label 'atlas && unix' }
             steps { gradleWrapper "check" }
             post {
                 always {

@@ -22,6 +22,14 @@ class Dotnet {
      */
     static final String DEFAULT_VERSION = "10.0.301"
 
+    /**
+     * Bounds how long a stdoutFile/stderrFile capture can be blocked by a
+     * hung/lingering child of the tool (see captureOutputScriptSh()) before
+     * giving up and leaving truncated output in the capture file rather than
+     * hanging the step indefinitely.
+     */
+    static final int CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS = 300
+
     private Object jenkins
     // Not named "unix" - that would form a Groovy JavaBean property pair with
     // isUnix() below, and referencing the bare field name inside its own
@@ -379,35 +387,63 @@ class Dotnet {
      * Installs the SDK/NuGet feed/tool (as withTool), then runs <toolBinary>
      * via `dotnet tool run` with the given args.
      *
-     * loginShell/umask/logCommandToStdErr only apply on unix (bat has no
-     * shebang, umask, or `set -x` equivalent) and are ignored on Windows:
-     * - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
-     *   default `sh -xe`, so the tool sees the same environment a login shell
-     *   would set up (e.g. profile-sourced PATH entries). A login shell
-     *   re-sources /etc/profile and ~/.bash_profile, which on some agents
-     *   unconditionally overwrites PATH, discarding the cache dir
-     *   withInstalledDotnet put on it - DOTNET_ROOT survives this (it's a
-     *   plain Jenkins-set env var, not something profile scripts touch), so
-     *   an `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right
-     *   after the shebang to defend against that (same fix documented as a
-     *   manual caveat for withDotnet). This also replaces Jenkins' default
-     *   invocation entirely, including its default `-x` tracing - use
-     *   logCommandToStdErr to opt back into that explicitly.
-     * - umask: prepended as `umask <value>` before the command, matching the
-     *   umask convention used elsewhere in this library for shared-cache-safe
-     *   file permissions.
-     * - logCommandToStdErr: prepends `set -x` (echoes each command to stderr
-     *   before running it), since a custom loginShell shebang above loses
-     *   Jenkins' own default `-xe` tracing.
+     * `options` groups the optional unix-only knobs, which had grown past
+     * readable as trailing positional parameters. It must be passed as an
+     * explicit Map literal (`runTool(p, b, a, v, false, [stderrFile: "x.log"])`):
+     * Groovy's bare named-argument sugar (`..., stderrFile: "x.log"`, no
+     * brackets) always collapses into a Map passed as the call's *first*
+     * argument, never reaching a trailing Map parameter - it throws
+     * MissingMethodException instead (confirmed by real execution).
+     *
+     * - loginShell/umask/logCommandToStdErr only apply on unix (bat has no
+     *   shebang, umask, or `set -x` equivalent) and are ignored on Windows:
+     *   - loginShell: run via a `#!/bin/bash -l` shebang instead of Jenkins'
+     *     default `sh -xe`, so the tool sees the same environment a login shell
+     *     would set up (e.g. profile-sourced PATH entries). A login shell
+     *     re-sources /etc/profile and ~/.bash_profile, which on some agents
+     *     unconditionally overwrites PATH, discarding the cache dir
+     *     withInstalledDotnet put on it - DOTNET_ROOT survives this (it's a
+     *     plain Jenkins-set env var, not something profile scripts touch), so
+     *     an `export PATH="$DOTNET_ROOT:$PATH"` is automatically re-added right
+     *     after the shebang to defend against that (same fix documented as a
+     *     manual caveat for withDotnet). This also replaces Jenkins' default
+     *     invocation entirely, including its default `-x` tracing - use
+     *     logCommandToStdErr to opt back into that explicitly.
+     *   - umask: prepended as `umask <value>` before the command, matching the
+     *     umask convention used elsewhere in this library for shared-cache-safe
+     *     file permissions.
+     *   - logCommandToStdErr: prepends `set -x` (echoes each command to stderr
+     *     before running it), since a custom loginShell shebang above loses
+     *     Jenkins' own default `-xe` tracing.
+     * - stdoutFile/stderrFile: unix/macOS only - see runToolCapturingOutput().
+     *   Either or both may be given; each names a workspace-relative file the
+     *   corresponding stream is duplicated into while still streaming live to
+     *   the console. The caller owns those files: the step's own return/throw
+     *   contract is untouched (a nonzero tool exit still throws unless
+     *   returnStatus is set), and the output is read back out of band with
+     *   readFile - including from a post block, which is the point. Note this
+     *   forces a bash shebang internally regardless of
+     *   loginShell/logCommandToStdErr, so Jenkins' default `-x` tracing is
+     *   dropped even when loginShell isn't set - pass logCommandToStdErr too
+     *   if that tracing is wanted back.
      */
-    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus,
-                Boolean loginShell = false, String umask = null, Boolean logCommandToStdErr = false) {
+    def runTool(String packageId, String toolBinary, List<String> args, String version, Boolean returnStatus, Map options = [:]) {
+        Boolean loginShell = (options.loginShell ?: false) as Boolean
+        String umask = options.umask as String
+        Boolean logCommandToStdErr = (options.logCommandToStdErr ?: false) as Boolean
+        String stdoutFile = options.stdoutFile as String
+        String stderrFile = options.stderrFile as String
+
+        validateCaptureFiles(stdoutFile, stderrFile, isUnix())
         return withTool(packageId, version) {
             // The "--" separator is required: without it, dotnet's own CLI parser
             // intercepts args that look like its own options (e.g. --help, -h) before
             // they ever reach the tool, printing `dotnet tool run`'s help instead of
             // forwarding the flag (confirmed by real execution).
             def command = (["dotnet", "tool", "run", toolBinary, "--"] + args).join(" ")
+            if (stdoutFile || stderrFile) {
+                return runToolCapturingOutput(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr, returnStatus)
+            }
             // label: reuses the same command string shown in the script body
             // (not a hand-written paraphrase) so the Jenkins UI's collapsed
             // step summary shows the meaningful command instead of the guard
@@ -421,22 +457,182 @@ class Dotnet {
         }
     }
 
+    // Windows is rejected rather than ignored (unlike loginShell/umask/
+    // logCommandToStdErr): those only change how the command is invoked, while
+    // silently not producing a file the caller explicitly named - and will go on
+    // to readFile - would surface far from the mistake, as a missing-file error
+    // in whatever post block reads it (or worse, as a stale file from an earlier
+    // build read back as this run's output).
+    @NonCPS
+    private static void validateCaptureFiles(String stdoutFile, String stderrFile, boolean unix) {
+        if (!stdoutFile && !stderrFile) {
+            return
+        }
+        if (!unix) {
+            throw new IllegalArgumentException(
+                    "runTool: 'stdoutFile'/'stderrFile' are only supported on unix/macOS agents")
+        }
+        validateCaptureFile("stdoutFile", stdoutFile)
+        validateCaptureFile("stderrFile", stderrFile)
+        // Both streams teeing into one file would interleave them unpredictably,
+        // and both FIFOs would collide on the same `<file>.fifo` path - so the
+        // capture would be quietly wrong rather than merely combined.
+        if (stdoutFile && stdoutFile == stderrFile) {
+            throw new IllegalArgumentException(
+                    "runTool: 'stdoutFile' and 'stderrFile' must name different files - use one of them alone to capture a single stream")
+        }
+    }
+
+    // Validated, never sanitized: the caller named this exact path and will read
+    // it back itself, so quietly writing somewhere else is worse than refusing.
+    // The characters below would expand or break out inside the generated
+    // script's double-quoted paths; workspace-relative is required because
+    // readFile()/fileExists() resolve against the workspace, so an absolute path
+    // would be written but never readable by the caller.
+    @NonCPS
+    private static void validateCaptureFile(String name, String path) {
+        if (path == null) {
+            return
+        }
+        if (path.trim().isEmpty()) {
+            throw new IllegalArgumentException("runTool: '${name}' must not be blank")
+        }
+        String forbidden = ['"', '$', '`', '\\', '\n', '\r'].find { path.contains(it) }
+        if (forbidden) {
+            throw new IllegalArgumentException(
+                    "runTool: '${name}' must not contain quotes, \$, backticks, backslashes, or newlines - got '${path}'")
+        }
+        if (path.startsWith("/")) {
+            throw new IllegalArgumentException(
+                    "runTool: '${name}' must be workspace-relative, not absolute - got '${path}'")
+        }
+        if (path.tokenize("/").contains("..")) {
+            throw new IllegalArgumentException(
+                    "runTool: '${name}' must not escape the workspace with '..' - got '${path}'")
+        }
+    }
+
+    // The generated script does the duplicating itself, so sh() keeps its normal
+    // contract: the caller's returnStatus choice is passed straight through and a
+    // nonzero tool exit throws exactly as it does without capture. The captured
+    // text reaches the caller out of band, via its own readFile() on the files it
+    // named - which is what lets a post block read output from a stage whose tool
+    // failed. Only the FIFOs are cleaned up here; the capture files belong to the
+    // caller and deliberately outlive this call.
+    private def runToolCapturingOutput(String command, String stdoutFile, String stderrFile, Boolean loginShell,
+                                       String umask, Boolean logCommandToStdErr, Boolean returnStatus) {
+        String quotedFifos = [stdoutFile, stderrFile].findAll { it }.collect { "\"${it}.fifo\"" }.join(" ")
+        try {
+            return jenkins.sh(
+                    label: command,
+                    script: captureOutputScriptSh(command, stdoutFile, stderrFile, loginShell, umask, logCommandToStdErr),
+                    returnStatus: returnStatus)
+        } finally {
+            try {
+                // The script's own trailing `rm -f` only runs on a clean exit -
+                // an abort or kill skips it - so this is the only FIFO cleanup
+                // guaranteed to run however the script terminated.
+                jenkins.sh(script: "rm -f ${quotedFifos}", returnStatus: true)
+            } catch (Exception ignored) {
+                // A cleanup failure must never mask an exception already
+                // propagating from the try block (e.g. the tool's own nonzero
+                // exit, or an agent disconnect) - a stray FIFO is the far
+                // smaller problem.
+            }
+        }
+    }
+
     // A custom shebang must be the very first line of the script for Jenkins'
     // sh step to honour it. The PATH re-export comes right after it, before
     // logCommandToStdErr/umask, since a login shell's profile-sourcing may
     // have already clobbered PATH by the time the script body starts running.
     // The DOTNET_CLI_HOME guard comes last, immediately before the actual
-    // command, since it's a precondition check for that command specifically.
-    private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+    // command, since it's a precondition check for that command specifically -
+    // which is why preGuardLines exists: captureOutputScriptSh() needs its file
+    // truncation to run even when that guard exits (see there), while still
+    // landing after `umask` so the files get the caller's intended permissions.
+    // Shared between shScript() and captureOutputScriptSh() (via forceBash) so
+    // any future preamble addition applies to both automatically instead of
+    // risking one variant getting updated and the other silently left behind.
+    private static List<String> scriptPreambleLines(Boolean loginShell, String umask, Boolean logCommandToStdErr,
+                                                   Boolean forceBash = false, List<String> preGuardLines = []) {
         List<String> lines = []
         if (loginShell) {
             lines << "#!/bin/bash -l"
             lines << 'export PATH="$DOTNET_ROOT:$PATH"'
+        } else if (forceBash) {
+            lines << "#!/bin/bash"
         }
         if (logCommandToStdErr) { lines << "set -x" }
         if (umask) { lines << "umask ${umask}" }
+        lines.addAll(preGuardLines)
         lines << requireDotnetCliHomeSh()
-        lines << command
+        return lines
+    }
+
+    private static String shScript(String command, Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        return (scriptPreambleLines(loginShell, umask, logCommandToStdErr) + [command]).join("\n")
+    }
+
+    // Duplicates each requested stream into its own capture file while still
+    // streaming it live to the console. Named FIFOs + background `tee` jobs,
+    // not `> >(tee ...)`: process-substitution subshells never join the job
+    // table, so `wait` would return before they'd flushed. See design.md for
+    // the full rationale, including the two bugs only real execution caught.
+    private static String captureOutputScriptSh(String command, String stdoutFile, String stderrFile,
+                                                 Boolean loginShell, String umask, Boolean logCommandToStdErr) {
+        List<String> captureFiles = [stdoutFile, stderrFile].findAll { it }
+        String quotedFifos = captureFiles.collect { "\"${it}.fifo\"" }.join(" ")
+
+        // Only a requested stream gets a FIFO/tee/pid slot - an unrequested one
+        // reaches the console untouched. Built as lines, not the template below,
+        // since it's the one part whose shape varies with what was requested.
+        List<String> teeSetupLines = []
+        List<String> teePids = []
+        if (stdoutFile) {
+            teeSetupLines << "tee \"${stdoutFile}\" >&3 < \"${stdoutFile}.fifo\" &"
+            teeSetupLines << '_stdout_tee_pid=$!'
+            teePids << '"$_stdout_tee_pid"'
+        }
+        if (stderrFile) {
+            teeSetupLines << "tee \"${stderrFile}\" >&4 < \"${stderrFile}.fifo\" &"
+            teeSetupLines << '_stderr_tee_pid=$!'
+            teePids << '"$_stderr_tee_pid"'
+        }
+        String redirects = (stdoutFile ? " > \"${stdoutFile}.fifo\"" : "") + (stderrFile ? " 2> \"${stderrFile}.fifo\"" : "")
+        String teePidList = teePids.join(" ")
+
+        // preGuardLines truncates the capture files before the DOTNET_CLI_HOME
+        // guard, so an early exit leaves them empty, not showing a stale build.
+        // Flush-left below, not indented + stripIndent()'d: stripIndent() isn't
+        // sandbox-whitelisted, and only real execution (RunDotnetToolSpec, not
+        // the mocked DotnetSpec) catches that.
+        List<String> lines = scriptPreambleLines(loginShell, umask, logCommandToStdErr, true,
+                captureFiles.collect { ": > \"${it}\"" })
+        lines << """exec 3>&1 4>&2  # each tee below targets its own fd, so neither redirect can clobber the other's target
+# Clear a stale file at a FIFO path first (from a crashed run) - tee would
+# otherwise hit EOF instantly and capture nothing. A genuine mkfifo failure
+# exits loudly via 125 instead of that same silent shape.
+rm -f ${quotedFifos}
+mkfifo ${quotedFifos} || exit 125
+${teeSetupLines.join("\n")}
+# No pipe, so \$? is <command>'s own exit status; closing fds 3/4 stops it
+# (or any child) from holding the console descriptors open against the
+# Durable Task step.
+${command}${redirects} 3>&- 4>&-
+_exit_code=\$?
+exec 3>&- 4>&-
+# Bounds `wait`: a child outliving <command> while holding a FIFO open would
+# hang tee (and wait) forever, so the watchdog kills it after a timeout,
+# trading a hang for truncated capture. `pkill -P` (non-POSIX, but present
+# on Linux and macOS) must kill the sleep before `kill` takes the watchdog,
+# or the sleep is orphaned for the full timeout.
+( sleep ${CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill ${teePidList} 2>/dev/null ) &
+_watchdog_pid=\$!
+wait ${teePidList}
+pkill -P "\$_watchdog_pid" 2>/dev/null; kill "\$_watchdog_pid" 2>/dev/null
+rm -f ${quotedFifos}
+exit \$_exit_code"""
         return lines.join("\n")
     }
 
