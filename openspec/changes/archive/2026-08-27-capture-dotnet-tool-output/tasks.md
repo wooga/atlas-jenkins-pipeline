@@ -330,7 +330,7 @@ rounds and two execution-only bugs to get right — is untouched; only the contr
 
 ## 5. Review
 
-- [ ] 5.1 Open an issue/Slack thread describing the proposed change ahead of the PR, per this
+- [x] 5.1 Open an issue/Slack thread describing the proposed change ahead of the PR, per this
       repo's `.github/CONTRIBUTING.md` guidance — Raul Gigea (original author of
       `Dotnet.groovy`/`runDotnetTool`, GitHub handle `pletoss`) is on leave for two weeks; post
       async so he can weigh in when back without blocking this.
