@@ -39,6 +39,8 @@ def call(Map configMap = [unityVersions: []]) {
       UVM_AUTO_INSTALL_UNITY_EDITOR = "YES"
       LOG_LEVEL = "${config.gradleArgs.logLevel}"
       ATLAS_READ = credentials('artifactory_read') //needed for gradle sto read private packages
+      UVM_DOWNLOAD_USER = "${ATLAS_READ_USR}"
+      UVM_DOWNLOAD_TOKEN = "${ATLAS_READ_PSW}"
     }
 
     parameters {
