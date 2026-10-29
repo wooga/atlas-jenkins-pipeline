@@ -1,5 +1,6 @@
 package scripts
 
+import net.wooga.jenkins.pipeline.model.Dotnet
 import tools.DeclarativeJenkinsSpec
 
 class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
@@ -89,6 +90,98 @@ class RunDotnetToolSpec extends DeclarativeJenkinsSpec {
         // Confirmed by real execution: without "--", dotnet's own CLI parser
         // intercepts --help and prints its own help instead of the tool's.
         shArgs().any { it instanceof Map && it.script == "${CLI_HOME_GUARD_SH}\ndotnet tool run mytool -- --help" }
+    }
+
+    def "map form threads stdoutFile and stderrFile through"() {
+        given:
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox {
+            runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"],
+                    stdoutFile: "out.log", stderrFile: "err.log")
+        }
+
+        then:
+        shArgs().any {
+            it instanceof Map && it.script == ([
+                    "#!/bin/bash",
+                    ': > "out.log"',
+                    ': > "err.log"',
+                    CLI_HOME_GUARD_SH,
+                    "exec 3>&1 4>&2  # each tee below targets its own fd, so neither redirect can clobber the other's target",
+                    "# Clear a stale file at a FIFO path first (from a crashed run) - tee would",
+                    "# otherwise hit EOF instantly and capture nothing. A genuine mkfifo failure",
+                    "# exits loudly via 125 instead of that same silent shape.",
+                    'rm -f "out.log.fifo" "err.log.fifo"',
+                    'mkfifo "out.log.fifo" "err.log.fifo" || exit 125',
+                    'tee "out.log" >&3 < "out.log.fifo" &',
+                    '_stdout_tee_pid=$!',
+                    'tee "err.log" >&4 < "err.log.fifo" &',
+                    '_stderr_tee_pid=$!',
+                    "# No pipe, so \$? is <command>'s own exit status; closing fds 3/4 stops it",
+                    "# (or any child) from holding the console descriptors open against the",
+                    "# Durable Task step.",
+                    'dotnet tool run mytool -- validate > "out.log.fifo" 2> "err.log.fifo" 3>&- 4>&-',
+                    '_exit_code=$?',
+                    'exec 3>&- 4>&-',
+                    "# Bounds `wait`: a child outliving <command> while holding a FIFO open would",
+                    "# hang tee (and wait) forever, so the watchdog kills it after a timeout,",
+                    "# trading a hang for truncated capture. `pkill -P` (non-POSIX, but present",
+                    "# on Linux and macOS) must kill the sleep before `kill` takes the watchdog,",
+                    "# or the sleep is orphaned for the full timeout.",
+                    "( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stdout_tee_pid\" \"\$_stderr_tee_pid\" 2>/dev/null ) &",
+                    '_watchdog_pid=$!',
+                    'wait "$_stdout_tee_pid" "$_stderr_tee_pid"',
+                    'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null',
+                    'rm -f "out.log.fifo" "err.log.fifo"',
+                    'exit $_exit_code',
+            ].join("\n"))
+        }
+        // only the FIFOs are cleaned up - the capture files belong to the caller
+        shArgs().any { it instanceof Map && it.script == 'rm -f "out.log.fifo" "err.log.fifo"' }
+    }
+
+    def "map form threads stderrFile through on its own"() {
+        given:
+        def runDotnetTool = loadSandboxedScript(SCRIPT_PATH)
+
+        when:
+        inSandbox { runDotnetTool(packageId: "MyTool", toolBinary: "mytool", args: ["validate"], stderrFile: "err.log") }
+
+        then:
+        shArgs().any {
+            it instanceof Map && it.script == ([
+                    "#!/bin/bash",
+                    ': > "err.log"',
+                    CLI_HOME_GUARD_SH,
+                    "exec 3>&1 4>&2  # each tee below targets its own fd, so neither redirect can clobber the other's target",
+                    "# Clear a stale file at a FIFO path first (from a crashed run) - tee would",
+                    "# otherwise hit EOF instantly and capture nothing. A genuine mkfifo failure",
+                    "# exits loudly via 125 instead of that same silent shape.",
+                    'rm -f "err.log.fifo"',
+                    'mkfifo "err.log.fifo" || exit 125',
+                    'tee "err.log" >&4 < "err.log.fifo" &',
+                    '_stderr_tee_pid=$!',
+                    "# No pipe, so \$? is <command>'s own exit status; closing fds 3/4 stops it",
+                    "# (or any child) from holding the console descriptors open against the",
+                    "# Durable Task step.",
+                    'dotnet tool run mytool -- validate 2> "err.log.fifo" 3>&- 4>&-',
+                    '_exit_code=$?',
+                    'exec 3>&- 4>&-',
+                    "# Bounds `wait`: a child outliving <command> while holding a FIFO open would",
+                    "# hang tee (and wait) forever, so the watchdog kills it after a timeout,",
+                    "# trading a hang for truncated capture. `pkill -P` (non-POSIX, but present",
+                    "# on Linux and macOS) must kill the sleep before `kill` takes the watchdog,",
+                    "# or the sleep is orphaned for the full timeout.",
+                    "( sleep ${Dotnet.CAPTURE_OUTPUT_WATCHDOG_TIMEOUT_SECONDS}; kill \"\$_stderr_tee_pid\" 2>/dev/null ) &",
+                    '_watchdog_pid=$!',
+                    'wait "$_stderr_tee_pid"',
+                    'pkill -P "$_watchdog_pid" 2>/dev/null; kill "$_watchdog_pid" 2>/dev/null',
+                    'rm -f "err.log.fifo"',
+                    'exit $_exit_code',
+            ].join("\n"))
+        }
     }
 
     def "map form threads loginShell, umask and logCommandToStdErr through"() {
