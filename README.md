@@ -26,6 +26,25 @@ Some build pipelines provide parameters which can be set before starting the bui
 
 ## Steps:
 
+### downstreamBuilds
+
+Inspects a downstream Pipeline build represented by Jenkins' `RunWrapper`. It does not trigger builds or filter
+pipeline-specific stages.
+
+#### Methods:
+
+* `inspectBuild(RunWrapper)`: returns serializable build metadata, causes, stages, and any stage inspection error.
+* `inspectStages(RunWrapper)`: returns all stages and parallel branches with result/state, failure cause, timing,
+  parent/child stage IDs, and direct step counts.
+
+#### Usage:
+
+```groovy
+def run = build(job: "folder/child/master", wait: true, propagate: false)
+Map buildInfo = downstreamBuilds.inspectBuild(run)
+List<Map> stages = downstreamBuilds.inspectStages(run)
+```
+
 ### gradleWrapper
 
 Invokes the gradle wrapper for the current platform (Windows/Unix);
