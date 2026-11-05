@@ -29,6 +29,19 @@ dependencies {
     implementation 'com.cloudbees:groovy-cps:1.12'
     implementation group: 'org.jenkinsci.plugins', name: 'pipeline-model-definition', version: '1.2', ext: 'jar'
     implementation 'org.codehaus.groovy:groovy-all:2.4.21'
+    compileOnly group: 'io.jenkins.blueocean', name: 'blueocean-pipeline-api-impl', version: '1.27.26', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.plugins', name: 'pipeline-graph-analysis',
+            version: '237.v2b_75640ca_888', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-api',
+            version: '1373.v7b_813f10efa_b_', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-job',
+            version: '1520.v56d65e3b_4566', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-support',
+            version: '968.v8f17397e87b_8', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.main', name: 'jenkins-core', version: '2.479.3', ext: 'jar'
+    compileOnly group: 'org.kohsuke.stapler', name: 'stapler', version: '1903.1905.ve5a_f469356f0', ext: 'jar'
+    compileOnly group: 'org.kohsuke.stapler', name: 'json-lib', version: '2.4-jenkins-8', ext: 'jar'
+    compileOnly group: 'jakarta.servlet', name: 'jakarta.servlet-api', version: '5.0.0', ext: 'jar'
     testImplementation "org.spockframework:spock-core:1.3-groovy-2.4"
     testImplementation project(':atlas-jenkins-pipeline-test')
     testImplementation 'com.github.ben-manes.caffeine:caffeine:2.9.2'
