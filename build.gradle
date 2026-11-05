@@ -15,6 +15,12 @@ version = '1.20.1'
 description = 'Atlas Jenkins pipeline shared library'
 java.sourceCompatibility = JavaVersion.VERSION_1_8
 
+tasks.named('compileGroovy', GroovyCompile) {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
 repositories {
     mavenCentral()
     maven {
@@ -33,12 +39,12 @@ dependencies {
     compileOnly group: 'org.jenkins-ci.plugins', name: 'pipeline-graph-analysis',
             version: '237.v2b_75640ca_888', ext: 'jar'
     compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-api',
-            version: '1373.v7b_813f10efa_b_', ext: 'jar'
+            version: '1413.v2ff1a_5e720fa_', ext: 'jar'
     compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-job',
-            version: '1520.v56d65e3b_4566', ext: 'jar'
+            version: '1571.1580.v18e46842c125', ext: 'jar'
     compileOnly group: 'org.jenkins-ci.plugins.workflow', name: 'workflow-support',
-            version: '968.v8f17397e87b_8', ext: 'jar'
-    compileOnly group: 'org.jenkins-ci.main', name: 'jenkins-core', version: '2.479.3', ext: 'jar'
+            version: '1015.v785e5a_b_b_8b_22', ext: 'jar'
+    compileOnly group: 'org.jenkins-ci.main', name: 'jenkins-core', version: '2.580.2', ext: 'jar'
     compileOnly group: 'org.kohsuke.stapler', name: 'stapler', version: '1903.1905.ve5a_f469356f0', ext: 'jar'
     compileOnly group: 'org.kohsuke.stapler', name: 'json-lib', version: '2.4-jenkins-8', ext: 'jar'
     compileOnly group: 'jakarta.servlet', name: 'jakarta.servlet-api', version: '5.0.0', ext: 'jar'
